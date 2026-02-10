@@ -166,9 +166,9 @@ export function LockScreen() {
         </div>
       </div>
 
-      {/* Unlock button */}
+      {/* Unlock button — always visible to prevent layout shift */}
       <button
-        className="btn-primary mt-6 w-40"
+        className="btn-primary mt-6 w-40 transition-opacity duration-200"
         disabled={pin.length < 4 || isLockedOut || isVerifying}
         style={{ opacity: pin.length >= 4 && !isLockedOut ? 1 : 0.3 }}
         onClick={handleUnlock}

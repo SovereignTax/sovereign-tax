@@ -99,16 +99,15 @@ export function SetupPIN({ isInitialSetup, onDone }: { isInitialSetup: boolean; 
         </div>
       </div>
 
-      {!isConfirming && pin.length >= 4 && (
-        <button className="btn-primary mt-6 w-40" onClick={handleContinue} disabled={isHashing}>
-          Continue
-        </button>
-      )}
-      {isConfirming && confirmPin.length >= 4 && (
-        <button className="btn-primary mt-6 w-40" onClick={handleSetPIN} disabled={isHashing}>
-          {isHashing ? "Securing..." : "Set PIN"}
-        </button>
-      )}
+      {/* Button always visible to prevent layout shift */}
+      <button
+        className="btn-primary mt-6 w-40 transition-opacity duration-200"
+        disabled={currentPin.length < 4 || isHashing}
+        style={{ opacity: currentPin.length >= 4 ? 1 : 0.3 }}
+        onClick={isConfirming ? handleSetPIN : handleContinue}
+      >
+        {isHashing ? "Securing..." : isConfirming ? "Set PIN" : "Continue"}
+      </button>
     </div>
   );
 }
