@@ -161,20 +161,59 @@ export function ImportView() {
       {/* Column Mapping */}
       {showMapping && (
         <div className="card mb-6">
-          <h3 className="font-semibold mb-4">Column Mapping</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Detected columns: {detectedHeaders.join(", ")}
+          <h3 className="font-semibold mb-2">Column Mapping</h3>
+          <p className="text-sm text-gray-500 mb-1">
+            We found these columns in your file: <span className="font-medium text-gray-600 dark:text-gray-300">{detectedHeaders.join(", ")}</span>
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Match each field below to the correct column from your CSV. Fields marked <span className="text-red-500 font-semibold">*</span> are required. If a field was auto-detected, it's already filled in — just verify it looks right.
           </p>
 
-          <MappingRow label="Date *" value={mapping.date} field="date" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Type" value={mapping.type} field="type" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Amount *" value={mapping.amount} field="amount" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Price" value={mapping.price} field="price" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Total" value={mapping.total} field="total" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Fee" value={mapping.fee} field="fee" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Wallet" value={mapping.wallet} field="wallet" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Exchange" value={mapping.exchange} field="exchange" headers={detectedHeaders} onChange={updateMapping} />
-          <MappingRow label="Notes" value={mapping.notes} field="notes" headers={detectedHeaders} onChange={updateMapping} />
+          <MappingRow
+            label="Date *"
+            tooltip="The date the transaction occurred"
+            value={mapping.date} field="date" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Type"
+            tooltip="Buy or Sell (or Send/Receive for transfers)"
+            value={mapping.type} field="type" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Amount *"
+            tooltip="The BTC quantity — how much Bitcoin, not the dollar value"
+            value={mapping.amount} field="amount" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Price"
+            tooltip="The USD price of one Bitcoin at the time of the transaction"
+            value={mapping.price} field="price" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Total"
+            tooltip="The total USD value of the transaction (Amount × Price)"
+            value={mapping.total} field="total" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Fee"
+            tooltip="Trading fees or commissions charged (optional — defaults to zero)"
+            value={mapping.fee} field="fee" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Wallet"
+            tooltip="Which wallet or sub-account this transaction belongs to (optional)"
+            value={mapping.wallet} field="wallet" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Exchange"
+            tooltip="The exchange or platform where the transaction happened (optional)"
+            value={mapping.exchange} field="exchange" headers={detectedHeaders} onChange={updateMapping}
+          />
+          <MappingRow
+            label="Notes"
+            tooltip="Any extra notes or description for the transaction (optional)"
+            value={mapping.notes} field="notes" headers={detectedHeaders} onChange={updateMapping}
+          />
 
           {/* Default type if no type column */}
           {!mapping.type && !isDualColumn(mapping) && (
@@ -250,14 +289,17 @@ export function ImportView() {
 }
 
 function MappingRow({
-  label, value, field, headers, onChange,
+  label, tooltip, value, field, headers, onChange,
 }: {
-  label: string; value?: string; field: string; headers: string[];
+  label: string; tooltip?: string; value?: string; field: string; headers: string[];
   onChange: (key: any, value: string | null) => void;
 }) {
   return (
     <div className="flex items-center gap-3 py-2 border-b border-gray-100 dark:border-gray-800">
-      <span className="w-24 font-medium text-sm">{label}</span>
+      <span className="w-24 font-medium text-sm flex-shrink-0 mapping-label" title={tooltip}>
+        {label}
+        {tooltip && <span className="ml-1 text-gray-400 text-xs cursor-help">ⓘ</span>}
+      </span>
       <select
         className="select w-56"
         value={value || ""}
