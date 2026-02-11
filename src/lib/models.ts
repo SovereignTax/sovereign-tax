@@ -10,7 +10,7 @@ export interface Transaction {
   fee?: number; // Exchange fee in USD
   exchange: string;
   wallet?: string; // Wallet/account for per-wallet cost basis tracking
-  incomeType?: IncomeType; // For mining, staking, airdrops — classified as ordinary income
+  incomeType?: IncomeType; // For mining, rewards — classified as ordinary income
   notes: string;
 }
 

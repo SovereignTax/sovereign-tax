@@ -87,7 +87,7 @@ export function AddTransactionView() {
                 <option key={it} value={it}>{IncomeTypeDisplayNames[it]}</option>
               ))}
             </select>
-            <span className="text-xs text-gray-400">(optional — for mining, staking, airdrops)</span>
+            <span className="text-xs text-gray-400">(optional — for mining, rewards, etc.)</span>
           </div>
         )}
 

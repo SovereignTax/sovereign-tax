@@ -31,8 +31,6 @@ export const TransactionTypeDisplayNames: Record<TransactionType, string> = {
 // Income types for Schedule 1 classification
 export enum IncomeType {
   Mining = "mining",
-  Staking = "staking",
-  Airdrop = "airdrop",
   Fork = "fork",
   Reward = "reward",
   Interest = "interest",
@@ -40,8 +38,6 @@ export enum IncomeType {
 
 export const IncomeTypeDisplayNames: Record<IncomeType, string> = {
   [IncomeType.Mining]: "Mining",
-  [IncomeType.Staking]: "Staking",
-  [IncomeType.Airdrop]: "Airdrop",
   [IncomeType.Fork]: "Hard Fork",
   [IncomeType.Reward]: "Reward",
   [IncomeType.Interest]: "Interest",
@@ -58,13 +54,6 @@ export function parseIncomeType(input: string): IncomeType | null {
   switch (lower) {
     case "mining":
       return IncomeType.Mining;
-    case "staking":
-    case "staking income":
-    case "staking reward":
-    case "inflation reward":
-      return IncomeType.Staking;
-    case "airdrop":
-      return IncomeType.Airdrop;
     case "fork":
       return IncomeType.Fork;
     case "reward":
@@ -81,8 +70,6 @@ export function parseIncomeType(input: string): IncomeType | null {
 
   // Substring fallbacks
   if (lower.includes("mining") || lower.includes("mined")) return IncomeType.Mining;
-  if (lower.includes("staking") || lower.includes("stake")) return IncomeType.Staking;
-  if (lower.includes("airdrop") || lower.includes("air drop")) return IncomeType.Airdrop;
   if (lower.includes("fork")) return IncomeType.Fork;
   if (lower.includes("interest")) return IncomeType.Interest;
   if (lower.includes("reward") || lower.includes("earn")) return IncomeType.Reward;
@@ -112,18 +99,13 @@ export function parseTransactionType(input: string): TransactionType | null {
     case "reward":
     case "rewards income":
     case "reward income":
-    case "staking income":
-    case "staking reward":
     case "interest":
     case "interest payout":
     case "learning reward":
     case "coinbase earn":
     case "earn":
-    case "airdrop":
     case "fork":
     case "mining":
-    case "inflation reward":
-    case "staking":
       return TransactionType.Buy;
 
     // Sell-like

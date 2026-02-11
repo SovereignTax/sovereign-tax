@@ -39,7 +39,7 @@ export function IncomeView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Income</h1>
-      <p className="text-gray-500 mb-6">Mining, staking, airdrops, and other ordinary income (Schedule 1)</p>
+      <p className="text-gray-500 mb-6">Mining, rewards, and other ordinary income (Schedule 1)</p>
 
       {/* Controls */}
       <div className="flex items-center gap-6 mb-6">
@@ -63,7 +63,7 @@ export function IncomeView() {
         <div className="text-center py-16">
           <div className="text-5xl mb-4 opacity-50">💰</div>
           <h2 className="text-xl text-gray-500">No income transactions in {selectedYear}</h2>
-          <p className="text-gray-400 mt-2">Mining, staking, airdrops, and rewards will appear here when imported</p>
+          <p className="text-gray-400 mt-2">Mining, rewards, and other income will appear here when imported</p>
         </div>
       ) : (
         <>
@@ -126,7 +126,7 @@ export function IncomeView() {
           <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg flex items-start gap-3">
             <span className="text-xl">⚠️</span>
             <div className="text-sm">
-              <strong>IRS Note:</strong> Mining, staking, airdrops, and other crypto income are taxed as ordinary income
+              <strong>IRS Note:</strong> Mining, rewards, and other crypto income are taxed as ordinary income
               at the fair market value on the date received. Report on Schedule 1 (Form 1040). The cost basis of
               these tokens equals the FMV at receipt for future capital gains calculations.
             </div>
