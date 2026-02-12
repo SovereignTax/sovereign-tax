@@ -21,14 +21,12 @@ function formatUSD(value: number): string {
   }).format(value);
 }
 
-/** Export Form 8949 compatible CSV */
+/** Export Form 8949 compatible CSV — splits lot details by term, not sales */
 export function exportForm8949CSV(
   sales: SaleRecord[],
   year: number,
   method: AccountingMethod
 ): string {
-  const shortTermSales = sales.filter((s) => !s.isLongTerm);
-  const longTermSales = sales.filter((s) => s.isLongTerm);
   const lines: string[] = [];
 
   // Title
@@ -38,26 +36,35 @@ export function exportForm8949CSV(
   lines.push(`Generated: ${formatDate(new Date().toISOString())}`);
   lines.push("");
 
+  // Collect all lot details split by term across ALL sales (handles mixed-term sales)
+  let stProceeds = 0, stBasis = 0, stGainLoss = 0, stFees = 0;
+  let ltProceeds = 0, ltBasis = 0, ltGainLoss = 0, ltFees = 0;
+
   // Part I — Short-Term
   lines.push("PART I — SHORT-TERM CAPITAL GAINS AND LOSSES (held one year or less)");
   lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Adjustments (Fees),Gain or (Loss)");
 
-  for (const sale of shortTermSales) {
-    for (const detail of sale.lotDetails) {
-      if (detail.isLongTerm) continue;
+  for (const sale of sales) {
+    const stDetails = sale.lotDetails.filter((d) => !d.isLongTerm);
+    if (stDetails.length === 0) continue;
+    // Apportion fee proportionally to short-term portion
+    const stBTCTotal = stDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const feeShare = sale.fee ? sale.fee * (stBTCTotal / saleBTCTotal) : 0;
+    for (const detail of stDetails) {
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
-      const feeStr = sale.fee ? formatCSVDecimal(sale.fee) : "";
+      const feeStr = feeShare > 0 ? formatCSVDecimal(feeShare / stDetails.length) : "";
       lines.push(
         `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );
+      stProceeds += proceeds;
+      stBasis += detail.totalCost;
+      stGainLoss += gainLoss;
     }
+    stFees += feeShare;
   }
 
-  const stProceeds = shortTermSales.reduce((a, s) => a + s.totalProceeds, 0);
-  const stBasis = shortTermSales.reduce((a, s) => a + s.costBasis, 0);
-  const stGainLoss = shortTermSales.reduce((a, s) => a + s.gainLoss, 0);
-  const stFees = shortTermSales.reduce((a, s) => a + (s.fee || 0), 0);
   lines.push(`TOTAL SHORT-TERM,,,${formatCSVDecimal(stProceeds)},${formatCSVDecimal(stBasis)},${stFees > 0 ? formatCSVDecimal(stFees) : ""},${formatCSVDecimal(stGainLoss)}`);
   lines.push("");
 
@@ -65,22 +72,27 @@ export function exportForm8949CSV(
   lines.push("PART II — LONG-TERM CAPITAL GAINS AND LOSSES (held more than one year)");
   lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Adjustments (Fees),Gain or (Loss)");
 
-  for (const sale of longTermSales) {
-    for (const detail of sale.lotDetails) {
-      if (!detail.isLongTerm) continue;
+  for (const sale of sales) {
+    const ltDetails = sale.lotDetails.filter((d) => d.isLongTerm);
+    if (ltDetails.length === 0) continue;
+    // Apportion fee proportionally to long-term portion
+    const ltBTCTotal = ltDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const feeShare = sale.fee ? sale.fee * (ltBTCTotal / saleBTCTotal) : 0;
+    for (const detail of ltDetails) {
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
-      const feeStr = sale.fee ? formatCSVDecimal(sale.fee) : "";
+      const feeStr = feeShare > 0 ? formatCSVDecimal(feeShare / ltDetails.length) : "";
       lines.push(
         `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );
+      ltProceeds += proceeds;
+      ltBasis += detail.totalCost;
+      ltGainLoss += gainLoss;
     }
+    ltFees += feeShare;
   }
 
-  const ltProceeds = longTermSales.reduce((a, s) => a + s.totalProceeds, 0);
-  const ltBasis = longTermSales.reduce((a, s) => a + s.costBasis, 0);
-  const ltGainLoss = longTermSales.reduce((a, s) => a + s.gainLoss, 0);
-  const ltFees = longTermSales.reduce((a, s) => a + (s.fee || 0), 0);
   lines.push(`TOTAL LONG-TERM,,,${formatCSVDecimal(ltProceeds)},${formatCSVDecimal(ltBasis)},${ltFees > 0 ? formatCSVDecimal(ltFees) : ""},${formatCSVDecimal(ltGainLoss)}`);
   lines.push("");
 

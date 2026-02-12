@@ -196,6 +196,10 @@
   background: rgba(249, 115, 22, 0.15);
   color: #ea580c;
 }
+.badge-blue {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
 
 /* Blur for privacy */
 .blur-privacy {

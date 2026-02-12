@@ -50,6 +50,7 @@ export interface SaleRecord {
   lotDetails: LotDetail[];
   holdingPeriodDays: number;
   isLongTerm: boolean;
+  isMixedTerm: boolean; // true when sale spans both short-term and long-term lots
   method: AccountingMethod;
 }
 

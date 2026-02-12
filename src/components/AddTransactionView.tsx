@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useAppState } from "../lib/app-state";
 import { createTransaction } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
@@ -17,8 +17,30 @@ export function AddTransactionView() {
   const [notes, setNotes] = useState("");
   const [incomeType, setIncomeType] = useState<IncomeType | "">("");
   const [useLive, setUseLive] = useState(false);
+  const [fmvLoading, setFmvLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /** Auto-fetch historical FMV for income transactions */
+  const fetchFMV = useCallback(async () => {
+    if (!date || !state.livePriceEnabled) return;
+    setFmvLoading(true);
+    setError(null);
+    try {
+      const price = await state.fetchHistoricalPrice(new Date(date));
+      if (price) {
+        setPriceStr(price.toFixed(2));
+        const amt = Number(amountStr);
+        if (amt > 0) setTotalStr((amt * price).toFixed(2));
+      } else {
+        setError("Could not fetch historical price for this date. Enter manually.");
+      }
+    } catch {
+      setError("Failed to fetch price. Check your internet connection.");
+    } finally {
+      setFmvLoading(false);
+    }
+  }, [date, amountStr, state]);
 
   const handleAdd = () => {
     setError(null); setSuccess(null);
@@ -115,6 +137,15 @@ export function AddTransactionView() {
             <input type="checkbox" checked={useLive} onChange={(e) => { setUseLive(e.target.checked); if (e.target.checked) state.fetchPrice(); }} />
             Live Price
           </label>
+          {type === TransactionType.Buy && incomeType && !useLive && state.livePriceEnabled && (
+            <button
+              className="btn-secondary text-xs px-3 py-1"
+              onClick={fetchFMV}
+              disabled={fmvLoading || !date}
+            >
+              {fmvLoading ? "Fetching..." : "Fetch FMV"}
+            </button>
+          )}
         </div>
 
         {/* Total */}

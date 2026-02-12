@@ -62,7 +62,7 @@ export function calculate(
       }
 
       case TransactionType.Sell: {
-        const sale = processSale(trans, lots, method);
+        const sale = processSale(trans, lots, method, undefined, warnings);
         if (sale) {
           sales.push(sale);
         } else {
@@ -83,13 +83,15 @@ export function calculate(
 
 /**
  * Simulate a sale without modifying actual lot state.
+ * If wallet is provided, enforces per-wallet lot selection (TD 9989).
  */
 export function simulateSale(
   amountBTC: number,
   pricePerBTC: number,
   currentLots: Lot[],
   method: AccountingMethod,
-  lotSelections?: LotSelection[]
+  lotSelections?: LotSelection[],
+  wallet?: string
 ): SaleRecord | null {
   // Deep copy lots
   const lotsCopy: Lot[] = currentLots.map((lot) => ({
@@ -104,7 +106,8 @@ export function simulateSale(
     amountBTC,
     pricePerBTC,
     totalUSD: amountBTC * pricePerBTC,
-    exchange: "Simulation",
+    exchange: wallet || "Simulation",
+    wallet: wallet,
     notes: "",
   };
 
@@ -114,22 +117,40 @@ export function simulateSale(
 /**
  * Process a sale against available lots.
  * MUTATES the lots array (reduces remainingBTC).
+ * Enforces per-wallet/per-account cost basis per IRS TD 9989 (effective Jan 1, 2025).
  * Optionally accepts lotSelections for Specific Identification method.
  */
 function processSale(
   sale: Transaction,
   lots: Lot[],
   method: AccountingMethod,
-  lotSelections?: LotSelection[]
+  lotSelections?: LotSelection[],
+  warnings?: string[]
 ): SaleRecord | null {
   const amountToSell = sale.amountBTC;
   if (amountToSell <= 0) return null;
 
-  // Get indices of lots with remaining BTC
-  const availableIndices = lots
+  // Per-wallet cost basis enforcement (IRS TD 9989)
+  // Filter lots to the same wallet/account as the sale
+  const saleWallet = sale.wallet || sale.exchange;
+  let availableIndices = lots
     .map((lot, idx) => ({ lot, idx }))
-    .filter(({ lot }) => lot.remainingBTC > 0)
+    .filter(({ lot }) => lot.remainingBTC > 0 && (lot.wallet || lot.exchange) === saleWallet)
     .map(({ idx }) => idx);
+
+  // Fallback: if no lots match the wallet, use all available lots with a warning
+  if (availableIndices.length === 0) {
+    availableIndices = lots
+      .map((lot, idx) => ({ lot, idx }))
+      .filter(({ lot }) => lot.remainingBTC > 0)
+      .map(({ idx }) => idx);
+
+    if (availableIndices.length > 0 && warnings) {
+      warnings.push(
+        `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`
+      );
+    }
+  }
 
   if (availableIndices.length === 0) return null;
 
@@ -226,7 +247,13 @@ function processSale(
     holdingDays.length === 0
       ? 0
       : Math.floor(holdingDays.reduce((a, b) => a + b, 0) / holdingDays.length);
-  const isLongTerm = avgHoldingDays > 365;
+
+  // Determine term classification from lot details, not averages
+  const hasShortTerm = lotDetails.some((d) => !d.isLongTerm);
+  const hasLongTerm = lotDetails.some((d) => d.isLongTerm);
+  const isMixedTerm = hasShortTerm && hasLongTerm;
+  // For non-mixed sales, use lot-level truth; for mixed, default to the majority
+  const isLongTerm = isMixedTerm ? hasLongTerm && !hasShortTerm : hasLongTerm;
 
   return {
     id: crypto.randomUUID(),
@@ -240,6 +267,7 @@ function processSale(
     lotDetails,
     holdingPeriodDays: avgHoldingDays,
     isLongTerm,
+    isMixedTerm,
     method,
   };
 }

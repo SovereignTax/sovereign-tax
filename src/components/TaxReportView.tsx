@@ -5,6 +5,7 @@ import { exportForm8949CSV, exportLegacyCSV, exportTurboTaxTXF, exportTurboTaxCS
 import { exportForm8949PDF } from "../lib/pdf-export";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
+import { computeCarryforward } from "../lib/carryforward";
 
 export function TaxReportView() {
   const { allTransactions, selectedYear, setSelectedYear, selectedMethod, setSelectedMethod, availableYears } = useAppState();
@@ -15,8 +16,14 @@ export function TaxReportView() {
   const totalProceeds = salesForYear.reduce((a, s) => a + s.totalProceeds, 0);
   const totalCostBasis = salesForYear.reduce((a, s) => a + s.costBasis, 0);
   const totalGL = salesForYear.reduce((a, s) => a + s.gainLoss, 0);
-  const stGL = salesForYear.filter((s) => !s.isLongTerm).reduce((a, s) => a + s.gainLoss, 0);
-  const ltGL = salesForYear.filter((s) => s.isLongTerm).reduce((a, s) => a + s.gainLoss, 0);
+
+  // Compute ST/LT gain/loss from lot details, not sale-level isLongTerm (handles mixed-term sales)
+  const stGL = salesForYear.reduce((a, s) => {
+    return a + s.lotDetails.filter((d) => !d.isLongTerm).reduce((sum, d) => sum + (d.amountBTC * s.salePricePerBTC - d.totalCost), 0);
+  }, 0);
+  const ltGL = salesForYear.reduce((a, s) => {
+    return a + s.lotDetails.filter((d) => d.isLongTerm).reduce((sum, d) => sum + (d.amountBTC * s.salePricePerBTC - d.totalCost), 0);
+  }, 0);
 
   const [exportToast, setExportToast] = useState<string | null>(null);
 
@@ -75,6 +82,27 @@ export function TaxReportView() {
             </div>
           </div>
 
+          {/* Capital Loss Carryforward Info */}
+          {(() => {
+            const cf = computeCarryforward(stGL, ltGL);
+            if (cf.netGainLoss >= 0) return null;
+            return (
+              <div className="card mb-6 border-l-4 border-l-orange-500">
+                <h3 className="font-semibold mb-2">Capital Loss Carryforward</h3>
+                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                  <p>Your net capital loss of <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span> exceeds the <span className="font-medium">{formatUSD(-3000)}</span> annual deduction limit.</p>
+                  {cf.carryforwardAmount < 0 && (
+                    <p>You may deduct <span className="font-medium">{formatUSD(cf.deductibleLoss)}</span> this year and carry forward <span className="font-medium text-orange-500">{formatUSD(cf.carryforwardAmount)}</span> to future tax years.</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    If you have capital loss carryforward from prior years, consult IRS Form 1040 Schedule D instructions.
+                    This calculation does not include prior-year carryforward amounts.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Export */}
           <div className="card mb-6">
             <h3 className="font-semibold mb-3">Export Tax Documents</h3>
@@ -99,6 +127,11 @@ export function TaxReportView() {
               Form 8949 exports include Part I (short-term) and Part II (long-term) separated sections with Schedule D summary.
               TurboTax formats can be imported directly into TurboTax.
             </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Note: If your modified adjusted gross income exceeds $200,000 ($250,000 MFJ),
+              capital gains may be subject to an additional 3.8% Net Investment Income Tax (NIIT).
+              Consult IRS Form 8960 or a tax professional.
+            </p>
           </div>
 
           {/* Sales List */}
@@ -114,9 +147,13 @@ export function TaxReportView() {
                   <span className={`font-medium tabular-nums ${sale.gainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
                     {sale.gainLoss >= 0 ? "+" : ""}{formatUSD(sale.gainLoss)}
                   </span>
-                  <span className={`badge ${sale.isLongTerm ? "badge-green" : "badge-orange"}`}>
-                    {sale.isLongTerm ? "Long-term" : "Short-term"}
-                  </span>
+                  {sale.isMixedTerm ? (
+                    <span className="badge badge-blue">Mixed</span>
+                  ) : (
+                    <span className={`badge ${sale.isLongTerm ? "badge-green" : "badge-orange"}`}>
+                      {sale.isLongTerm ? "Long-term" : "Short-term"}
+                    </span>
+                  )}
                 </summary>
                 <div className="ml-8 mt-1 text-xs">
                   {sale.lotDetails.map((d) => (

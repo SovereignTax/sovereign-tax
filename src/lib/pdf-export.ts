@@ -32,9 +32,6 @@ export function exportForm8949PDF(
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  const shortTermSales = sales.filter((s) => !s.isLongTerm);
-  const longTermSales = sales.filter((s) => s.isLongTerm);
-
   // --- Header ---
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
@@ -49,13 +46,19 @@ export function exportForm8949PDF(
 
   let yPos = 40;
 
+  // Build detail rows at the lot-detail level across ALL sales (handles mixed-term correctly)
+  const stRows = buildDetailRows(sales, false);
+  const ltRows = buildDetailRows(sales, true);
+
+  // Compute totals from lot details, not sale-level aggregates
+  const { proceeds: stProceeds, basis: stBasis, gainLoss: stGL, fees: stFees } = computeDetailTotals(sales, false);
+  const { proceeds: ltProceeds, basis: ltBasis, gainLoss: ltGL, fees: ltFees } = computeDetailTotals(sales, true);
+
   // --- Part I: Short-Term ---
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.text("Part I — Short-Term Capital Gains and Losses (held one year or less)", 14, yPos);
   yPos += 5;
-
-  const stRows = buildDetailRows(shortTermSales, false);
 
   if (stRows.length === 0) {
     doc.setFontSize(10);
@@ -67,7 +70,7 @@ export function exportForm8949PDF(
       startY: yPos,
       head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Adj. (Fees)", "Gain/(Loss)"]],
       body: stRows,
-      foot: [buildTotalRow("Total Short-Term", shortTermSales)],
+      foot: [buildTotalRowFromDetails("Total Short-Term", stProceeds, stBasis, stGL, stFees)],
       theme: "striped",
       headStyles: { fillColor: [41, 128, 185], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
@@ -90,8 +93,6 @@ export function exportForm8949PDF(
   doc.text("Part II — Long-Term Capital Gains and Losses (held more than one year)", 14, yPos);
   yPos += 5;
 
-  const ltRows = buildDetailRows(longTermSales, true);
-
   if (ltRows.length === 0) {
     doc.setFontSize(10);
     doc.setFont("helvetica", "italic");
@@ -102,7 +103,7 @@ export function exportForm8949PDF(
       startY: yPos,
       head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Adj. (Fees)", "Gain/(Loss)"]],
       body: ltRows,
-      foot: [buildTotalRow("Total Long-Term", longTermSales)],
+      foot: [buildTotalRowFromDetails("Total Long-Term", ltProceeds, ltBasis, ltGL, ltFees)],
       theme: "striped",
       headStyles: { fillColor: [39, 174, 96], fontSize: 8 },
       bodyStyles: { fontSize: 8 },
@@ -125,13 +126,6 @@ export function exportForm8949PDF(
   doc.text("Schedule D Summary — Capital Gains and Losses", 14, yPos);
   yPos += 5;
 
-  const stProceeds = shortTermSales.reduce((a, s) => a + s.totalProceeds, 0);
-  const stBasis = shortTermSales.reduce((a, s) => a + s.costBasis, 0);
-  const stGL = shortTermSales.reduce((a, s) => a + s.gainLoss, 0);
-  const ltProceeds = longTermSales.reduce((a, s) => a + s.totalProceeds, 0);
-  const ltBasis = longTermSales.reduce((a, s) => a + s.costBasis, 0);
-  const ltGL = longTermSales.reduce((a, s) => a + s.gainLoss, 0);
-
   autoTable(doc, {
     startY: yPos,
     head: [["Category", "Proceeds", "Cost Basis", "Gain/(Loss)"]],
@@ -147,6 +141,21 @@ export function exportForm8949PDF(
     margin: { left: 14, right: 14 },
     styles: { cellPadding: 3 },
   });
+
+  // --- NIIT Surtax Note ---
+  yPos = (doc as any).lastAutoTable.finalY + 8;
+  if (yPos > doc.internal.pageSize.getHeight() - 30) {
+    doc.addPage();
+    yPos = 15;
+  }
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(128, 128, 128);
+  doc.text(
+    "Note: Capital gains may be subject to an additional 3.8% Net Investment Income Tax (NIIT) if MAGI exceeds $200,000 ($250,000 MFJ). See IRS Form 8960.",
+    14,
+    yPos
+  );
 
   // --- Footer on all pages ---
   const totalPages = doc.getNumberOfPages();
@@ -167,6 +176,7 @@ export function exportForm8949PDF(
   doc.save(`form_8949_${year}_${method}.pdf`);
 }
 
+/** Build detail rows from ALL sales, filtering lot details by term */
 function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][] {
   const rows: string[][] = [];
   for (const sale of sales) {
@@ -175,13 +185,20 @@ function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][]
       if (!longTermOnly && detail.isLongTerm) continue;
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
+      // Apportion fee proportionally when sale has mixed-term lots
+      const termBTC = sale.lotDetails
+        .filter((d) => d.isLongTerm === longTermOnly)
+        .reduce((a, d) => a + d.amountBTC, 0);
+      const totalBTC = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+      const feeShare = sale.fee ? sale.fee * (termBTC / totalBTC) : 0;
+      const termDetailCount = sale.lotDetails.filter((d) => d.isLongTerm === longTermOnly).length;
       rows.push([
         `${formatBTC(detail.amountBTC)} BTC`,
         formatDate(detail.purchaseDate),
         formatDate(sale.saleDate),
         formatUSD(proceeds),
         formatUSD(detail.totalCost),
-        sale.fee ? formatUSD(sale.fee) : "",
+        feeShare > 0 ? formatUSD(feeShare / termDetailCount) : "",
         formatUSD(gainLoss),
       ]);
     }
@@ -189,11 +206,26 @@ function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][]
   return rows;
 }
 
-function buildTotalRow(label: string, sales: SaleRecord[]): string[] {
-  const totalProceeds = sales.reduce((a, s) => a + s.totalProceeds, 0);
-  const totalBasis = sales.reduce((a, s) => a + s.costBasis, 0);
-  const totalGL = sales.reduce((a, s) => a + s.gainLoss, 0);
-  const totalFees = sales.reduce((a, s) => a + (s.fee || 0), 0);
+/** Compute totals from lot details for a given term */
+function computeDetailTotals(sales: SaleRecord[], longTermOnly: boolean): { proceeds: number; basis: number; gainLoss: number; fees: number } {
+  let proceeds = 0, basis = 0, gainLoss = 0, fees = 0;
+  for (const sale of sales) {
+    const termDetails = sale.lotDetails.filter((d) => d.isLongTerm === longTermOnly);
+    if (termDetails.length === 0) continue;
+    const termBTC = termDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const totalBTC = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+    for (const detail of termDetails) {
+      const detailProceeds = detail.amountBTC * sale.salePricePerBTC;
+      proceeds += detailProceeds;
+      basis += detail.totalCost;
+      gainLoss += detailProceeds - detail.totalCost;
+    }
+    fees += sale.fee ? sale.fee * (termBTC / totalBTC) : 0;
+  }
+  return { proceeds, basis, gainLoss, fees };
+}
+
+function buildTotalRowFromDetails(label: string, totalProceeds: number, totalBasis: number, totalGL: number, totalFees: number): string[] {
   return [
     label,
     "",
