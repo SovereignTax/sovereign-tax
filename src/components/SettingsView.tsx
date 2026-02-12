@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.5";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/jhimm2300/sovereign-tax/main/version.json";
 
 export function SettingsView() {
@@ -258,7 +258,7 @@ export function SettingsView() {
           </div>
           {updateStatus?.type === "available" && (
             <p className="text-xs text-gray-400 mt-2">
-              Visit <a href="https://sovereigntax.com" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">sovereigntax.com</a> to download the latest version.
+              Visit <a href="https://sovereigntax.io" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">sovereigntax.io</a> to download the latest version.
             </p>
           )}
         </div>

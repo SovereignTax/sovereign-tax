@@ -1,6 +1,6 @@
 {
-  "latest": "1.0.2",
-  "url": "https://sovereigntax.com",
-  "releaseDate": "2026-02-10",
-  "notes": "CSV mapping tooltips, strengthened Terms of Service, privacy controls"
+  "latest": "1.0.5",
+  "url": "https://sovereigntax.io",
+  "releaseDate": "2026-02-12",
+  "notes": "Per-wallet cost basis (IRS TD 9989), mixed-term Form 8949 export fix, capital loss carryforward tracking, NIIT surtax note, FMV auto-lookup"
 }
