@@ -132,3 +132,11 @@ export function requiredFieldsMissing(mapping: ColumnMapping): string[] {
 export function isMappingValid(mapping: ColumnMapping): boolean {
   return requiredFieldsMissing(mapping).length === 0;
 }
+
+export function warningFieldsMissing(mapping: ColumnMapping): string[] {
+  const warnings: string[] = [];
+  if (!isDualColumn(mapping) && !mapping.price && !mapping.total) {
+    warnings.push("price or total");
+  }
+  return warnings;
+}

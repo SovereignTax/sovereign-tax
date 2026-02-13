@@ -11,6 +11,7 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "store:default",
+    "opener:default",
     {
       "identifier": "fs:allow-read-file",
       "allow": [

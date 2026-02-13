@@ -83,24 +83,21 @@ export function TransactionsView() {
         <span className="text-xs"><span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1" />{counts.transfers} Transfers</span>
       </div>
 
-      <div className="border-t border-gray-200 dark:border-gray-700" />
-
-      {/* Table Header (sticky) */}
-      <div className="px-6">
-        <div className="grid grid-cols-7 gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700">
-          <SortHeader label="Date" field="date" current={sortField} asc={sortAsc} onClick={toggleSort} />
-          <div>Type</div>
-          <SortHeader label="Amount BTC" field="amountBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
-          <SortHeader label="Price/BTC" field="pricePerBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
-          <SortHeader label="Total USD" field="totalUSD" current={sortField} asc={sortAsc} onClick={toggleSort} />
-          <SortHeader label="Exchange" field="exchange" current={sortField} asc={sortAsc} onClick={toggleSort} />
-          <div>Notes</div>
-        </div>
-      </div>
-
-      {/* Table Body (scrollable) */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Table (scrollable with sticky header) */}
+      <div className="flex-1 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
         <div className="px-6">
+          {/* Sticky Header */}
+          <div className="grid grid-cols-7 gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+            <SortHeader label="Date" field="date" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <div>Type</div>
+            <SortHeader label="Amount BTC" field="amountBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <SortHeader label="Price/BTC" field="pricePerBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <SortHeader label="Total USD" field="totalUSD" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <SortHeader label="Exchange" field="exchange" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <div>Notes</div>
+          </div>
+
+          {/* Table Body */}
           {filtered.map((t, i) => (
             <div key={t.id} className={`grid grid-cols-7 gap-2 py-1.5 text-sm ${i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30"}`}>
               <div className="tabular-nums">{formatDateTime(t.date)}</div>

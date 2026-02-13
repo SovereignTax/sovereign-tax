@@ -1,7 +1,7 @@
 import { useState, useCallback, DragEvent } from "react";
 import { useAppState } from "../lib/app-state";
-import { readHeaders, detectColumns, parseCSVContent, computeHash } from "../lib/csv-import";
-import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
+import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash } from "../lib/csv-import";
+import { ColumnMapping, isMappingValid, requiredFieldsMissing, warningFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 
 type ImportStatus = { type: "success"; count: number; skipped: number; duplicates: number } | { type: "error"; message: string };
@@ -163,7 +163,22 @@ export function ImportView() {
         <div className="card mb-6">
           <h3 className="font-semibold mb-2">Column Mapping</h3>
           <p className="text-sm text-gray-500 mb-1">
-            We found these columns in your file: <span className="font-medium text-gray-600 dark:text-gray-300">{detectedHeaders.join(", ")}</span>
+            Columns in your file:{" "}
+            {detectedHeaders.map((h, i) => {
+              const mappedValues = Object.values(mapping).filter(Boolean);
+              const isMapped = mappedValues.includes(h);
+              return (
+                <span key={h}>
+                  {i > 0 && ", "}
+                  <span className={isMapped
+                    ? "font-medium text-green-600 dark:text-green-400"
+                    : "font-medium text-orange-500 dark:text-orange-400"
+                  }>
+                    {h}{!isMapped && " (unmapped)"}
+                  </span>
+                </span>
+              );
+            })}
           </p>
           <p className="text-sm text-gray-500 mb-4">
             Match each field below to the correct column from your CSV. Fields marked <span className="text-red-500 font-semibold">*</span> are required. If a field was auto-detected, it's already filled in — just verify it looks right.
@@ -232,6 +247,19 @@ export function ImportView() {
             </div>
           )}
 
+          {/* Price/Total warning */}
+          {warningFieldsMissing(mapping).length > 0 && (
+            <div className="flex items-start gap-2 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <span className="text-red-500 text-lg leading-none mt-0.5">⚠️</span>
+              <div>
+                <p className="text-red-600 dark:text-red-400 font-semibold text-sm">Neither Price nor Total is mapped</p>
+                <p className="text-red-500 dark:text-red-400 text-sm mt-0.5">
+                  All transactions will import with $0 USD values, causing incorrect tax calculations. Please map your Price or Total column above.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Validation */}
           {requiredFieldsMissing(mapping).length > 0 ? (
             <div className="flex items-center gap-2 mt-4 text-red-500 text-sm">
@@ -245,6 +273,11 @@ export function ImportView() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Data Preview */}
+      {showMapping && pendingContent && (
+        <DataPreview content={pendingContent} headers={detectedHeaders} mapping={mapping} />
       )}
 
       {/* Import Button */}
@@ -311,6 +344,111 @@ function MappingRow({
         ))}
       </select>
       <span>{value ? "✅" : "⚪"}</span>
+    </div>
+  );
+}
+
+function DataPreview({ content, headers, mapping }: {
+  content: string; headers: string[]; mapping: ColumnMapping;
+}) {
+  // Parse first 3 data rows
+  const lines = content.startsWith("\uFEFF") ? content.slice(1) : content;
+  const allLines = lines.split(/\r?\n/).filter((l) => l.trim());
+  if (allLines.length <= 1) return null;
+
+  // Find header line index (first line with known columns)
+  let headerIdx = 0;
+  const headerFields = parseCSVLine(allLines[0]);
+  const headersLower = headerFields.map((h) => h.toLowerCase().trim());
+  for (let i = 0; i < allLines.length; i++) {
+    const fields = parseCSVLine(allLines[i]);
+    const fieldsLower = fields.map((f) => f.toLowerCase().trim());
+    if (fieldsLower.some((f) => headers.map((h) => h.toLowerCase().trim()).includes(f))) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  const dataLines = allLines.slice(headerIdx + 1, headerIdx + 4);
+  if (dataLines.length === 0) return null;
+
+  // Build header-to-index map
+  const parsedHeaders = parseCSVLine(allLines[headerIdx]);
+  const headerIndex: Record<string, number> = {};
+  parsedHeaders.forEach((h, i) => { headerIndex[h] = i; });
+
+  // Define which columns to show
+  const previewCols: { label: string; key: keyof ColumnMapping; isUSD: boolean }[] = [
+    { label: "Date", key: "date", isUSD: false },
+    { label: "Type", key: "type", isUSD: false },
+    { label: "Amount", key: "amount", isUSD: false },
+    { label: "Price", key: "price", isUSD: true },
+    { label: "Total", key: "total", isUSD: true },
+    { label: "Fee", key: "fee", isUSD: true },
+  ];
+
+  const activeCols = previewCols.filter((c) => mapping[c.key]);
+
+  // Parse rows
+  const rows = dataLines.map((line) => {
+    const fields = parseCSVLine(line);
+    return activeCols.map((col) => {
+      const mappedHeader = mapping[col.key] as string;
+      const idx = headerIndex[mappedHeader];
+      const raw = idx !== undefined && idx < fields.length ? fields[idx] : "";
+      return { raw, isUSD: col.isUSD };
+    });
+  });
+
+  const formatCell = (raw: string, isUSD: boolean) => {
+    if (!raw.trim()) return "—";
+    if (!isUSD) return raw;
+    const cleaned = raw.replace(/[$,]/g, "").trim();
+    const num = Number(cleaned);
+    if (isNaN(num)) return raw;
+    return `$${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const isZeroUSD = (raw: string, isUSD: boolean) => {
+    if (!isUSD) return false;
+    const cleaned = raw.replace(/[$,]/g, "").trim();
+    const num = Number(cleaned);
+    return !isNaN(num) && num === 0;
+  };
+
+  return (
+    <div className="card mb-6">
+      <h3 className="font-semibold mb-1 text-sm">Data Preview</h3>
+      <p className="text-xs text-gray-500 mb-3">First {rows.length} row{rows.length !== 1 ? "s" : ""} with your current mapping — verify this looks correct before importing.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              {activeCols.map((col) => (
+                <th key={col.key} className="text-left py-1.5 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className="border-b border-gray-100 dark:border-gray-800">
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={`py-1.5 px-2 font-mono text-xs ${
+                      isZeroUSD(cell.raw, cell.isUSD)
+                        ? "text-orange-500 font-semibold bg-orange-50 dark:bg-orange-900/20"
+                        : "text-gray-700 dark:text-gray-300"
+                    }`}
+                  >
+                    {formatCell(cell.raw, cell.isUSD)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

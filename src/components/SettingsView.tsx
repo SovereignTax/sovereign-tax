@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
-const APP_VERSION = "1.0.6";
-const VERSION_CHECK_URL = "https://sovereigntax.io/version.json";
+const APP_VERSION = "1.0.7";
+const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
 
 export function SettingsView() {
   const state = useAppState();
@@ -223,9 +224,10 @@ export function SettingsView() {
                   if (latest === APP_VERSION) {
                     setUpdateStatus({ type: "up-to-date", message: `You're up to date! (v${APP_VERSION})` });
                   } else {
+                    const notes = data.notes ? ` — ${data.notes}` : "";
                     setUpdateStatus({
                       type: "available",
-                      message: `Update available: v${latest} (you have v${APP_VERSION})`,
+                      message: `v${latest} available${notes}`,
                     });
                   }
                 } catch (e: any) {
@@ -234,7 +236,6 @@ export function SettingsView() {
                     message: `Could not check for updates. Make sure you're connected to the internet.`,
                   });
                 }
-                setTimeout(() => setUpdateStatus(null), 8000);
               }}
             >
               {updateStatus?.type === "checking" ? "Checking..." : "🔄 Check for Updates"}
@@ -250,16 +251,27 @@ export function SettingsView() {
                 }`}
               >
                 {updateStatus.type === "up-to-date" && "✓ "}
-                {updateStatus.type === "available" && "⬆ "}
                 {updateStatus.type === "error" && "⚠ "}
                 {updateStatus.message}
               </span>
             )}
           </div>
           {updateStatus?.type === "available" && (
-            <p className="text-xs text-gray-400 mt-2">
-              Visit <a href="https://sovereigntax.io" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">sovereigntax.io</a> to download the latest version.
-            </p>
+            <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-orange-500 text-lg">⬆</span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-orange-600 dark:text-orange-400">{updateStatus.message}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">You have v{APP_VERSION}. Download the latest version to get new features and fixes.</p>
+                </div>
+                <button
+                  className="btn-primary text-sm px-4 py-2"
+                  onClick={() => openUrl("https://sovereigntax.io")}
+                >
+                  Download Update
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
