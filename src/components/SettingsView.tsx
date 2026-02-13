@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 
-const APP_VERSION = "1.0.5";
+const APP_VERSION = "1.0.6";
 const VERSION_CHECK_URL = "https://sovereigntax.io/version.json";
 
 export function SettingsView() {

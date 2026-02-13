@@ -20,16 +20,19 @@ const columnVariations: Record<string, string[]> = {
   amount: [
     "amount", "quantity", "size", "btc amount", "bitcoin", "btc", "volume",
     "asset amount", "net amount", "quantity transacted",
+    "amount (btc)", "amount btc", "quantity (btc)",
   ],
   price: [
     "price", "price per btc", "rate", "unit price", "btc price", "price usd",
     "spot price", "asset price", "price at transaction",
     "spot price at transaction", "usd spot price at transaction",
+    "price (usd)", "price (btc)", "unit price (usd)",
   ],
   total: [
     "total", "total usd", "usd total", "value", "total value", "subtotal",
     "total (inclusive of fees and/or spread)", "usd amount",
     "usd total (inclusive of fees)", "usd subtotal",
+    "total (usd)",
   ],
   fee: [
     "fee", "fees", "commission", "spread", "trading fee", "transaction fee",
@@ -197,6 +200,44 @@ export function detectColumns(headers: string[]): ColumnMapping {
     }
   }
 
+  // Pass 4: Normalize parenthetical headers — "Price (USD)" → "price usd"
+  // This catches any parenthetical format not explicitly listed in variations
+  for (let i = 0; i < headers.length; i++) {
+    const lower = headersLower[i];
+    // Skip if no parentheses
+    if (!lower.includes("(")) continue;
+    // Normalize: strip parens, collapse whitespace
+    const normalized = lower.replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+    if (normalized === lower) continue;
+
+    for (const [field, variations] of Object.entries(columnVariations)) {
+      // Skip fields already mapped
+      const mappedKey = field as keyof ColumnMapping;
+      if (mapping[mappedKey]) continue;
+
+      if (variations.includes(normalized)) {
+        const original = headers[i];
+        switch (field) {
+          case "date": mapping.date = original; break;
+          case "type": mapping.type = original; break;
+          case "amount": mapping.amount = original; break;
+          case "price": mapping.price = original; break;
+          case "total": mapping.total = original; break;
+          case "fee": mapping.fee = original; break;
+          case "wallet": mapping.wallet = original; break;
+          case "exchange": mapping.exchange = original; break;
+          case "notes": mapping.notes = original; break;
+          case "asset": mapping.asset = original; break;
+          case "receivedQuantity": mapping.receivedQuantity = original; break;
+          case "receivedCurrency": mapping.receivedCurrency = original; break;
+          case "sentQuantity": mapping.sentQuantity = original; break;
+          case "sentCurrency": mapping.sentCurrency = original; break;
+        }
+        break;
+      }
+    }
+  }
+
   return mapping;
 }
 
@@ -211,7 +252,15 @@ function findHeaderLineIndex(lines: string[]): number {
     const fields = parseCSVLine(lines[idx]);
     if (fields.length >= 3) {
       const fieldsLower = fields.map((f) => f.toLowerCase().trim());
-      const matchCount = fieldsLower.filter((f) => allKnownColumns.has(f)).length;
+      const matchCount = fieldsLower.filter((f) => {
+        if (allKnownColumns.has(f)) return true;
+        // Also try normalizing parenthetical headers: "price (usd)" → "price usd"
+        if (f.includes("(")) {
+          const normalized = f.replace(/[()]/g, "").replace(/\s+/g, " ").trim();
+          return allKnownColumns.has(normalized);
+        }
+        return false;
+      }).length;
       if (matchCount >= 1) return idx;
     }
   }
