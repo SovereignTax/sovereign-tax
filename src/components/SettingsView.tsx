@@ -15,7 +15,7 @@ export function SettingsView() {
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [updateStatus, setUpdateStatus] = useState<{ type: "checking" | "up-to-date" | "available" | "error"; message: string } | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<{ type: "checking" | "up-to-date" | "available" | "error"; message: string; downloadUrl?: string } | null>(null);
 
   if (showChangePIN) {
     return <SetupPIN isInitialSetup={false} onDone={() => setShowChangePIN(false)} />;
@@ -225,9 +225,12 @@ export function SettingsView() {
                     setUpdateStatus({ type: "up-to-date", message: `You're up to date! (v${APP_VERSION})` });
                   } else {
                     const notes = data.notes ? ` — ${data.notes}` : "";
+                    const platform = navigator.userAgent.includes("Mac") ? "macos" : "windows";
+                    const downloadUrl = data.downloads?.[platform] || data.url;
                     setUpdateStatus({
                       type: "available",
                       message: `v${latest} available${notes}`,
+                      downloadUrl,
                     });
                   }
                 } catch (e: any) {
@@ -266,7 +269,7 @@ export function SettingsView() {
                 </div>
                 <button
                   className="btn-primary text-sm px-4 py-2"
-                  onClick={() => openUrl("https://sovereigntax.io")}
+                  onClick={() => openUrl(updateStatus.downloadUrl || "https://sovereigntax.io")}
                 >
                   Download Update
                 </button>
