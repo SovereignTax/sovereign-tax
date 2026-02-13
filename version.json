@@ -1,6 +1,6 @@
 {
-  "latest": "1.0.7",
+  "latest": "1.0.8",
   "url": "https://sovereigntax.io",
   "releaseDate": "2026-02-13",
-  "notes": "Import UX: data preview, unmapped column warnings, sticky table headers, update checker fix"
+  "notes": "Fix long-term holding period calculation to use calendar year per IRS IRC §1222"
 }

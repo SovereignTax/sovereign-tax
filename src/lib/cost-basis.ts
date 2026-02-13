@@ -16,6 +16,20 @@ export function daysBetween(d1: string, d2: string): number {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Determine if a holding period qualifies as long-term per IRS IRC §1222.
+ * The holding period starts the day after acquisition. An asset is long-term
+ * if sold on or after the same month/day of the next year + 1 day.
+ * This correctly handles leap years and boundary cases.
+ */
+export function isMoreThanOneYear(acquiredDate: string, soldDate: string): boolean {
+  const acquired = new Date(acquiredDate);
+  const sold = new Date(soldDate);
+  const oneYearLater = new Date(acquired);
+  oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+  return sold > oneYearLater;
+}
+
 /** Format date for display */
 function formatDateShort(isoDate: string): string {
   const d = new Date(isoDate);
@@ -183,7 +197,7 @@ function processSale(
         daysHeld,
         exchange: lots[lotIdx].exchange,
         wallet: lots[lotIdx].wallet,
-        isLongTerm: daysHeld > 365,
+        isLongTerm: isMoreThanOneYear(lots[lotIdx].purchaseDate, sale.date),
       });
 
       lots[lotIdx].remainingBTC -= sellFromLot;
@@ -233,7 +247,7 @@ function processSale(
         daysHeld,
         exchange: lots[idx].exchange,
         wallet: lots[idx].wallet,
-        isLongTerm: daysHeld > 365,
+        isLongTerm: isMoreThanOneYear(lots[idx].purchaseDate, sale.date),
       });
 
       lots[idx].remainingBTC -= sellFromLot;
