@@ -1,7 +1,7 @@
 import { useState, useCallback, DragEvent } from "react";
 import { useAppState } from "../lib/app-state";
 import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash } from "../lib/csv-import";
-import { ColumnMapping, isMappingValid, requiredFieldsMissing, warningFieldsMissing, isDualColumn } from "../lib/models";
+import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 
 type ImportStatus = { type: "success"; count: number; skipped: number; duplicates: number } | { type: "error"; message: string };
@@ -247,14 +247,14 @@ export function ImportView() {
             </div>
           )}
 
-          {/* Price/Total warning */}
-          {warningFieldsMissing(mapping).length > 0 && (
+          {/* Price/Total requirement notice */}
+          {!isDualColumn(mapping) && !mapping.price && !mapping.total && (
             <div className="flex items-start gap-2 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <span className="text-red-500 text-lg leading-none mt-0.5">⚠️</span>
               <div>
-                <p className="text-red-600 dark:text-red-400 font-semibold text-sm">Neither Price nor Total is mapped</p>
+                <p className="text-red-600 dark:text-red-400 font-semibold text-sm">Price or Total is required</p>
                 <p className="text-red-500 dark:text-red-400 text-sm mt-0.5">
-                  All transactions will import with $0 USD values, causing incorrect tax calculations. Please map your Price or Total column above.
+                  Without a USD price or total value, tax calculations cannot be accurate. Please map your Price or Total column above.
                 </p>
               </div>
             </div>

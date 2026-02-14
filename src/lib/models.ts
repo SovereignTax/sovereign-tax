@@ -125,6 +125,7 @@ export function requiredFieldsMissing(mapping: ColumnMapping): string[] {
   if (!mapping.date) missing.push("date");
   if (!isDualColumn(mapping)) {
     if (!mapping.amount) missing.push("amount");
+    if (!mapping.price && !mapping.total) missing.push("price or total");
   }
   return missing;
 }

@@ -1,8 +1,8 @@
 {
-  "latest": "1.0.8",
+  "latest": "1.0.9",
   "url": "https://sovereigntax.io",
   "releaseDate": "2026-02-13",
-  "notes": "Fix long-term holding period calculation to use calendar year per IRS IRC §1222",
+  "notes": "Require Price or Total for CSV import — prevents $0 USD value imports that cause incorrect tax calculations",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe"
