@@ -225,7 +225,7 @@ export function SettingsView() {
                     setUpdateStatus({ type: "up-to-date", message: `You're up to date! (v${APP_VERSION})` });
                   } else {
                     const notes = data.notes ? ` — ${data.notes}` : "";
-                    const platform = navigator.userAgent.includes("Mac") ? "macos" : "windows";
+                    const platform = navigator.userAgent.includes("Mac") ? "macos" : navigator.userAgent.includes("Linux") ? "linux" : "windows";
                     const downloadUrl = data.downloads?.[platform] || data.url;
                     setUpdateStatus({
                       type: "available",
