@@ -49,6 +49,25 @@ export function timeAgo(date: Date): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+/** Find existing transactions that look similar (same type, same day, similar amount).
+ *  Used to warn users about potential duplicates before adding. */
+export function findSimilarTransactions<T extends { date: string; transactionType: string; amountBTC: number; exchange: string }>(
+  existing: T[],
+  type: string,
+  date: string,
+  amountBTC: number
+): T[] {
+  const targetDay = new Date(date).toDateString();
+  return existing.filter((t) => {
+    if (t.transactionType !== type) return false;
+    if (new Date(t.date).toDateString() !== targetDay) return false;
+    // Within 5% of the amount, or exact match at 0
+    if (amountBTC === 0 && t.amountBTC === 0) return true;
+    const ratio = Math.abs(t.amountBTC - amountBTC) / Math.max(t.amountBTC, amountBTC);
+    return ratio < 0.05;
+  });
+}
+
 /** Natural key for transaction deduplication */
 export function transactionNaturalKey(t: { date: string; transactionType: string; amountBTC: number; exchange: string; wallet?: string }): string {
   const d = new Date(t.date);

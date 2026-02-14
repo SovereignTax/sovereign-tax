@@ -3,6 +3,7 @@
 export enum AuditAction {
   TransactionImport = "TransactionImport",
   TransactionAdd = "TransactionAdd",
+  TransactionEdit = "TransactionEdit",
   TransactionDelete = "TransactionDelete",
   SaleRecorded = "SaleRecorded",
   DataCleared = "DataCleared",
@@ -15,6 +16,7 @@ export enum AuditAction {
 export const AuditActionDisplayNames: Record<AuditAction, string> = {
   [AuditAction.TransactionImport]: "Transactions Imported",
   [AuditAction.TransactionAdd]: "Transaction Added",
+  [AuditAction.TransactionEdit]: "Transaction Edited",
   [AuditAction.TransactionDelete]: "Transaction Deleted",
   [AuditAction.SaleRecorded]: "Sale Recorded",
   [AuditAction.DataCleared]: "Data Cleared",

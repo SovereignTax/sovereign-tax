@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { useAppState } from "../lib/app-state";
-import { createTransaction } from "../lib/models";
+import { createTransaction, Transaction } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
-import { formatUSD } from "../lib/utils";
+import { formatUSD, formatBTC, formatDateTime, findSimilarTransactions } from "../lib/utils";
 
 export function AddTransactionView() {
   const state = useAppState();
@@ -20,6 +20,10 @@ export function AddTransactionView() {
   const [fmvLoading, setFmvLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Duplicate warning state
+  const [pendingTxn, setPendingTxn] = useState<Transaction | null>(null);
+  const [duplicateMatches, setDuplicateMatches] = useState<typeof state.transactions>([]);
 
   /** Auto-fetch historical FMV for income transactions */
   const fetchFMV = useCallback(async () => {
@@ -41,6 +45,14 @@ export function AddTransactionView() {
       setFmvLoading(false);
     }
   }, [date, amountStr, state]);
+
+  const commitTransaction = (txn: Transaction) => {
+    state.addTransaction(txn);
+    setSuccess(`${TransactionTypeDisplayNames[txn.transactionType]} of ${formatBTC(txn.amountBTC)} BTC added`);
+    setAmountStr(""); setPriceStr(""); setTotalStr(""); setFeeStr(""); setWallet(""); setNotes(""); setIncomeType("");
+    setPendingTxn(null);
+    setDuplicateMatches([]);
+  };
 
   const handleAdd = () => {
     setError(null); setSuccess(null);
@@ -77,9 +89,16 @@ export function AddTransactionView() {
       incomeType: type === TransactionType.Buy && incomeType ? incomeType : undefined,
       notes,
     });
-    state.addTransaction(txn);
-    setSuccess(`${TransactionTypeDisplayNames[type]} of ${amountStr} BTC added`);
-    setAmountStr(""); setPriceStr(""); setTotalStr(""); setFeeStr(""); setWallet(""); setNotes(""); setIncomeType("");
+
+    // Check for similar existing transactions
+    const similar = findSimilarTransactions(state.transactions, type, txn.date, amount);
+    if (similar.length > 0) {
+      setPendingTxn(txn);
+      setDuplicateMatches(similar);
+      return;
+    }
+
+    commitTransaction(txn);
   };
 
   return (
@@ -188,6 +207,43 @@ export function AddTransactionView() {
 
       {success && <div className="bg-green-50 dark:bg-green-900/20 text-green-600 p-4 rounded-lg mt-4">✅ {success}</div>}
       {error && <div className="bg-red-50 dark:bg-red-900/20 text-red-500 p-4 rounded-lg mt-4">⚠️ {error}</div>}
+
+      {/* Duplicate Warning Modal */}
+      {pendingTxn && duplicateMatches.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setPendingTxn(null); setDuplicateMatches([]); }}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-2 text-orange-500">Possible Duplicate</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              A similar transaction already exists. Adding this could cause duplicate entries, which will produce incorrect tax calculations (e.g., double-counting a sale).
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              This can happen if you manually add a transaction that also appears in a CSV import.
+            </p>
+
+            <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-3 mb-4 text-sm space-y-1">
+              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Existing match{duplicateMatches.length > 1 ? "es" : ""}:</p>
+              {duplicateMatches.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+                  <span className="tabular-nums">{formatDateTime(m.date)}</span>
+                  <span>{TransactionTypeDisplayNames[m.transactionType]}</span>
+                  <span className="tabular-nums">{formatBTC(m.amountBTC)} BTC</span>
+                  <span className="text-gray-400">{m.exchange}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => { setPendingTxn(null); setDuplicateMatches([]); }}>Cancel</button>
+              <button
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                onClick={() => commitTransaction(pendingTxn)}
+              >
+                Add Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

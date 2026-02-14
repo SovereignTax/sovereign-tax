@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useAppState } from "../lib/app-state";
 import { calculate, simulateSale, LotSelection } from "../lib/cost-basis";
-import { formatUSD, formatBTC, formatDate } from "../lib/utils";
-import { AccountingMethod, TransactionType } from "../lib/types";
+import { formatUSD, formatBTC, formatDate, formatDateTime, findSimilarTransactions } from "../lib/utils";
+import { AccountingMethod, TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 import { SaleRecord, createTransaction } from "../lib/models";
 import { LotPicker } from "./LotPicker";
 
@@ -18,6 +18,8 @@ export function RecordSaleView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showLotPicker, setShowLotPicker] = useState(false);
   const [lotSelections, setLotSelections] = useState<LotSelection[] | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<typeof state.transactions>([]);
 
   const fullResult = useMemo(() => calculate(state.allTransactions, method), [state.allTransactions, method]);
 
@@ -56,7 +58,7 @@ export function RecordSaleView() {
     setShowLotPicker(false);
   };
 
-  const confirmSale = () => {
+  const commitSale = () => {
     if (!preview) return;
     const txn = createTransaction({
       date: new Date(saleDate).toISOString(),
@@ -72,7 +74,28 @@ export function RecordSaleView() {
     setSuccess("Sale recorded successfully");
     setPreview(null);
     setLotSelections(null);
+    setPendingConfirm(false);
+    setDuplicateMatches([]);
     setAmountStr(""); setPriceStr("");
+  };
+
+  const confirmSale = () => {
+    if (!preview) return;
+
+    // Check for similar existing sell transactions on same day
+    const similar = findSimilarTransactions(
+      state.transactions,
+      TransactionType.Sell,
+      new Date(saleDate).toISOString(),
+      preview.amountSold
+    );
+    if (similar.length > 0) {
+      setPendingConfirm(true);
+      setDuplicateMatches(similar);
+      return;
+    }
+
+    commitSale();
   };
 
   return (
@@ -112,7 +135,7 @@ export function RecordSaleView() {
           <button className="btn-secondary" onClick={generatePreview}>
             {isSpecificID ? "🔍 Select Lots" : "👁️ Preview"}
           </button>
-          {preview && <button className="btn-primary" onClick={() => { if (confirm("This will permanently record the sale. Proceed?")) confirmSale(); }}>✅ Record Sale</button>}
+          {preview && <button className="btn-primary" onClick={confirmSale}>✅ Record Sale</button>}
         </div>
       </div>
 
@@ -163,6 +186,43 @@ export function RecordSaleView() {
               <span className={`badge ${s.isLongTerm ? "badge-green" : "badge-orange"}`}>{s.isLongTerm ? "Long" : "Short"}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Duplicate Warning Modal */}
+      {pendingConfirm && duplicateMatches.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setPendingConfirm(false); setDuplicateMatches([]); }}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-2 text-orange-500">Possible Duplicate Sale</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              A similar sell transaction already exists on the same day. Recording this sale could double-count the sale and produce incorrect tax calculations.
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              This can happen if you record a sale manually that was also imported from a CSV.
+            </p>
+
+            <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-3 mb-4 text-sm space-y-1">
+              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Existing match{duplicateMatches.length > 1 ? "es" : ""}:</p>
+              {duplicateMatches.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+                  <span className="tabular-nums">{formatDateTime(m.date)}</span>
+                  <span>{TransactionTypeDisplayNames[m.transactionType]}</span>
+                  <span className="tabular-nums">{formatBTC(m.amountBTC)} BTC</span>
+                  <span className="text-gray-400">{m.exchange}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => { setPendingConfirm(false); setDuplicateMatches([]); }}>Cancel</button>
+              <button
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                onClick={commitSale}
+              >
+                Record Anyway
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

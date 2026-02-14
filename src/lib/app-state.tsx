@@ -60,6 +60,7 @@ interface AppStateContextType {
   addTransactionsDeduped: (txns: Transaction[]) => { added: number; duplicates: number };
   addTransaction: (txn: Transaction) => void;
   deleteTransaction: (id: string) => void;
+  updateTransaction: (id: string, updates: Partial<Omit<Transaction, "id">>) => void;
   updateTransactionPrice: (id: string, price: number) => void;
   recordSale: (sale: SaleRecord) => void;
   clearAllData: () => void;
@@ -291,6 +292,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
   }, [appendAuditLog]);
 
+  const updateTransaction = useCallback((id: string, updates: Partial<Omit<Transaction, "id">>) => {
+    setTransactions((prev) => {
+      const next = prev.map((t) => {
+        if (t.id !== id) return t;
+        return { ...t, ...updates };
+      });
+      persistence.saveTransactions(next);
+      const updated = next.find((t) => t.id === id);
+      if (updated) {
+        appendAuditLog(AuditAction.TransactionEdit, `Edited ${updated.transactionType} of ${updated.amountBTC.toFixed(8)} BTC from ${updated.exchange}`);
+      }
+      return next;
+    });
+  }, [appendAuditLog]);
+
   const updateTransactionPrice = useCallback((id: string, price: number) => {
     setTransactions((prev) => {
       const next = prev.map((t) => {
@@ -415,6 +431,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     addTransactionsDeduped,
     addTransaction,
     deleteTransaction,
+    updateTransaction,
     updateTransactionPrice,
     recordSale: recordSaleAction,
     clearAllData,
