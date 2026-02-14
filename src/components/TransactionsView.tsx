@@ -87,11 +87,12 @@ export function TransactionsView() {
       <div className="flex-1 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
         <div className="px-6">
           {/* Sticky Header */}
-          <div className="grid grid-cols-7 gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+          <div className="grid gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 1.2fr' }}>
             <SortHeader label="Date" field="date" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <div>Type</div>
             <SortHeader label="Amount BTC" field="amountBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <SortHeader label="Price/BTC" field="pricePerBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <div>Fee</div>
             <SortHeader label="Total USD" field="totalUSD" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <SortHeader label="Exchange" field="exchange" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <div>Notes</div>
@@ -99,13 +100,14 @@ export function TransactionsView() {
 
           {/* Table Body */}
           {filtered.map((t, i) => (
-            <div key={t.id} className={`grid grid-cols-7 gap-2 py-1.5 text-sm ${i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30"}`}>
+            <div key={t.id} className={`grid gap-2 py-1.5 text-sm ${i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30"}`} style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 1.2fr' }}>
               <div className="tabular-nums">{formatDateTime(t.date)}</div>
               <div className={typeColor(t.transactionType)}>
                 {typeIcon(t.transactionType)} {TransactionTypeDisplayNames[t.transactionType]}
               </div>
               <div className="tabular-nums">{formatBTC(t.amountBTC)}</div>
               <div className="tabular-nums">{formatUSD(t.pricePerBTC)}</div>
+              <div className="tabular-nums text-gray-400">{t.fee ? formatUSD(t.fee) : ""}</div>
               <div className="tabular-nums">{formatUSD(t.totalUSD)}</div>
               <div className="truncate">{t.exchange}</div>
               <div className="text-gray-500 truncate">{t.notes}</div>
