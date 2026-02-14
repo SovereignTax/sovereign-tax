@@ -78,7 +78,7 @@ export function AddTransactionView() {
 
     const finalExchange = exchange || "Manual";
     const txn = createTransaction({
-      date: new Date(date).toISOString(),
+      date: new Date(date + "T12:00:00").toISOString(),
       transactionType: type,
       amountBTC: amount,
       pricePerBTC: adjustedPrice,

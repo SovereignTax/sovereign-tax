@@ -61,7 +61,7 @@ export function RecordSaleView() {
   const commitSale = () => {
     if (!preview) return;
     const txn = createTransaction({
-      date: new Date(saleDate).toISOString(),
+      date: new Date(saleDate + "T12:00:00").toISOString(),
       transactionType: TransactionType.Sell,
       amountBTC: preview.amountSold,
       pricePerBTC: preview.salePricePerBTC,
@@ -86,7 +86,7 @@ export function RecordSaleView() {
     const similar = findSimilarTransactions(
       state.transactions,
       TransactionType.Sell,
-      new Date(saleDate).toISOString(),
+      new Date(saleDate + "T12:00:00").toISOString(),
       preview.amountSold
     );
     if (similar.length > 0) {
