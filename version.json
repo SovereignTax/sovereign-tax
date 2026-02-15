@@ -6,6 +6,6 @@
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",
-    "linux": "https://sovereigntax.io/downloads/SovereignTax-Linux.AppImage"
+    "linux": "https://sovereigntax.io/downloads/SovereignTax-Linux.deb"
   }
 }
