@@ -74,7 +74,7 @@ h1 .accent {
 /* Download Cards */
 .download-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 16px;
   margin-bottom: 40px;
 }
@@ -217,8 +217,8 @@ h1 .accent {
   font-weight: 500;
 }
 
-/* macOS note */
-.macos-note {
+/* Platform notes */
+.platform-note {
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
@@ -227,14 +227,18 @@ h1 .accent {
   margin-bottom: 40px;
 }
 
-.macos-note h4 {
+.platform-note + .platform-note {
+  margin-top: 12px;
+}
+
+.platform-note h4 {
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 4px;
   color: var(--text);
 }
 
-.macos-note p {
+.platform-note p {
   font-size: 0.82rem;
   color: var(--text-tertiary);
   line-height: 1.55;
@@ -431,6 +435,13 @@ h1 .accent {
         <span class="platform-detail">Windows 10 / 11</span>
         <span class="dl-btn">&#8595; Download .exe</span>
       </a>
+
+      <a href="downloads/SovereignTax-Linux.AppImage" class="download-card">
+        <span class="platform-icon">&#128039;</span>
+        <span class="platform-name">Linux</span>
+        <span class="platform-detail">AppImage (all distros)</span>
+        <span class="dl-btn">&#8595; Download .AppImage</span>
+      </a>
     </div>
 
     <!-- Invoice Notice -->
@@ -450,7 +461,7 @@ h1 .accent {
 
       <div class="step-item">
         <span class="step-num">2</span>
-        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer.</span>
+        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer. On Linux, make the AppImage executable and run it.</span>
       </div>
 
       <div class="step-item">
@@ -464,11 +475,18 @@ h1 .accent {
       </div>
     </div>
 
-    <!-- macOS Note -->
-    <div class="macos-note">
+    <!-- Platform Notes -->
+    <div class="platform-note">
       <h4>&#63743; macOS Users</h4>
       <p>
         This app is signed and notarized by Apple. Double-click the DMG, drag Sovereign Tax to your Applications folder, and launch it. No extra steps required.
+      </p>
+    </div>
+
+    <div class="platform-note">
+      <h4>&#128039; Linux Users</h4>
+      <p>
+        Make the AppImage executable: <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">chmod +x SovereignTax-Linux.AppImage</code> then run it directly. Works on Ubuntu, Fedora, Arch, and most distributions. No installation required.
       </p>
     </div>
 
