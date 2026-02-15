@@ -4,7 +4,7 @@ import { savePINHash, savePINSalt } from "../lib/persistence";
 import { generateSalt, hashPINWithPBKDF2 } from "../lib/crypto";
 
 export function SetupPIN({ isInitialSetup, onDone }: { isInitialSetup: boolean; onDone?: () => void }) {
-  const { unlockWithPIN } = useAppState();
+  const { unlockWithPIN, changePIN } = useAppState();
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [isConfirming, setIsConfirming] = useState(false);
@@ -46,13 +46,17 @@ export function SetupPIN({ isInitialSetup, onDone }: { isInitialSetup: boolean; 
 
     setIsHashing(true);
     try {
-      // Generate a fresh random salt and derive PBKDF2 hash
-      const salt = generateSalt();
-      const hash = await hashPINWithPBKDF2(pin, salt);
-      savePINSalt(salt);
-      savePINHash(hash);
-      // Derive encryption key and load/encrypt data
-      await unlockWithPIN(pin);
+      if (isInitialSetup) {
+        // First-time setup: save PIN hash/salt, then derive encryption key
+        const salt = generateSalt();
+        const hash = await hashPINWithPBKDF2(pin, salt);
+        savePINSalt(salt);
+        savePINHash(hash);
+        await unlockWithPIN(pin);
+      } else {
+        // PIN change: decrypt data with old key, re-encrypt with new key
+        await changePIN(pin);
+      }
       onDone?.();
     } finally {
       setIsHashing(false);

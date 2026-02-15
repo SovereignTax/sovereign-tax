@@ -27,7 +27,7 @@ export function ReconciliationView() {
         subtitle="Match transfers between exchanges and identify missing data."
         expandedContent={
           <>
-            <p><strong>How matching works:</strong> A withdrawal from one exchange is paired with a deposit at another within a 48-hour window and matching BTC amount (1% tolerance for network fees).</p>
+            <p><strong>How matching works:</strong> A withdrawal from one exchange is paired with a deposit at another within a 7-day window and near-exact BTC amount match.</p>
             <p><strong>Unmatched transfers:</strong> Withdrawals to your own cold storage wallet will appear as unmatched — this is normal and does not indicate a problem.</p>
             <p><strong>Exchange balances:</strong> Net BTC balance per exchange is computed from all buys, sells, and transfers. A negative balance may indicate missing import data.</p>
           </>

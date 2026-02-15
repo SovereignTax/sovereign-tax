@@ -146,11 +146,13 @@ function processSale(
   if (amountToSell <= 0) return null;
 
   // Per-wallet cost basis enforcement (IRS TD 9989)
-  // Filter lots to the same wallet/account as the sale
+  // Filter lots to the same wallet/account as the sale (case-insensitive)
+  const normalizeWallet = (w: string | undefined) => (w || "").trim().toLowerCase();
   const saleWallet = sale.wallet || sale.exchange;
+  const saleWalletNorm = normalizeWallet(saleWallet);
   let availableIndices = lots
     .map((lot, idx) => ({ lot, idx }))
-    .filter(({ lot }) => lot.remainingBTC > 0 && (lot.wallet || lot.exchange) === saleWallet)
+    .filter(({ lot }) => lot.remainingBTC > 0 && normalizeWallet(lot.wallet || lot.exchange) === saleWalletNorm)
     .map(({ idx }) => idx);
 
   // Fallback: if no lots match the wallet, use all available lots with a warning
@@ -174,12 +176,13 @@ function processSale(
   let remainingToSell = amountToSell;
   const holdingDays: number[] = [];
 
-  // Specific Identification: use manual lot selections
+  // Specific Identification: use manual lot selections (restricted to wallet-filtered lots)
   if (method === AccountingMethod.SpecificID && lotSelections && lotSelections.length > 0) {
+    const availableSet = new Set(availableIndices);
     for (const sel of lotSelections) {
       if (remainingToSell <= 0) break;
       const lotIdx = lots.findIndex((l) => l.id === sel.lotId);
-      if (lotIdx === -1 || lots[lotIdx].remainingBTC <= 0) continue;
+      if (lotIdx === -1 || !availableSet.has(lotIdx) || lots[lotIdx].remainingBTC <= 0) continue;
 
       const sellFromLot = Math.min(sel.amountBTC, lots[lotIdx].remainingBTC, remainingToSell);
       const costBasisPerBTC = lots[lotIdx].pricePerBTC;
@@ -256,7 +259,11 @@ function processSale(
     }
   }
 
-  const totalProceeds = sale.totalUSD; // Already net of fee (fee subtracted during import)
+  const amountSold = amountToSell - remainingToSell;
+  // Pro-rate proceeds if only partially filled (not enough lots to cover full sale)
+  const totalProceeds = amountSold < amountToSell
+    ? amountSold * sale.pricePerBTC
+    : sale.totalUSD;
   const gainLoss = totalProceeds - totalCostBasis;
   const avgHoldingDays =
     holdingDays.length === 0
@@ -273,12 +280,12 @@ function processSale(
   return {
     id: crypto.randomUUID(),
     saleDate: sale.date,
-    amountSold: amountToSell - remainingToSell,
+    amountSold,
     salePricePerBTC: sale.pricePerBTC,
     totalProceeds,
     costBasis: totalCostBasis,
     gainLoss,
-    fee: sale.fee,
+    fee: amountSold < amountToSell ? (amountSold / amountToSell) * (sale.fee ?? 0) : sale.fee,
     lotDetails,
     holdingPeriodDays: avgHoldingDays,
     isLongTerm,

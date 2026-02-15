@@ -9,10 +9,34 @@ import { computeCarryforward } from "../lib/carryforward";
 import { HelpPanel } from "./HelpPanel";
 
 export function TaxReportView() {
-  const { allTransactions, selectedYear, setSelectedYear, selectedMethod, setSelectedMethod, availableYears } = useAppState();
+  const { allTransactions, recordedSales, selectedYear, setSelectedYear, selectedMethod, setSelectedMethod, availableYears } = useAppState();
 
   const result = useMemo(() => calculate(allTransactions, selectedMethod), [allTransactions, selectedMethod]);
-  const salesForYear = result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
+
+  // For Specific ID: use stored recordedSales (which have correct lot choices) instead of
+  // recalculated sales (which fall back to FIFO when no lot selections are provided).
+  const salesForYear = useMemo(() => {
+    const calcSales = result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
+
+    if (selectedMethod !== AccountingMethod.SpecificID || recordedSales.length === 0) {
+      return calcSales;
+    }
+
+    // Build a lookup of recorded Specific ID sales by date+amount key
+    const recordedMap = new Map<string, typeof recordedSales[0]>();
+    for (const rs of recordedSales) {
+      if (rs.method === AccountingMethod.SpecificID && new Date(rs.saleDate).getFullYear() === selectedYear) {
+        const key = `${rs.saleDate}|${rs.amountSold.toFixed(8)}`;
+        recordedMap.set(key, rs);
+      }
+    }
+
+    // Replace calculated sales with recorded Specific ID sales where they match
+    return calcSales.map((cs) => {
+      const key = `${cs.saleDate}|${cs.amountSold.toFixed(8)}`;
+      return recordedMap.get(key) ?? cs;
+    });
+  }, [result.sales, recordedSales, selectedYear, selectedMethod]);
 
   const totalProceeds = salesForYear.reduce((a, s) => a + s.totalProceeds, 0);
   const totalCostBasis = salesForYear.reduce((a, s) => a + s.costBasis, 0);

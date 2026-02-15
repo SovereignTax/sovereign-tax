@@ -159,11 +159,13 @@ export function RecordSaleView() {
       {error && <div className="bg-red-50 dark:bg-red-900/20 text-red-500 p-4 rounded-lg mb-6">⚠️ {error}</div>}
       {success && <div className="bg-green-50 dark:bg-green-900/20 text-green-600 p-4 rounded-lg mb-6">✅ {success}</div>}
 
-      {/* Lot Picker for Specific ID */}
+      {/* Lot Picker for Specific ID — filtered to selected wallet */}
       {showLotPicker && (
         <div className="mb-6">
           <LotPicker
-            lots={fullResult.lots}
+            lots={selectedWallet
+              ? fullResult.lots.filter((l) => (l.wallet || l.exchange || "").toLowerCase() === selectedWallet.toLowerCase())
+              : fullResult.lots}
             targetAmount={Number(amountStr)}
             onConfirm={handleLotPickerConfirm}
             onCancel={handleLotPickerCancel}

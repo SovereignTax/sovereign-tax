@@ -186,12 +186,20 @@ export function loadMappings(): Record<string, ColumnMapping> {
   return loadJSON<Record<string, ColumnMapping>>(KEYS.exchangeMappings) ?? {};
 }
 
+export async function loadMappingsAsync(): Promise<Record<string, ColumnMapping>> {
+  return (await loadEncrypted<Record<string, ColumnMapping>>(KEYS.exchangeMappings)) ?? {};
+}
+
 export function saveMappings(mappings: Record<string, ColumnMapping>): void {
   if (_encryptionKey) {
     saveEncrypted(KEYS.exchangeMappings, mappings);
   } else {
     saveJSON(KEYS.exchangeMappings, mappings);
   }
+}
+
+export async function saveMappingsAsync(mappings: Record<string, ColumnMapping>): Promise<void> {
+  await saveEncrypted(KEYS.exchangeMappings, mappings);
 }
 
 // Import History
@@ -209,6 +217,10 @@ export function saveImportHistory(history: Record<string, ImportRecord>): void {
   } else {
     saveJSON(KEYS.importHistory, history);
   }
+}
+
+export async function saveImportHistoryAsync(history: Record<string, ImportRecord>): Promise<void> {
+  await saveEncrypted(KEYS.importHistory, history);
 }
 
 // Preferences (not encrypted — contains no sensitive financial data)
@@ -307,6 +319,10 @@ export function saveAuditLog(entries: AuditEntry[]): void {
   }
 }
 
+export async function saveAuditLogAsync(entries: AuditEntry[]): Promise<void> {
+  await saveEncrypted(KEYS.auditLog, entries);
+}
+
 // ======================================================================
 // Price Cache (plaintext — not sensitive)
 // ======================================================================
@@ -333,7 +349,7 @@ export async function loadAllDataForBackup(): Promise<{
 }> {
   const transactions = await loadTransactionsAsync();
   const recordedSales = await loadRecordedSalesAsync();
-  const mappings = loadMappings();
+  const mappings = await loadMappingsAsync();
   const importHistory = await loadImportHistoryAsync();
   const auditLog = await loadAuditLogAsync();
   const preferences = loadPreferences();

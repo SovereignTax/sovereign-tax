@@ -6,7 +6,7 @@ import { fetchBTCPrice, fetchHistoricalPrice } from "./price-service";
 import { transactionNaturalKey } from "./utils";
 import * as persistence from "./persistence";
 import { computeHash } from "./csv-import";
-import { deriveEncryptionKey, generateSalt } from "./crypto";
+import { deriveEncryptionKey, generateSalt, hashPINWithPBKDF2 } from "./crypto";
 import { AuditEntry, AuditAction, createAuditEntry } from "./audit";
 import { createBackupBundle, parseBackupBundle, downloadBackup, BackupBundle } from "./backup";
 
@@ -44,6 +44,7 @@ interface AppStateContextType {
   isUnlocked: boolean;
   setIsUnlocked: (unlocked: boolean) => void;
   unlockWithPIN: (pin: string) => Promise<void>;
+  changePIN: (newPin: string) => Promise<void>;
 
   // Price
   priceState: PriceState;
@@ -189,6 +190,44 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const updatedAudit = [...audit, entry];
     setAuditLog(updatedAudit);
     persistence.saveAuditLog(updatedAudit);
+  }, []);
+
+  /**
+   * Change PIN: decrypt all data with the old key, generate new encryption salt,
+   * derive a new encryption key from the new PIN, and re-encrypt all data.
+   * Must only be called while the app is unlocked (old key in memory).
+   */
+  const changePIN = useCallback(async (newPin: string) => {
+    // 1. Read ALL decrypted data while old key is still active
+    const txns = await persistence.loadTransactionsAsync();
+    const sales = await persistence.loadRecordedSalesAsync();
+    const mappings = await persistence.loadMappingsAsync();
+    const history = await persistence.loadImportHistoryAsync();
+    const audit = await persistence.loadAuditLogAsync();
+
+    // 2. Save new PIN hash/salt (for authentication)
+    const pinSalt = generateSalt();
+    const pinHash = await hashPINWithPBKDF2(newPin, pinSalt);
+    persistence.savePINSalt(pinSalt);
+    persistence.savePINHash(pinHash);
+
+    // 3. Generate new encryption salt and derive new encryption key
+    const newEncSalt = generateSalt();
+    persistence.saveEncryptionSalt(newEncSalt);
+    const newKey = await deriveEncryptionKey(newPin, newEncSalt);
+    persistence.setEncryptionKey(newKey);
+
+    // 4. Re-encrypt ALL data with the new key
+    await persistence.saveTransactionsAsync(txns);
+    await persistence.saveRecordedSalesAsync(sales);
+    await persistence.saveMappingsAsync(mappings);
+    await persistence.saveImportHistoryAsync(history);
+
+    // 5. Log PIN change and save audit with new key
+    const entry = createAuditEntry(AuditAction.PINChanged, "PIN changed — data re-encrypted");
+    const updatedAudit = [...audit, entry];
+    await persistence.saveAuditLogAsync(updatedAudit);
+    setAuditLog(updatedAudit);
   }, []);
 
   const fetchPrice = useCallback(async () => {
@@ -414,6 +453,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     isUnlocked,
     setIsUnlocked,
     unlockWithPIN,
+    changePIN,
     priceState,
     fetchPrice,
     fetchHistoricalPrice: fetchHistoricalPriceAction,
