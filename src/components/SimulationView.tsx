@@ -5,13 +5,16 @@ import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
 import { SaleRecord } from "../lib/models";
 import { LotPicker } from "./LotPicker";
+import { HelpPanel } from "./HelpPanel";
 
 export function SimulationView() {
-  const { allTransactions, priceState, fetchPrice } = useAppState();
+  const state = useAppState();
+  const { allTransactions, priceState, fetchPrice, availableWallets } = state;
   const [amountStr, setAmountStr] = useState("");
   const [priceStr, setPriceStr] = useState("");
   const [useLive, setUseLive] = useState(false);
   const [method, setMethod] = useState(AccountingMethod.FIFO);
+  const [selectedWallet, setSelectedWallet] = useState("");
   const [result, setResult] = useState<SaleRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showLotPicker, setShowLotPicker] = useState(false);
@@ -42,7 +45,8 @@ export function SimulationView() {
       return;
     }
 
-    const sim = simulateSale(amount, price, fullResult.lots, method);
+    const wallet = selectedWallet || undefined;
+    const sim = simulateSale(amount, price, fullResult.lots, method, undefined, wallet);
     if (!sim) { setError("Not enough BTC in holdings"); return; }
     setResult(sim);
   };
@@ -51,7 +55,8 @@ export function SimulationView() {
     setShowLotPicker(false);
     const amount = Number(amountStr);
     const price = useLive ? priceState.currentPrice! : Number(priceStr);
-    const sim = simulateSale(amount, price, fullResult.lots, method, selections);
+    const wallet = selectedWallet || undefined;
+    const sim = simulateSale(amount, price, fullResult.lots, method, selections, wallet);
     if (!sim) { setError("Not enough BTC from selected lots"); return; }
     setResult(sim);
   };
@@ -63,7 +68,7 @@ export function SimulationView() {
   return (
     <div className="p-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-1">Simulate Sale</h1>
-      <p className="text-gray-500 mb-6">Preview tax consequences without recording a real sale</p>
+      <HelpPanel subtitle="Preview capital gains and lot matching for a hypothetical sale — nothing is recorded." />
 
       <div className="card mb-6">
         <div className="flex gap-6 mb-4">
@@ -91,6 +96,15 @@ export function SimulationView() {
               {Object.values(AccountingMethod).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
+          {availableWallets.length > 1 && (
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Wallet</label>
+              <select className="select" value={selectedWallet} onChange={(e) => { setSelectedWallet(e.target.value); setResult(null); }}>
+                <option value="">All Wallets</option>
+                {availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <button className="btn-primary" disabled={!canSimulate()} onClick={runSimulation}>
           {isSpecificID ? "🔍 Select Lots" : "▶️ Simulate"}

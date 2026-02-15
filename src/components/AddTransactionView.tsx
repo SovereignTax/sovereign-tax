@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { createTransaction, Transaction } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
 import { formatUSD, formatBTC, formatDateTime, findSimilarTransactions } from "../lib/utils";
+import { HelpPanel } from "./HelpPanel";
 
 export function AddTransactionView() {
   const state = useAppState();
@@ -103,7 +104,8 @@ export function AddTransactionView() {
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-3xl font-bold mb-6">Add Transaction</h1>
+      <h1 className="text-3xl font-bold mb-1">Add Transaction</h1>
+      <HelpPanel subtitle="Manually add a buy, sell, transfer, or income transaction that wasn't in a CSV import." />
 
       <div className="card space-y-4">
         {/* Type */}

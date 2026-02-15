@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { TransactionType, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
 import { exportIncomeCSV } from "../lib/export";
+import { HelpPanel } from "./HelpPanel";
 
 export function IncomeView() {
   const { allTransactions, selectedYear, setSelectedYear, availableYears } = useAppState();
@@ -39,7 +40,7 @@ export function IncomeView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Income</h1>
-      <p className="text-gray-500 mb-6">Mining, rewards, and other ordinary income (Schedule 1)</p>
+      <HelpPanel subtitle="Mining, staking rewards, and other crypto income taxed as ordinary income at fair market value on the date received." />
 
       {/* Controls */}
       <div className="flex items-center gap-6 mb-6">

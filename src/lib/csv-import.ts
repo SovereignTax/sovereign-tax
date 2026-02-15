@@ -62,20 +62,34 @@ const dateFormats = [
   "yyyy-MM-dd HH:mm:ss zzz",
 ];
 
-/** Parse a CSV line handling quoted fields */
+/** Parse a CSV line handling quoted fields (RFC 4180: escaped quotes via "") */
 export function parseCSVLine(line: string): string[] {
   const fields: string[] = [];
   let current = "";
   let inQuotes = false;
 
-  for (const char of line) {
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === "," && !inQuotes) {
-      fields.push(current.trim());
-      current = "";
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += char;
+      }
     } else {
-      current += char;
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ",") {
+        fields.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
     }
   }
   fields.push(current.trim());

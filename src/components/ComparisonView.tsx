@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { calculate } from "../lib/cost-basis";
 import { formatUSD } from "../lib/utils";
 import { AccountingMethod, AccountingMethodDisplayNames } from "../lib/types";
+import { HelpPanel } from "./HelpPanel";
 
 interface MethodResult {
   method: AccountingMethod;
@@ -25,8 +26,8 @@ export function ComparisonView() {
       return {
         method,
         totalGL: salesForYear.reduce((a, s) => a + s.gainLoss, 0),
-        stGL: salesForYear.filter((s) => !s.isLongTerm).reduce((a, s) => a + s.gainLoss, 0),
-        ltGL: salesForYear.filter((s) => s.isLongTerm).reduce((a, s) => a + s.gainLoss, 0),
+        stGL: salesForYear.reduce((a, s) => a + s.lotDetails.filter((d) => !d.isLongTerm).reduce((sum, d) => sum + (d.amountBTC * s.salePricePerBTC - d.totalCost), 0), 0),
+        ltGL: salesForYear.reduce((a, s) => a + s.lotDetails.filter((d) => d.isLongTerm).reduce((sum, d) => sum + (d.amountBTC * s.salePricePerBTC - d.totalCost), 0), 0),
         salesCount: salesForYear.length,
       };
     });
@@ -47,7 +48,18 @@ export function ComparisonView() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <h1 className="text-3xl font-bold mb-6">Compare Methods</h1>
+      <h1 className="text-3xl font-bold mb-1">Compare Methods</h1>
+      <HelpPanel
+        subtitle="Side-by-side comparison of FIFO, LIFO, and HIFO to find your optimal accounting method."
+        expandedContent={
+          <>
+            <p><strong>FIFO (First In, First Out):</strong> Sells oldest lots first. Often results in more long-term gains in a rising market.</p>
+            <p><strong>LIFO (Last In, First Out):</strong> Sells newest lots first. May produce more short-term gains but with a higher cost basis.</p>
+            <p><strong>HIFO (Highest In, First Out):</strong> Sells highest-cost lots first. Generally minimizes taxable gains.</p>
+            <p><strong>Note:</strong> Specific ID is excluded from auto-comparison because it requires manual lot selection per sale.</p>
+          </>
+        }
+      />
 
       <div className="flex items-center gap-3 mb-6">
         <span className="text-gray-500">Tax Year:</span>

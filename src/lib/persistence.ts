@@ -384,5 +384,7 @@ export function clearAllData(): void {
     selectedMethod: AccountingMethod.FIFO,
     appearanceMode: null,
     privacyBlur: false,
+    livePriceEnabled: true,
+    selectedWallet: null,
   });
 }

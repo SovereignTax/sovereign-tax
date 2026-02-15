@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { calculate } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
+import { HelpPanel } from "./HelpPanel";
 
 export function HoldingsView() {
   const { allTransactions, selectedMethod, setSelectedMethod, priceState, privacyBlur, setPrivacyBlur, setSelectedNav, selectedWallet, setSelectedWallet, availableWallets } = useAppState();
@@ -39,7 +40,7 @@ export function HoldingsView() {
   return (
     <div className="p-8 max-w-6xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-3xl font-bold">Holdings</h1>
         <button
           onClick={() => setPrivacyBlur(!privacyBlur)}
@@ -49,6 +50,7 @@ export function HoldingsView() {
           {privacyBlur ? "🙈" : "👁️"}
         </button>
       </div>
+      <HelpPanel subtitle="Your current BTC lots, cost basis, and unrealized gain/loss at the current market price." />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">

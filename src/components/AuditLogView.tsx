@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { AuditAction, AuditActionDisplayNames } from "../lib/audit";
 import { exportAuditLogCSV } from "../lib/export";
 import { formatDateTime } from "../lib/utils";
+import { HelpPanel } from "./HelpPanel";
 
 export function AuditLogView() {
   const { auditLog } = useAppState();
@@ -31,7 +32,7 @@ export function AuditLogView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Audit Log</h1>
-      <p className="text-gray-500 mb-6">Timestamped record of all actions for IRS documentation</p>
+      <HelpPanel subtitle="Timestamped record of every import, sale, edit, and deletion for IRS documentation." />
 
       <div className="flex items-center gap-4 mb-6">
         <select

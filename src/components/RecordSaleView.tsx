@@ -5,6 +5,7 @@ import { formatUSD, formatBTC, formatDate, formatDateTime, findSimilarTransactio
 import { AccountingMethod, TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 import { SaleRecord, createTransaction } from "../lib/models";
 import { LotPicker } from "./LotPicker";
+import { HelpPanel } from "./HelpPanel";
 
 export function RecordSaleView() {
   const state = useAppState();
@@ -18,6 +19,7 @@ export function RecordSaleView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showLotPicker, setShowLotPicker] = useState(false);
   const [lotSelections, setLotSelections] = useState<LotSelection[] | null>(null);
+  const [selectedWallet, setSelectedWallet] = useState("");
   const [pendingConfirm, setPendingConfirm] = useState(false);
   const [duplicateMatches, setDuplicateMatches] = useState<typeof state.transactions>([]);
 
@@ -39,7 +41,9 @@ export function RecordSaleView() {
       return;
     }
 
-    const sim = simulateSale(amount, price, fullResult.lots, method);
+    const wallet = selectedWallet || undefined;
+    const saleDateISO = new Date(saleDate + "T12:00:00").toISOString();
+    const sim = simulateSale(amount, price, fullResult.lots, method, undefined, wallet, saleDateISO);
     if (!sim) { setError("Not enough BTC to sell"); return; }
     setPreview(sim);
   };
@@ -49,7 +53,9 @@ export function RecordSaleView() {
     setLotSelections(selections);
     const amount = Number(amountStr);
     const price = useLive ? state.priceState.currentPrice! : Number(priceStr);
-    const sim = simulateSale(amount, price, fullResult.lots, method, selections);
+    const wallet = selectedWallet || undefined;
+    const saleDateISO = new Date(saleDate + "T12:00:00").toISOString();
+    const sim = simulateSale(amount, price, fullResult.lots, method, selections, wallet, saleDateISO);
     if (!sim) { setError("Not enough BTC from selected lots"); return; }
     setPreview(sim);
   };
@@ -60,13 +66,15 @@ export function RecordSaleView() {
 
   const commitSale = () => {
     if (!preview) return;
+    const walletName = selectedWallet || "Recorded Sale";
     const txn = createTransaction({
       date: new Date(saleDate + "T12:00:00").toISOString(),
       transactionType: TransactionType.Sell,
       amountBTC: preview.amountSold,
       pricePerBTC: preview.salePricePerBTC,
       totalUSD: preview.totalProceeds,
-      exchange: "Recorded Sale",
+      exchange: walletName,
+      wallet: walletName,
       notes: "Manually recorded sale",
     });
     state.addTransaction(txn);
@@ -101,7 +109,7 @@ export function RecordSaleView() {
   return (
     <div className="p-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-1">Record Sale</h1>
-      <p className="text-gray-500 mb-6">Record an actual sale to permanently update lot balances</p>
+      <HelpPanel subtitle="Record an actual sale to permanently consume lots and generate a taxable event." />
 
       <div className="card mb-6">
         <div className="flex gap-4 mb-4 flex-wrap">
@@ -130,6 +138,15 @@ export function RecordSaleView() {
               {Object.values(AccountingMethod).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
+          {state.availableWallets.length > 1 && (
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Wallet</label>
+              <select className="select" value={selectedWallet} onChange={(e) => { setSelectedWallet(e.target.value); setPreview(null); }}>
+                <option value="">All Wallets</option>
+                {state.availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex gap-3">
           <button className="btn-secondary" onClick={generatePreview}>

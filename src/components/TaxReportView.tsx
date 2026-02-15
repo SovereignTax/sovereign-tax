@@ -6,6 +6,7 @@ import { exportForm8949PDF } from "../lib/pdf-export";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
 import { computeCarryforward } from "../lib/carryforward";
+import { HelpPanel } from "./HelpPanel";
 
 export function TaxReportView() {
   const { allTransactions, selectedYear, setSelectedYear, selectedMethod, setSelectedMethod, availableYears } = useAppState();
@@ -46,7 +47,17 @@ export function TaxReportView() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <h1 className="text-3xl font-bold mb-6">Tax Report</h1>
+      <h1 className="text-3xl font-bold mb-1">Tax Report</h1>
+      <HelpPanel
+        subtitle="Form 8949 and Schedule D data for your selected tax year and accounting method."
+        expandedContent={
+          <>
+            <p><strong>Short-term vs. long-term:</strong> Assets held one year or less are short-term (taxed as ordinary income). Assets held more than one year are long-term (lower capital gains rate).</p>
+            <p><strong>Accounting methods:</strong> FIFO sells oldest lots first, LIFO sells newest, HIFO sells highest-cost. Specific ID lets you choose individual lots.</p>
+            <p><strong>Export options:</strong> Form 8949 CSV for manual filing, TurboTax CSV/TXF for direct import, or a PDF summary for your records.</p>
+          </>
+        }
+      />
 
       {/* Controls */}
       <div className="flex items-center gap-6 mb-6">

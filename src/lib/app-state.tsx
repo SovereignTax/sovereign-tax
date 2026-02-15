@@ -205,24 +205,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return fetchHistoricalPrice(date);
   }, []);
 
-  // Computed: all transactions including recorded sales
+  // Computed: all transactions (recorded sales are already in transactions[] via addTransaction)
   const allTransactions = React.useMemo(() => {
-    const all = [...transactions];
-    for (const sale of recordedSales) {
-      all.push({
-        id: crypto.randomUUID(),
-        date: sale.saleDate,
-        transactionType: TransactionType.Sell,
-        amountBTC: sale.amountSold,
-        pricePerBTC: sale.salePricePerBTC,
-        totalUSD: sale.totalProceeds,
-        fee: sale.fee,
-        exchange: "Recorded Sale",
-        notes: "Manually recorded sale",
-      });
-    }
-    return all;
-  }, [transactions, recordedSales]);
+    return [...transactions];
+  }, [transactions]);
 
   // Available years
   const availableYears = React.useMemo(() => {
@@ -256,19 +242,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const addTransactionsDeduped = useCallback(
     (newTxns: Transaction[]) => {
-      const existingKeys = new Set(transactions.map(transactionNaturalKey));
-      const unique = newTxns.filter((t) => !existingKeys.has(transactionNaturalKey(t)));
-      if (unique.length > 0) {
-        const next = [...transactions, ...unique];
-        setTransactions(next);
-        persistence.saveTransactions(next);
+      let added = 0;
+      let duplicates = 0;
+      setTransactions((prev) => {
+        const existingKeys = new Set(prev.map(transactionNaturalKey));
+        const unique = newTxns.filter((t) => !existingKeys.has(transactionNaturalKey(t)));
+        added = unique.length;
+        duplicates = newTxns.length - unique.length;
+        if (unique.length > 0) {
+          const next = [...prev, ...unique];
+          persistence.saveTransactions(next);
+          return next;
+        }
+        return prev;
+      });
+      if (added > 0) {
+        appendAuditLog(AuditAction.TransactionImport, `Imported ${added} transactions (${duplicates} duplicates skipped)`);
       }
-      if (unique.length > 0) {
-        appendAuditLog(AuditAction.TransactionImport, `Imported ${unique.length} transactions (${newTxns.length - unique.length} duplicates skipped)`);
-      }
-      return { added: unique.length, duplicates: newTxns.length - unique.length };
+      return { added, duplicates };
     },
-    [transactions, appendAuditLog]
+    [appendAuditLog]
   );
 
   const addTransaction = useCallback((txn: Transaction) => {

@@ -105,7 +105,8 @@ export function simulateSale(
   currentLots: Lot[],
   method: AccountingMethod,
   lotSelections?: LotSelection[],
-  wallet?: string
+  wallet?: string,
+  saleDate?: string
 ): SaleRecord | null {
   // Deep copy lots
   const lotsCopy: Lot[] = currentLots.map((lot) => ({
@@ -115,7 +116,7 @@ export function simulateSale(
 
   const fakeSale: Transaction = {
     id: crypto.randomUUID(),
-    date: new Date().toISOString(),
+    date: saleDate || new Date().toISOString(),
     transactionType: TransactionType.Sell,
     amountBTC,
     pricePerBTC,
@@ -266,8 +267,8 @@ function processSale(
   const hasShortTerm = lotDetails.some((d) => !d.isLongTerm);
   const hasLongTerm = lotDetails.some((d) => d.isLongTerm);
   const isMixedTerm = hasShortTerm && hasLongTerm;
-  // For non-mixed sales, use lot-level truth; for mixed, default to the majority
-  const isLongTerm = isMixedTerm ? hasLongTerm && !hasShortTerm : hasLongTerm;
+  // For non-mixed sales, use lot-level truth; for mixed, isLongTerm=false (use lotDetails for split)
+  const isLongTerm = isMixedTerm ? false : hasLongTerm;
 
   return {
     id: crypto.randomUUID(),

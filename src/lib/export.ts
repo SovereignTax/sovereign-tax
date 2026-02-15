@@ -51,10 +51,18 @@ export function exportForm8949CSV(
     const stBTCTotal = stDetails.reduce((a, d) => a + d.amountBTC, 0);
     const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
     const feeShare = sale.fee ? sale.fee * (stBTCTotal / saleBTCTotal) : 0;
-    for (const detail of stDetails) {
+    let feeRemaining = feeShare;
+    for (let di = 0; di < stDetails.length; di++) {
+      const detail = stDetails[di];
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
-      const feeStr = feeShare > 0 ? formatCSVDecimal(feeShare / stDetails.length) : "";
+      // Assign fee per lot; last lot gets remainder to avoid rounding loss
+      let lotFee = 0;
+      if (feeShare > 0) {
+        lotFee = di < stDetails.length - 1 ? Math.round((feeShare / stDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        feeRemaining -= lotFee;
+      }
+      const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
       lines.push(
         `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );
@@ -79,10 +87,17 @@ export function exportForm8949CSV(
     const ltBTCTotal = ltDetails.reduce((a, d) => a + d.amountBTC, 0);
     const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
     const feeShare = sale.fee ? sale.fee * (ltBTCTotal / saleBTCTotal) : 0;
-    for (const detail of ltDetails) {
+    let feeRemaining = feeShare;
+    for (let di = 0; di < ltDetails.length; di++) {
+      const detail = ltDetails[di];
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
-      const feeStr = feeShare > 0 ? formatCSVDecimal(feeShare / ltDetails.length) : "";
+      let lotFee = 0;
+      if (feeShare > 0) {
+        lotFee = di < ltDetails.length - 1 ? Math.round((feeShare / ltDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        feeRemaining -= lotFee;
+      }
+      const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
       lines.push(
         `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );

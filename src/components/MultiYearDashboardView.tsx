@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { calculate } from "../lib/cost-basis";
 import { formatUSD } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
+import { HelpPanel } from "./HelpPanel";
 
 interface YearSummary {
   year: number;
@@ -26,10 +27,14 @@ export function MultiYearDashboardView() {
       }
       byYear[year].totalGL += sale.gainLoss;
       byYear[year].salesCount++;
-      if (sale.isLongTerm) {
-        byYear[year].ltGL += sale.gainLoss;
-      } else {
-        byYear[year].stGL += sale.gainLoss;
+      // Split ST/LT from lot details to handle mixed-term sales correctly
+      for (const d of sale.lotDetails) {
+        const lotGL = d.amountBTC * sale.salePricePerBTC - d.totalCost;
+        if (d.isLongTerm) {
+          byYear[year].ltGL += lotGL;
+        } else {
+          byYear[year].stGL += lotGL;
+        }
       }
     }
 
@@ -57,7 +62,7 @@ export function MultiYearDashboardView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Multi-Year Dashboard</h1>
-      <p className="text-gray-500 mb-6">Capital gains and losses across all tax years ({selectedMethod})</p>
+      <HelpPanel subtitle={`Lifetime capital gains and losses across all tax years using ${selectedMethod}.`} />
 
       {/* Bar Chart */}
       <div className="card mb-6">

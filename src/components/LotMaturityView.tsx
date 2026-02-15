@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useAppState } from "../lib/app-state";
-import { calculate, daysBetween } from "../lib/cost-basis";
+import { calculate, daysBetween, isMoreThanOneYear } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
+import { HelpPanel } from "./HelpPanel";
 
 export function LotMaturityView() {
   const { allTransactions, selectedMethod, setSelectedNav } = useAppState();
@@ -14,9 +15,13 @@ export function LotMaturityView() {
       .filter((l) => l.remainingBTC > 0)
       .map((lot) => {
         const daysHeld = daysBetween(lot.purchaseDate, now);
-        const daysUntilLongTerm = Math.max(0, 366 - daysHeld);
-        const longTermDate = new Date(new Date(lot.purchaseDate).getTime() + 366 * 24 * 60 * 60 * 1000).toISOString();
-        const isLongTerm = daysHeld >= 366;
+        // Long-term = held more than 1 calendar year (IRC §1222, handles leap years)
+        const ltDate = new Date(lot.purchaseDate);
+        ltDate.setFullYear(ltDate.getFullYear() + 1);
+        ltDate.setDate(ltDate.getDate() + 1); // Day after 1 year anniversary
+        const longTermDate = ltDate.toISOString();
+        const isLongTerm = isMoreThanOneYear(lot.purchaseDate, now);
+        const daysUntilLongTerm = isLongTerm ? 0 : Math.max(0, daysBetween(now, longTermDate));
         return { ...lot, daysHeld, daysUntilLongTerm, longTermDate, isLongTerm };
       })
       .sort((a, b) => a.daysUntilLongTerm - b.daysUntilLongTerm);
@@ -48,7 +53,7 @@ export function LotMaturityView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Lot Maturity</h1>
-      <p className="text-gray-500 mb-6">Track when short-term lots become long-term (366+ days)</p>
+      <HelpPanel subtitle="Track when each lot crosses the one-year holding threshold for long-term capital gains treatment." />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">

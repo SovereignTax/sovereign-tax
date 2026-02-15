@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { formatUSD, formatBTC, formatDateTime } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
 import { Transaction } from "../lib/models";
+import { HelpPanel } from "./HelpPanel";
 
 export function TransactionsView() {
   const { transactions, setSelectedNav, updateTransaction, deleteTransaction } = useAppState();
@@ -71,14 +72,14 @@ export function TransactionsView() {
     <div className="flex flex-col h-full">
       <div className="p-6 pb-3 text-center">
         <h1 className="text-3xl font-bold">All Transactions</h1>
-        <p className="text-gray-500">{transactions.length} transactions imported</p>
+        <HelpPanel subtitle={`${transactions.length} transactions imported — click any column header to sort.`} />
       </div>
 
       {/* Toolbar */}
       <div className="flex items-center gap-4 px-6 pb-3">
-        <div className="flex items-center gap-2 bg-gray-100 dark:bg-zinc-800 rounded-lg px-3 py-1.5 w-72">
+        <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 w-72">
           <span className="text-gray-400">🔍</span>
-          <input className="bg-transparent outline-none flex-1 text-sm" placeholder="Search by exchange or notes..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+          <input className="bg-transparent outline-none flex-1 text-sm text-gray-900 dark:text-gray-200" placeholder="Search by exchange or notes..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
         </div>
         <select className="select text-sm" value={filterType} onChange={(e) => setFilterType(e.target.value as any)}>
           <option value="">All Types</option>
@@ -180,8 +181,17 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
   const [type, setType] = useState(txn.transactionType);
   const [date, setDate] = useState(new Date(txn.date).toISOString().split("T")[0]);
   const [amountStr, setAmountStr] = useState(txn.amountBTC.toFixed(8));
-  const [priceStr, setPriceStr] = useState(txn.pricePerBTC.toFixed(2));
-  const [totalStr, setTotalStr] = useState(txn.totalUSD.toFixed(2));
+  // Back out fee from stored totals so user sees pre-fee values (fee is re-applied on save)
+  const baseTotalUSD = txn.fee
+    ? txn.transactionType === TransactionType.Buy
+      ? txn.totalUSD - txn.fee
+      : txn.transactionType === TransactionType.Sell
+        ? txn.totalUSD + txn.fee
+        : txn.totalUSD
+    : txn.totalUSD;
+  const basePricePerBTC = txn.amountBTC > 0 ? baseTotalUSD / txn.amountBTC : txn.pricePerBTC;
+  const [priceStr, setPriceStr] = useState(basePricePerBTC.toFixed(2));
+  const [totalStr, setTotalStr] = useState(baseTotalUSD.toFixed(2));
   const [feeStr, setFeeStr] = useState(txn.fee ? txn.fee.toFixed(2) : "");
   const [exchange, setExchange] = useState(txn.exchange);
   const [wallet, setWallet] = useState(txn.wallet || "");

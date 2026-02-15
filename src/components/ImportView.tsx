@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash } from "../lib/csv-import";
 import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
+import { HelpPanel } from "./HelpPanel";
 
 type ImportStatus = { type: "success"; count: number; skipped: number; duplicates: number } | { type: "error"; message: string };
 
@@ -128,7 +129,17 @@ export function ImportView() {
     <div className="p-8 max-w-4xl">
       <div className="text-center mb-6">
         <h1 className="text-3xl font-bold mb-2">Import Transactions</h1>
-        <p className="text-gray-500">Import CSV files from any exchange</p>
+        <HelpPanel
+          subtitle="Drop a CSV file from any exchange — columns are auto-detected."
+          expandedContent={
+            <>
+              <p><strong>Supported formats:</strong> Coinbase, Kraken, Gemini, Strike, Cash App, River, Swan, Bisq, and any custom CSV with date, amount, and price columns.</p>
+              <p><strong>Auto-detection:</strong> Column headers are matched automatically. If a column isn't recognized, use the mapping editor to assign it manually.</p>
+              <p><strong>Duplicate protection:</strong> The same file can't be imported twice. Individual transactions are also de-duplicated by date, amount, and exchange.</p>
+              <p><strong>Income tagging:</strong> If your CSV doesn't have a transaction type column, choose a default type (Buy, Sell, etc.) before importing.</p>
+            </>
+          }
+        />
       </div>
 
       {/* Drop Zone */}

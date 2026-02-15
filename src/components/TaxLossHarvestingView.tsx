@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useAppState } from "../lib/app-state";
-import { calculate, daysBetween, simulateSale } from "../lib/cost-basis";
+import { calculate, daysBetween, simulateSale, isMoreThanOneYear } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
 import { SaleRecord } from "../lib/models";
+import { HelpPanel } from "./HelpPanel";
 
 export function TaxLossHarvestingView() {
   const { allTransactions, selectedYear, setSelectedYear, availableYears, priceState, fetchPrice, selectedMethod } = useAppState();
@@ -21,7 +22,7 @@ export function TaxLossHarvestingView() {
         const costBasis = lot.remainingBTC * lot.pricePerBTC;
         const unrealizedGL = currentValue - costBasis;
         const daysHeld = daysBetween(lot.purchaseDate, new Date().toISOString());
-        return { ...lot, currentValue, costBasis, unrealizedGL, daysHeld, isLongTerm: daysHeld > 365 };
+        return { ...lot, currentValue, costBasis, unrealizedGL, daysHeld, isLongTerm: isMoreThanOneYear(lot.purchaseDate, new Date().toISOString()) };
       })
       .sort((a, b) => a.unrealizedGL - b.unrealizedGL); // Biggest losses first
   }, [result.lots, currentPrice]);
@@ -55,7 +56,7 @@ export function TaxLossHarvestingView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Tax-Loss Harvesting</h1>
-      <p className="text-gray-500 mb-6">Identify lots with unrealized losses to offset capital gains</p>
+      <HelpPanel subtitle="Identify lots trading below cost basis that could be sold to offset realized gains this year." />
 
       <div className="flex items-center gap-3 mb-6">
         <span className="text-gray-500">Tax Year:</span>

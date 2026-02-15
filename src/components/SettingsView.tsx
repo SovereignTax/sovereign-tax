@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { HelpPanel } from "./HelpPanel";
 
 const APP_VERSION = "1.1.0";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
@@ -23,7 +24,8 @@ export function SettingsView() {
 
   return (
     <div className="p-8 max-w-3xl">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <h1 className="text-3xl font-bold mb-1">Settings</h1>
+      <HelpPanel subtitle="Appearance, security, data management, and backup/restore." />
 
       {/* Appearance */}
       <div className="card mb-4">

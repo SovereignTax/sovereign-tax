@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useAppState } from "../lib/app-state";
 import { reconcileTransfers } from "../lib/reconciliation";
 import { formatBTC, formatDate } from "../lib/utils";
+import { HelpPanel } from "./HelpPanel";
 
 export function ReconciliationView() {
   const { allTransactions, setSelectedNav } = useAppState();
@@ -22,7 +23,16 @@ export function ReconciliationView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Reconciliation</h1>
-      <p className="text-gray-500 mb-6">Match transfers between exchanges and identify missing data. Withdrawals to your own cold storage wallet will appear as unmatched — this is normal.</p>
+      <HelpPanel
+        subtitle="Match transfers between exchanges and identify missing data."
+        expandedContent={
+          <>
+            <p><strong>How matching works:</strong> A withdrawal from one exchange is paired with a deposit at another within a 48-hour window and matching BTC amount (1% tolerance for network fees).</p>
+            <p><strong>Unmatched transfers:</strong> Withdrawals to your own cold storage wallet will appear as unmatched — this is normal and does not indicate a problem.</p>
+            <p><strong>Exchange balances:</strong> Net BTC balance per exchange is computed from all buys, sells, and transfers. A negative balance may indicate missing import data.</p>
+          </>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
