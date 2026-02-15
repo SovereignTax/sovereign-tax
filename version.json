@@ -1,8 +1,8 @@
 {
-  "latest": "1.2.0",
+  "latest": "1.2.1",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-14",
-  "notes": "Bug fixes and contextual help across all views",
+  "releaseDate": "2026-02-15",
+  "notes": "Security and cost-basis engine fixes: PIN key rotation, partial-sale pro-rating, Specific ID wallet enforcement, case-insensitive wallet matching",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",

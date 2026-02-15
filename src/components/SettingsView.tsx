@@ -4,7 +4,7 @@ import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { HelpPanel } from "./HelpPanel";
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
 
 export function SettingsView() {
