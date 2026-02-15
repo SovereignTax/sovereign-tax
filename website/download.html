@@ -74,7 +74,7 @@ h1 .accent {
 /* Download Cards */
 .download-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 40px;
 }
@@ -436,12 +436,14 @@ h1 .accent {
         <span class="dl-btn">&#8595; Download .exe</span>
       </a>
 
+      <!-- Linux AppImage available but too large for Cloudflare Pages (79MB > 25MB limit)
       <a href="downloads/SovereignTax-Linux.AppImage" class="download-card">
         <span class="platform-icon">&#128039;</span>
         <span class="platform-name">Linux</span>
         <span class="platform-detail">AppImage (all distros)</span>
         <span class="dl-btn">&#8595; Download .AppImage</span>
       </a>
+      -->
     </div>
 
     <!-- Invoice Notice -->
@@ -461,7 +463,7 @@ h1 .accent {
 
       <div class="step-item">
         <span class="step-num">2</span>
-        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer. On Linux, make the AppImage executable and run it.</span>
+        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer.</span>
       </div>
 
       <div class="step-item">
@@ -483,12 +485,14 @@ h1 .accent {
       </p>
     </div>
 
+    <!-- Linux note hidden until hosting solution found
     <div class="platform-note">
       <h4>&#128039; Linux Users</h4>
       <p>
         Make the AppImage executable: <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">chmod +x SovereignTax-Linux.AppImage</code> then run it directly. Works on Ubuntu, Fedora, Arch, and most distributions. No installation required.
       </p>
     </div>
+    -->
 
   </div>
 
