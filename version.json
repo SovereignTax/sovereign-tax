@@ -1,8 +1,8 @@
 {
-  "latest": "1.1.0",
+  "latest": "1.2.0",
   "url": "https://sovereigntax.io",
   "releaseDate": "2026-02-14",
-  "notes": "Edit/delete transactions, duplicate detection warnings, fee column visibility",
+  "notes": "Bug fixes and contextual help across all views",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",
