@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useAppState } from "../lib/app-state";
 import { formatUSD, formatBTC, formatDateTime } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
@@ -59,6 +59,26 @@ export function TransactionsView() {
     }
   };
 
+  const exportCSV = useCallback(() => {
+    const header = "Date,Type,Amount (BTC),Price (USD),Total (USD),Fee (USD),Exchange,Wallet,Notes";
+    const rows = transactions.map((t) => {
+      const dateStr = new Date(t.date).toISOString().split("T")[0];
+      const typeStr = TransactionTypeDisplayNames[t.transactionType];
+      const notes = (t.notes || "").replace(/"/g, '""');
+      const exchangeEsc = (t.exchange || "").replace(/"/g, '""');
+      const walletEsc = (t.wallet || t.exchange || "").replace(/"/g, '""');
+      return `${dateStr},${typeStr},${t.amountBTC.toFixed(8)},${t.pricePerBTC.toFixed(2)},${t.totalUSD.toFixed(2)},${t.fee ? t.fee.toFixed(2) : "0.00"},"${exchangeEsc}","${walletEsc}","${notes}"`;
+    });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sovereign-tax-transactions-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [transactions]);
+
   if (transactions.length === 0) {
     return (
       <div className="p-8 flex flex-col items-center justify-center h-full">
@@ -93,6 +113,7 @@ export function TransactionsView() {
         <span className="text-xs"><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />{counts.sells} Sells</span>
         <span className="text-xs"><span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1" />{counts.transfers} Transfers</span>
         {counts.donations > 0 && <span className="text-xs"><span className="inline-block w-2 h-2 rounded-full bg-purple-500 mr-1" />{counts.donations} Donations</span>}
+        <button className="btn-secondary text-xs px-3 py-1" onClick={exportCSV} title="Export all transactions as CSV">📥 Export CSV</button>
       </div>
 
       {/* Table (scrollable with sticky header) */}

@@ -35,6 +35,13 @@
       "allow": [
         { "path": "$APPDATA/**" }
       ]
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.coingecko.com/**" },
+        { "url": "https://raw.githubusercontent.com/**" }
+      ]
     }
   ]
 }

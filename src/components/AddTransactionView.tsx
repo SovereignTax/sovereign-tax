@@ -240,7 +240,7 @@ export function AddTransactionView() {
           <span className="w-24 text-right text-gray-500">Type:</span>
           <div className="segmented">
             {Object.values(TransactionType).map((t) => (
-              <button key={t} className={`segmented-btn ${type === t ? "active" : ""}`} onClick={() => { setType(t); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }}>
+              <button key={t} className={`segmented-btn ${type === t ? "active" : ""}`} onClick={() => { setType(t); setWallet(""); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }}>
                 {TransactionTypeDisplayNames[t]}
               </button>
             ))}
@@ -273,6 +273,18 @@ export function AddTransactionView() {
               ))}
             </div>
             <span className="text-xs text-gray-400">{isSpecificID ? "Choose exactly which lots to dispose" : "FIFO — IRS default, sells oldest lots first"}</span>
+          </div>
+        )}
+
+        {/* Wallet Filter (Sell + Donation — filter lots by wallet) */}
+        {isDisposition && state.availableWallets.length > 1 && (
+          <div className="flex items-center gap-4">
+            <span className="w-24 text-right text-gray-500">Wallet:</span>
+            <select className="select w-48" value={wallet} onChange={(e) => { setWallet(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }}>
+              <option value="">All Wallets</option>
+              {state.availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <span className="text-xs text-gray-400">Filter lots to a specific wallet/exchange</span>
           </div>
         )}
 
@@ -337,7 +349,8 @@ export function AddTransactionView() {
           <input className="input w-48" placeholder="e.g., Coinbase" value={exchange} onChange={(e) => { setExchange(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
         </div>
 
-        {/* Wallet */}
+        {/* Wallet — hide when From Wallet dropdown is shown (dispositions with multiple wallets) */}
+        {!(isDisposition && state.availableWallets.length > 1) && (
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Wallet:</span>
           <input className="input w-48" list="wallet-options" placeholder="Defaults to exchange" value={wallet} onChange={(e) => { setWallet(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
@@ -346,6 +359,7 @@ export function AddTransactionView() {
           </datalist>
           <span className="text-xs text-gray-400">(optional — for per-wallet cost basis tracking)</span>
         </div>
+        )}
         {showWalletWarning && (
           <div className="flex items-center gap-4">
             <span className="w-24" />

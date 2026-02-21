@@ -256,9 +256,17 @@
 .select:focus {
   border-color: var(--accent);
 }
+.select option {
+  background: var(--bg);
+  color: var(--text);
+}
 .light .select {
   background: white;
   border-color: #d1d5db;
+}
+.light .select option {
+  background: white;
+  color: #111;
 }
 
 /* ── Status Badges ─────────────────────────────────────────── */

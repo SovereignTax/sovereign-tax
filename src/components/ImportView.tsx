@@ -158,6 +158,25 @@ export function ImportView() {
         <button className="btn-secondary">Browse Files...</button>
       </div>
 
+      {/* Template download */}
+      <div className="text-center mb-4">
+        <button
+          className="text-xs text-orange-500 hover:text-orange-400 underline"
+          onClick={() => {
+            const template = "Date,Type,Amount (BTC),Price (USD),Total (USD),Fee (USD),Exchange,Wallet,Notes\n2026-01-15,Buy,0.10000000,97500.00,9750.00,5.00,Coinbase,Coinbase,Example buy\n2026-01-20,Sell,0.05000000,99000.00,4950.00,2.50,Kraken,Kraken,Example sell";
+            const blob = new Blob([template], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "sovereign-tax-import-template.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          📄 Download CSV template (for manual data entry)
+        </button>
+      </div>
+
       {/* Exchange name */}
       <div className="flex items-center gap-3 mb-6">
         <span className="text-gray-500">Exchange Name:</span>

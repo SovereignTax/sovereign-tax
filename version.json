@@ -1,8 +1,8 @@
 {
-  "latest": "1.3.4",
+  "latest": "1.3.5",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-20",
-  "notes": "Specific ID UX overhaul: sortable/color-coded lot picker, one-click Optimize button (tax-score algorithm), saved lot selections flow (Simulate → Record), multi-wallet warnings, wallet autocomplete. External audit fixes.",
+  "releaseDate": "2026-02-21",
+  "notes": "Automated test suite (285 tests, IRS compliance verification), Tauri HTTP plugin for price fetching, CSV import UX improvements, glass theme refinements.",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",

@@ -250,7 +250,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
         </div>
       )}
 
-      <div className="flex items-center gap-3 mt-4">
+      <div className="sticky bottom-0 bg-white dark:bg-zinc-900 pt-3 pb-1 border-t border-gray-200 dark:border-gray-700 mt-4 flex items-center gap-3">
         <button className="btn-primary" disabled={!isValid} onClick={handleConfirm}>
           Confirm Selection
         </button>

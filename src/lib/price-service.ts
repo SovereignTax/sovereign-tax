@@ -1,4 +1,5 @@
 import { loadPriceCache, savePriceCache } from "./persistence";
+import { fetch } from "@tauri-apps/plugin-http";
 
 const API_URL =
   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";

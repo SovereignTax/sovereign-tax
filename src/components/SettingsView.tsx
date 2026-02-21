@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { fetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
 import { isEncryptedBackup } from "../lib/backup";
 
