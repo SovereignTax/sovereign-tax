@@ -140,6 +140,24 @@ describe("parseDecimal", () => {
   it("strips whitespace", () => {
     expect(parseDecimal("  42.5  ")).toBe(42.5);
   });
+
+  it("strips BTC/XBT unit suffixes", () => {
+    expect(parseDecimal("0.0041604 BTC")).toBe(0.0041604);
+    expect(parseDecimal("0.00423113 BTC")).toBe(0.00423113);
+    expect(parseDecimal("1.5 XBT")).toBe(1.5);
+    expect(parseDecimal("0.01321421 btc")).toBe(0.01321421);
+  });
+
+  it("strips USD/USDT/USDC unit suffixes", () => {
+    expect(parseDecimal("1234.56 USD")).toBe(1234.56);
+    expect(parseDecimal("500.00 USDT")).toBe(500);
+    expect(parseDecimal("99.99 USDC")).toBe(99.99);
+  });
+
+  it("strips SAT/SATS unit suffixes", () => {
+    expect(parseDecimal("100000 SAT")).toBe(100000);
+    expect(parseDecimal("250000 SATS")).toBe(250000);
+  });
 });
 
 // ═══════════════════════════════════════════════════════

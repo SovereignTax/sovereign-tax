@@ -134,12 +134,13 @@ export function parseDate(dateStr: string): Date | null {
   return null;
 }
 
-/** Parse a decimal number from string, handling $, commas, etc */
+/** Parse a decimal number from string, handling $, commas, unit suffixes, etc */
 export function parseDecimal(str: string): number | null {
   const cleaned = str
     .trim()
     .replace(/\$/g, "")
     .replace(/,/g, "")
+    .replace(/\s*(BTC|XBT|USD|USDT|USDC|SAT|SATS)\s*$/i, "")
     .replace(/\s/g, "");
   if (!cleaned) return 0;
   const num = Number(cleaned);
