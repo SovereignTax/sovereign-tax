@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Lot } from "../lib/models";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
-import { daysBetween, isMoreThanOneYear } from "../lib/cost-basis";
+import { daysBetween, isMoreThanOneYear, optimizeLotSelections } from "../lib/cost-basis";
 
 export interface LotSelection {
   lotId: string;
@@ -84,31 +84,10 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
    * When no sale price is available (e.g. donations), falls back to long-term first + highest cost basis.
    */
   const optimizeSelections = () => {
-    const refDate = saleDate || new Date().toISOString();
-    const ST_RATE = 0.37;
-    const LT_RATE = 0.15;
-
-    const ranked = availableLots
-      .map((lot) => {
-        const isLongTerm = isMoreThanOneYear(lot.purchaseDate, refDate);
-        const costBasisPerBTC = lot.totalCost / lot.amountBTC; // fee-inclusive
-        const rate = isLongTerm ? LT_RATE : ST_RATE;
-        // Estimated tax per BTC: positive = tax owed, negative = tax saved (loss)
-        const taxScore = salePrice
-          ? (salePrice - costBasisPerBTC) * rate
-          : (isLongTerm ? -1e9 : 0) - costBasisPerBTC; // fallback: long-term first, then highest basis
-        return { lot, taxScore };
-      })
-      // Lowest tax score first (losses first, then smallest gains)
-      .sort((a, b) => a.taxScore - b.taxScore);
-
-    let needed = targetAmount;
+    const result = optimizeLotSelections(availableLots, targetAmount, salePrice, saleDate);
     const newSelections: Record<string, number> = {};
-    for (const { lot } of ranked) {
-      if (needed <= 0.00000001) break;
-      const take = Math.min(lot.remainingBTC, needed);
-      newSelections[lot.id] = take;
-      needed -= take;
+    for (const s of result) {
+      newSelections[s.lotId] = s.amountBTC;
     }
     setSelections(newSelections);
   };

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences } from "./models";
 import { AccountingMethod, TransactionType } from "./types";
-import { calculate, simulateSale as simSale, LotSelection } from "./cost-basis";
+import { calculate, simulateSale as simSale, resolveRecordedSales, LotSelection } from "./cost-basis";
 import { fetchBTCPrice, fetchHistoricalPrice } from "./price-service";
 import { transactionNaturalKey } from "./utils";
 import * as persistence from "./persistence";
@@ -15,6 +15,29 @@ interface PriceState {
   lastUpdated: Date | null;
   isLoading: boolean;
   error: string | null;
+}
+
+/**
+ * Pure function: determines whether a transaction update contains material changes
+ * that should invalidate a linked Specific ID election.
+ * Material fields: amountBTC, date, pricePerBTC, totalUSD, wallet, transactionType.
+ * Non-material fields: notes, exchange, incomeType.
+ * BTC compared as integer satoshis, USD as integer cents — eliminates IEEE 754 edge cases.
+ */
+export function isMaterialChange(
+  original: Transaction,
+  updates: Partial<Omit<Transaction, "id">>
+): boolean {
+  const btcDiff = (a: number, b: number) => Math.round(a * 1e8) !== Math.round(b * 1e8);
+  const usdDiff = (a: number, b: number) => Math.round(a * 100) !== Math.round(b * 100);
+  return (
+    (updates.amountBTC !== undefined && btcDiff(updates.amountBTC, original.amountBTC)) ||
+    (updates.date !== undefined && updates.date !== original.date) ||
+    (updates.pricePerBTC !== undefined && usdDiff(updates.pricePerBTC, original.pricePerBTC)) ||
+    (updates.totalUSD !== undefined && usdDiff(updates.totalUSD, original.totalUSD)) ||
+    (updates.wallet !== undefined && updates.wallet !== original.wallet) ||
+    (updates.transactionType !== undefined && updates.transactionType !== original.transactionType)
+  );
 }
 
 /** Session-only saved lot selections from Simulation → Record Sale / Add Transaction */
@@ -77,6 +100,12 @@ interface AppStateContextType {
   updateTransaction: (id: string, updates: Partial<Omit<Transaction, "id">>) => Promise<void>;
   updateTransactionPrice: (id: string, price: number) => Promise<void>;
   recordSale: (sale: SaleRecord) => Promise<void>;
+  deleteSaleRecordBySourceTxnId: (sourceTransactionId: string) => Promise<void>;
+  replaceSaleRecordBySourceTxnId: (sourceTransactionId: string, newRecord: SaleRecord) => Promise<void>;
+  deleteSaleRecordById: (saleRecordId: string) => Promise<void>;
+  replaceSaleRecordById: (saleRecordId: string, newRecord: SaleRecord) => Promise<void>;
+  recordSalesBatch: (sales: SaleRecord[]) => Promise<void>;
+  deleteSaleRecordsByIds: (ids: string[]) => Promise<void>;
   clearAllData: () => Promise<void>;
   computeFileHash: (content: string) => Promise<string>;
   checkImportHistory: (hash: string) => ImportRecord | undefined;
@@ -342,6 +371,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = prev.filter((t) => t.id !== id);
     setTransactions(next);
     await persistence.saveTransactions(next);
+
+    // Cascade: remove any linked Specific ID SaleRecord to prevent orphaned entries.
+    // Uses shared resolver for consistent matching (same logic as engine + UI).
+    const prevSales = recordedSalesRef.current;
+    const resolved = resolveRecordedSales(prev, prevSales);
+    const linkedRecord = resolved.get(id);
+    if (linkedRecord) {
+      const nextSales = prevSales.filter((s) => s.id !== linkedRecord.id);
+      setRecordedSales(nextSales);
+      recordedSalesRef.current = nextSales;
+      await persistence.saveRecordedSales(nextSales);
+    }
+
     if (deleted) {
       await appendAuditLog(AuditAction.TransactionDelete, `Deleted ${deleted.transactionType} of ${deleted.amountBTC.toFixed(8)} BTC from ${deleted.exchange}`);
     }
@@ -354,6 +396,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
     setTransactions(next);
     await persistence.saveTransactions(next);
+
+    // Invalidate linked Specific ID election only when material fields change.
+    const original = transactionsRef.current.find((t) => t.id === id);
+    if (original && (original.transactionType === TransactionType.Sell || original.transactionType === TransactionType.Donation)) {
+      if (isMaterialChange(original, updates)) {
+        const resolved = resolveRecordedSales([original], recordedSalesRef.current);
+        const linkedRecord = resolved.get(id);
+        // Only auto-delete when we have a positive sourceTransactionId match.
+        // Legacy records (no sourceTransactionId) are ambiguous — leave them alone.
+        if (linkedRecord && linkedRecord.sourceTransactionId === id) {
+          const nextSales = recordedSalesRef.current.filter((s) => s.id !== linkedRecord.id);
+          setRecordedSales(nextSales);
+          recordedSalesRef.current = nextSales;
+          await persistence.saveRecordedSales(nextSales);
+          await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed Specific ID election for edited transaction (${original.amountBTC.toFixed(8)} BTC)`);
+        }
+      }
+    }
+
     const updated = next.find((t) => t.id === id);
     if (updated) {
       await appendAuditLog(AuditAction.TransactionEdit, `Edited ${updated.transactionType} of ${updated.amountBTC.toFixed(8)} BTC from ${updated.exchange}`);
@@ -371,10 +432,91 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const recordSaleAction = useCallback(async (sale: SaleRecord) => {
-    const next = [...recordedSalesRef.current, sale];
+    const prev = recordedSalesRef.current;
+    // Dedup: if a record with the same sourceTransactionId already exists, replace it instead of appending
+    const next = sale.sourceTransactionId && prev.some((s) => s.sourceTransactionId === sale.sourceTransactionId)
+      ? [...prev.filter((s) => s.sourceTransactionId !== sale.sourceTransactionId), sale]
+      : [...prev, sale];
     setRecordedSales(next);
+    recordedSalesRef.current = next;
     await persistence.saveRecordedSales(next);
     await appendAuditLog(AuditAction.SaleRecorded, `Recorded sale of ${sale.amountSold.toFixed(8)} BTC — G/L: $${sale.gainLoss.toFixed(2)}`);
+  }, [appendAuditLog]);
+
+  /** Delete SaleRecord by sourceTransactionId — used for cascade cleanup when a transaction is deleted. */
+  const deleteSaleRecordBySourceTxnIdAction = useCallback(async (sourceTransactionId: string) => {
+    const prev = recordedSalesRef.current;
+    const toDelete = prev.find((s) => s.sourceTransactionId === sourceTransactionId);
+    const next = prev.filter((s) => s.sourceTransactionId !== sourceTransactionId);
+    setRecordedSales(next);
+    recordedSalesRef.current = next; // Sync ref immediately to prevent stale reads
+    await persistence.saveRecordedSales(next);
+    if (toDelete) {
+      await appendAuditLog(AuditAction.SaleRecorded, `Removed Specific ID lot election for sale of ${toDelete.amountSold.toFixed(8)} BTC on ${new Date(toDelete.saleDate).toLocaleDateString()}`);
+    }
+  }, [appendAuditLog]);
+
+  /** Atomic replace by sourceTransactionId: removes existing SaleRecord and inserts a new one in a single operation.
+   *  Avoids the stale-ref race condition that occurs when delete and record are called sequentially. */
+  const replaceSaleRecordBySourceTxnIdAction = useCallback(async (sourceTransactionId: string, newRecord: SaleRecord) => {
+    const prev = recordedSalesRef.current;
+    const next = [...prev.filter((s) => s.sourceTransactionId !== sourceTransactionId), newRecord];
+    setRecordedSales(next);
+    recordedSalesRef.current = next; // Sync ref immediately
+    await persistence.saveRecordedSales(next);
+    await appendAuditLog(AuditAction.SaleRecorded, `Updated Specific ID lot election for sale of ${newRecord.amountSold.toFixed(8)} BTC — G/L: $${newRecord.gainLoss.toFixed(2)}`);
+  }, [appendAuditLog]);
+
+  /** Delete SaleRecord by its own id — used for UI revert (works for both legacy and new-style records). */
+  const deleteSaleRecordByIdAction = useCallback(async (saleRecordId: string) => {
+    const prev = recordedSalesRef.current;
+    const toDelete = prev.find((s) => s.id === saleRecordId);
+    const next = prev.filter((s) => s.id !== saleRecordId);
+    setRecordedSales(next);
+    recordedSalesRef.current = next;
+    await persistence.saveRecordedSales(next);
+    if (toDelete) {
+      await appendAuditLog(AuditAction.SaleRecorded, `Reverted Specific ID lot election for sale of ${toDelete.amountSold.toFixed(8)} BTC on ${new Date(toDelete.saleDate).toLocaleDateString()}`);
+    }
+  }, [appendAuditLog]);
+
+  /** Atomic replace by SaleRecord.id: removes old record and inserts new one.
+   *  Used for editing lot selections — supports upgrade-on-save (legacy records get sourceTransactionId stamped). */
+  const replaceSaleRecordByIdAction = useCallback(async (saleRecordId: string, newRecord: SaleRecord) => {
+    const prev = recordedSalesRef.current;
+    const next = [...prev.filter((s) => s.id !== saleRecordId), newRecord];
+    setRecordedSales(next);
+    recordedSalesRef.current = next;
+    await persistence.saveRecordedSales(next);
+    await appendAuditLog(AuditAction.SaleRecorded, `Updated Specific ID lot election for sale of ${newRecord.amountSold.toFixed(8)} BTC — G/L: $${newRecord.gainLoss.toFixed(2)}`);
+  }, [appendAuditLog]);
+
+  /** Batch save multiple SaleRecords in a single encrypt+write operation.
+   *  Deduplicates by sourceTransactionId (replaces existing if present). */
+  const recordSalesBatchAction = useCallback(async (sales: SaleRecord[]) => {
+    let current = recordedSalesRef.current;
+    for (const sale of sales) {
+      if (sale.sourceTransactionId && current.some((s) => s.sourceTransactionId === sale.sourceTransactionId)) {
+        current = [...current.filter((s) => s.sourceTransactionId !== sale.sourceTransactionId), sale];
+      } else {
+        current = [...current, sale];
+      }
+    }
+    setRecordedSales(current);
+    recordedSalesRef.current = current;
+    await persistence.saveRecordedSales(current);
+    await appendAuditLog(AuditAction.SaleRecorded, `Batch saved ${sales.length} Specific ID lot election${sales.length === 1 ? "" : "s"}`);
+  }, [appendAuditLog]);
+
+  /** Batch delete multiple SaleRecords by ID in a single encrypt+write operation. */
+  const deleteSaleRecordsByIdsAction = useCallback(async (ids: string[]) => {
+    const idSet = new Set(ids);
+    const prev = recordedSalesRef.current;
+    const next = prev.filter((s) => !idSet.has(s.id));
+    setRecordedSales(next);
+    recordedSalesRef.current = next;
+    await persistence.saveRecordedSales(next);
+    await appendAuditLog(AuditAction.SaleRecorded, `Batch removed ${ids.length} Specific ID lot election${ids.length === 1 ? "" : "s"}`);
   }, [appendAuditLog]);
 
   const clearAllData = useCallback(async () => {
@@ -506,6 +648,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateTransaction,
     updateTransactionPrice,
     recordSale: recordSaleAction,
+    deleteSaleRecordBySourceTxnId: deleteSaleRecordBySourceTxnIdAction,
+    replaceSaleRecordBySourceTxnId: replaceSaleRecordBySourceTxnIdAction,
+    deleteSaleRecordById: deleteSaleRecordByIdAction,
+    replaceSaleRecordById: replaceSaleRecordByIdAction,
+    recordSalesBatch: recordSalesBatchAction,
+    deleteSaleRecordsByIds: deleteSaleRecordsByIdsAction,
     clearAllData,
     computeFileHash,
     checkImportHistory,

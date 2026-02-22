@@ -2,11 +2,12 @@ import { useMemo } from "react";
 import { useAppState } from "../lib/app-state";
 import { calculate, daysBetween, isMoreThanOneYear } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
+import { AccountingMethod } from "../lib/types";
 import { HelpPanel } from "./HelpPanel";
 
 export function LotMaturityView() {
-  const { allTransactions, selectedMethod, setSelectedNav, recordedSales } = useAppState();
-  const result = useMemo(() => calculate(allTransactions, selectedMethod, recordedSales), [allTransactions, selectedMethod, recordedSales]);
+  const { allTransactions, setSelectedNav, recordedSales } = useAppState();
+  const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
   const now = new Date().toISOString();
 

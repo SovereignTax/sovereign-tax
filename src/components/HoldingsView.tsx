@@ -3,12 +3,13 @@ import { useAppState } from "../lib/app-state";
 import { calculate } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
+// Holdings always uses FIFO — method selector removed in v1.3.6
 import { HelpPanel } from "./HelpPanel";
 
 export function HoldingsView() {
-  const { allTransactions, selectedMethod, setSelectedMethod, priceState, privacyBlur, setPrivacyBlur, setSelectedNav, selectedWallet, setSelectedWallet, availableWallets, recordedSales } = useAppState();
+  const { allTransactions, priceState, privacyBlur, setPrivacyBlur, setSelectedNav, selectedWallet, setSelectedWallet, availableWallets, recordedSales } = useAppState();
 
-  const result = useMemo(() => calculate(allTransactions, selectedMethod, recordedSales), [allTransactions, selectedMethod, recordedSales]);
+  const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
   const activeLots = result.lots.filter((l) => {
     if (l.remainingBTC <= 0) return false;
@@ -69,20 +70,9 @@ export function HoldingsView() {
         )}
       </div>
 
-      {/* Method Picker + Wallet Filter */}
-      <div className="flex items-center justify-center gap-4 mb-6">
-        <div className="segmented">
-          {Object.values(AccountingMethod).map((m) => (
-            <button
-              key={m}
-              className={`segmented-btn ${selectedMethod === m ? "active" : ""}`}
-              onClick={() => setSelectedMethod(m)}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        {availableWallets.length > 1 && (
+      {/* Wallet Filter */}
+      {availableWallets.length > 1 && (
+        <div className="flex items-center justify-center gap-4 mb-6">
           <select
             className="select text-sm"
             value={selectedWallet || ""}
@@ -93,8 +83,8 @@ export function HoldingsView() {
               <option key={w} value={w}>{w}</option>
             ))}
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Lot Table */}
       <div className="card">

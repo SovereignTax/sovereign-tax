@@ -1,8 +1,8 @@
 {
-  "latest": "1.3.6",
+  "latest": "1.3.7",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-21",
-  "notes": "Fix CSV import for exchanges that embed unit suffixes in amount fields (e.g. '0.0041604 BTC'). 288 automated tests passing.",
+  "releaseDate": "2026-02-22",
+  "notes": "Specific ID management overhaul: Edit Lots, Optimize All batch, Compare Methods rewrite, 3 rounds of audit fixes. 317 automated tests passing.",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",

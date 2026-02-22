@@ -43,6 +43,61 @@ export interface LotSelection {
 }
 
 /**
+ * Shared resolver: maps each disposition transaction to its recorded Specific ID SaleRecord.
+ * Returns Map<transactionId, SaleRecord> with deterministic one-to-one matching.
+ *
+ * Primary path: match by sourceTransactionId (collision-proof, v1.3.0+).
+ * Legacy fallback: match by date|amount|type key with shift() consumption (pre-v1.3.0 records).
+ * Transactions are consumed chronologically to match the engine's processing order.
+ *
+ * Used by: calculate(), calculateUpTo(), TransactionsView (UI), deleteTransaction (cascade).
+ */
+export function resolveRecordedSales(
+  transactions: Transaction[],
+  recordedSales: SaleRecord[]
+): Map<string, SaleRecord> {
+  const result = new Map<string, SaleRecord>();
+
+  // 1. Index new-style records by sourceTransactionId (collision-proof primary path)
+  for (const rs of recordedSales) {
+    if (rs.sourceTransactionId && rs.method === AccountingMethod.SpecificID) {
+      result.set(rs.sourceTransactionId, rs);
+    }
+  }
+
+  // 2. Index legacy records by date|amount|type into arrays for one-to-one consumption
+  const legacyByKey = new Map<string, SaleRecord[]>();
+  for (const rs of recordedSales) {
+    if (rs.method === AccountingMethod.SpecificID && !rs.sourceTransactionId) {
+      const typeTag = rs.isDonation ? "donation" : "sale";
+      const key = `${rs.saleDate}|${rs.amountSold.toFixed(8)}|${typeTag}`;
+      const arr = legacyByKey.get(key) || [];
+      arr.push(rs);
+      legacyByKey.set(key, arr);
+    }
+  }
+
+  // 3. Sort transactions chronologically (matches engine processing order)
+  const sorted = [...transactions].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // 4. For each disposition not already matched, consume one legacy record via shift()
+  for (const txn of sorted) {
+    if (result.has(txn.id)) continue; // Already matched by sourceTransactionId
+    if (txn.transactionType !== TransactionType.Sell && txn.transactionType !== TransactionType.Donation) continue;
+    const typeTag = txn.transactionType === TransactionType.Donation ? "donation" : "sale";
+    const key = `${txn.date}|${txn.amountBTC.toFixed(8)}|${typeTag}`;
+    const arr = legacyByKey.get(key);
+    if (arr && arr.length > 0) {
+      result.set(txn.id, arr.shift()!);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Cost Basis Engine — pure calculation, no side effects.
  * Supports FIFO and Specific Identification methods (the only two IRS-permitted methods).
  *
@@ -51,7 +106,7 @@ export interface LotSelection {
  * across multiple calculate() calls.
  *
  * recordedSales: optional pre-recorded SaleRecords from Specific ID elections.
- * When a Sell or Donation matches a recorded Specific ID SaleRecord (by date + amount),
+ * When a Sell or Donation matches a recorded Specific ID SaleRecord,
  * the engine uses the recorded lot selections instead of auto-selecting.
  * This ensures Specific ID elections are permanent and consistent across all views.
  */
@@ -64,23 +119,8 @@ export function calculate(
   const sales: SaleRecord[] = [];
   const warnings: string[] = [];
 
-  // Build lookup for recorded Specific ID SaleRecords
-  // Primary key: sourceTransactionId (unique, collision-proof)
-  // Fallback key: date|amount (for pre-v1.3.0 recordings without sourceTransactionId)
-  const recordedByTxnId = new Map<string, SaleRecord>();
-  const recordedByDateAmount = new Map<string, SaleRecord>();
-  if (recordedSales) {
-    for (const rs of recordedSales) {
-      if (rs.method === AccountingMethod.SpecificID) {
-        if (rs.sourceTransactionId) {
-          recordedByTxnId.set(rs.sourceTransactionId, rs);
-        } else {
-          const key = `${rs.saleDate}|${rs.amountSold.toFixed(8)}`;
-          recordedByDateAmount.set(key, rs);
-        }
-      }
-    }
-  }
+  // Resolve which transactions have recorded Specific ID elections
+  const resolved = recordedSales ? resolveRecordedSales(transactions, recordedSales) : new Map<string, SaleRecord>();
 
   // Sort by date
   const sorted = [...transactions].sort(
@@ -106,10 +146,7 @@ export function calculate(
       }
 
       case TransactionType.Sell: {
-        // Check for a recorded Specific ID election for this sale
-        // Primary: match by transaction ID (collision-proof). Fallback: date|amount (legacy).
-        const recorded = recordedByTxnId.get(trans.id)
-          || recordedByDateAmount.get(`${trans.date}|${trans.amountBTC.toFixed(8)}`);
+        const recorded = resolved.get(trans.id);
         let lotSelections = recorded ? extractLotSelections(recorded, lots) : undefined;
         let effectiveMethod = recorded ? AccountingMethod.SpecificID : method;
 
@@ -132,10 +169,7 @@ export function calculate(
       }
 
       case TransactionType.Donation: {
-        // Check for a recorded Specific ID election for this donation
-        // Primary: match by transaction ID (collision-proof). Fallback: date|amount (legacy).
-        const recorded = recordedByTxnId.get(trans.id)
-          || recordedByDateAmount.get(`${trans.date}|${trans.amountBTC.toFixed(8)}`);
+        const recorded = resolved.get(trans.id);
         let lotSelections = recorded ? extractLotSelections(recorded, lots) : undefined;
         let effectiveMethod = recorded ? AccountingMethod.SpecificID : method;
 
@@ -213,6 +247,193 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
   if (unmatchedCount > 0) return null;
 
   return selections;
+}
+
+/**
+ * Calculate lot state up to (but not including) a specific transaction.
+ * Used to get the available lots at the point in time just before a sale/donation,
+ * so the user can retroactively assign Specific ID lot selections to imported sells.
+ *
+ * All transactions before `stopBeforeTransactionId` are processed normally
+ * (including their recorded Specific ID elections). The target transaction
+ * and everything after it are skipped, giving us the lot pool as it existed
+ * at that moment in time.
+ *
+ * excludeSaleRecordId: optional SaleRecord.id to exclude from the recorded sales
+ * passed to calculate(). This prevents the target transaction's own record from
+ * being consumed by a different transaction with the same legacy key (date|amount|type),
+ * which would corrupt the lot pool.
+ */
+export function calculateUpTo(
+  transactions: Transaction[],
+  method: AccountingMethod,
+  stopBeforeTransactionId: string,
+  recordedSales?: SaleRecord[],
+  excludeSaleRecordId?: string
+): CalculationResult {
+  // Sort chronologically (same as calculate())
+  const sorted = [...transactions].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // Find the index of the target transaction
+  const stopIdx = sorted.findIndex((t) => t.id === stopBeforeTransactionId);
+  if (stopIdx === -1) {
+    // Transaction not found — fall back to full calculation
+    return calculate(transactions, method, recordedSales);
+  }
+
+  // Process only transactions before the target
+  const subset = sorted.slice(0, stopIdx);
+
+  // Exclude the target transaction's own SaleRecord to prevent legacy key contamination
+  const filteredSales = excludeSaleRecordId && recordedSales
+    ? recordedSales.filter((rs) => rs.id !== excludeSaleRecordId)
+    : recordedSales;
+
+  return calculate(subset, method, filteredSales);
+}
+
+/**
+ * Auto-select lots to minimize estimated tax burden.
+ * Scores each lot by (salePrice - costBasisPerBTC) * taxRate, picks lowest scores first
+ * (losses first, then smallest gains). When salePrice is unavailable (donations),
+ * falls back to long-term first + highest basis.
+ *
+ * Returns LotSelection[] ready to pass to simulateSale().
+ */
+export function optimizeLotSelections(
+  lots: Lot[],
+  targetAmount: number,
+  salePrice?: number,
+  saleDate?: string
+): LotSelection[] {
+  const refDate = saleDate || new Date().toISOString();
+  const ST_RATE = 0.37;
+  const LT_RATE = 0.15;
+
+  const ranked = lots
+    .filter((l) => l.remainingBTC > 0)
+    .map((lot) => {
+      const longTerm = isMoreThanOneYear(lot.purchaseDate, refDate);
+      const costBasisPerBTC = lot.totalCost / lot.amountBTC; // fee-inclusive
+      const rate = longTerm ? LT_RATE : ST_RATE;
+      const taxScore = salePrice
+        ? (salePrice - costBasisPerBTC) * rate
+        : (longTerm ? -1e9 : 0) - costBasisPerBTC; // fallback: long-term first, then highest basis
+      return { lot, taxScore };
+    })
+    .sort((a, b) => a.taxScore - b.taxScore);
+
+  let needed = targetAmount;
+  const selections: LotSelection[] = [];
+  for (const { lot } of ranked) {
+    if (needed <= 0.00000001) break;
+    const take = Math.min(lot.remainingBTC, needed);
+    selections.push({ lotId: lot.id, amountBTC: take });
+    needed -= take;
+  }
+  return selections;
+}
+
+/**
+ * Batch-optimize all unassigned sells/donations in a year using Specific ID.
+ * Processes chronologically: for each unassigned disposition, calculates lots at that point,
+ * runs optimizeLotSelections(), simulates the sale, and returns the SaleRecords to save.
+ *
+ * Does NOT modify any state — caller is responsible for saving the returned records.
+ * Skips transactions that already have Specific ID elections (unless includeExisting is true).
+ */
+export function batchOptimizeSpecificId(
+  transactions: Transaction[],
+  recordedSales: SaleRecord[],
+  taxYear: number,
+  includeExisting = false
+): { records: SaleRecord[]; skipped: number; failed: string[] } {
+  const resolved = resolveRecordedSales(transactions, recordedSales);
+  const sorted = [...transactions].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  const dispositions = sorted.filter((t) => {
+    if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
+    const txnYear = new Date(t.date).getFullYear();
+    if (txnYear !== taxYear) return false;
+    if (!includeExisting && resolved.has(t.id)) return false;
+    return true;
+  });
+
+  const records: SaleRecord[] = [];
+  const failed: string[] = [];
+  let skipped = 0;
+
+  // Build a working copy of recordedSales that accumulates new records as we go
+  let workingSales = [...recordedSales];
+
+  for (const txn of dispositions) {
+    // Calculate lots at this point, including previously generated records from this batch
+    const result = calculateUpTo(transactions, AccountingMethod.FIFO, txn.id, workingSales);
+    const available = result.lots.filter((l) => l.remainingBTC > 0);
+
+    // Wallet filter (TD 9989)
+    const walletName = txn.wallet || txn.exchange;
+    const walletNorm = (walletName || "").trim().toLowerCase();
+    let pool = available;
+    if (walletNorm) {
+      const filtered = available.filter(
+        (l) => (l.wallet || l.exchange || "").toLowerCase() === walletNorm
+      );
+      if (filtered.length > 0) pool = filtered;
+    }
+
+    const isDonation = txn.transactionType === TransactionType.Donation;
+    const salePrice = isDonation ? undefined : txn.pricePerBTC;
+    const selections = optimizeLotSelections(pool, txn.amountBTC, salePrice, txn.date);
+
+    // Reject if no lots available or if selections don't fully cover the disposition
+    const totalSelected = selections.reduce((sum, s) => sum + s.amountBTC, 0);
+    if (selections.length === 0 || totalSelected < txn.amountBTC - 1e-8) {
+      failed.push(txn.id);
+      skipped++;
+      continue;
+    }
+
+    const sim = simulateSale(
+      txn.amountBTC,
+      isDonation ? 0 : txn.pricePerBTC,
+      result.lots, // full lot pool for simulateSale to deep-copy
+      AccountingMethod.SpecificID,
+      selections,
+      walletName || undefined,
+      txn.date
+    );
+
+    if (!sim) {
+      failed.push(txn.id);
+      skipped++;
+      continue;
+    }
+
+    if (isDonation) {
+      sim.isDonation = true;
+      sim.donationFmvPerBTC = txn.pricePerBTC;
+      sim.donationFmvTotal = txn.amountBTC * txn.pricePerBTC;
+    }
+
+    const record: SaleRecord = {
+      ...sim,
+      id: crypto.randomUUID(),
+      saleDate: txn.date,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: txn.id,
+    };
+
+    records.push(record);
+    // Add to working sales so the next iteration's calculateUpTo sees this assignment
+    workingSales = [...workingSales, record];
+  }
+
+  return { records, skipped, failed };
 }
 
 /**

@@ -14,10 +14,10 @@ interface YearSummary {
 }
 
 export function MultiYearDashboardView() {
-  const { allTransactions, selectedMethod, setSelectedNav, recordedSales } = useAppState();
+  const { allTransactions, setSelectedNav, recordedSales } = useAppState();
 
   const yearSummaries = useMemo(() => {
-    const result = calculate(allTransactions, selectedMethod, recordedSales);
+    const result = calculate(allTransactions, AccountingMethod.FIFO, recordedSales);
     const byYear: Record<number, YearSummary> = {};
 
     for (const sale of result.sales) {
@@ -42,7 +42,7 @@ export function MultiYearDashboardView() {
     }
 
     return Object.values(byYear).sort((a, b) => a.year - b.year);
-  }, [allTransactions, selectedMethod, recordedSales]);
+  }, [allTransactions, recordedSales]);
 
   const lifetimeTotal = yearSummaries.reduce((a, y) => a + y.totalGL, 0);
   const lifetimeST = yearSummaries.reduce((a, y) => a + y.stGL, 0);
@@ -65,7 +65,7 @@ export function MultiYearDashboardView() {
   return (
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Multi-Year Dashboard</h1>
-      <HelpPanel subtitle={`Lifetime capital gains and losses across all tax years using ${selectedMethod}.`} />
+      <HelpPanel subtitle="Lifetime capital gains and losses across all tax years." />
 
       {/* Bar Chart */}
       <div className="card mb-6">

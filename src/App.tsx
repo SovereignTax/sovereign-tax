@@ -9,7 +9,6 @@ import { ImportView } from "./components/ImportView";
 import { TransactionsView } from "./components/TransactionsView";
 import { TaxReportView } from "./components/TaxReportView";
 import { SimulationView } from "./components/SimulationView";
-import { RecordSaleView } from "./components/RecordSaleView";
 import { AddTransactionView } from "./components/AddTransactionView";
 import { ComparisonView } from "./components/ComparisonView";
 import { SettingsView } from "./components/SettingsView";
@@ -44,7 +43,6 @@ function AppContent() {
       case "holdings": return <HoldingsView />;
       case "taxReport": return <TaxReportView />;
       case "simulation": return <SimulationView />;
-      case "recordSale": return <RecordSaleView />;
       case "addTransaction": return <AddTransactionView />;
       case "comparison": return <ComparisonView />;
       case "income": return <IncomeView />;

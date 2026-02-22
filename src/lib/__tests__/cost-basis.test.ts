@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { calculate, simulateSale, daysBetween, isMoreThanOneYear, LotSelection } from "../cost-basis";
-import { createTransaction } from "../models";
+import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, optimizeLotSelections, daysBetween, isMoreThanOneYear, LotSelection } from "../cost-basis";
+import { createTransaction, SaleRecord } from "../models";
 import { AccountingMethod, TransactionType } from "../types";
 
 // ═══════════════════════════════════════════════════════
@@ -601,5 +601,202 @@ describe("Edge cases", () => {
     // The sell on Jan 1 happens before the buy on Mar 1 → no lots available
     expect(result.sales).toHaveLength(0);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// SHARED RESOLVER — resolveRecordedSales()
+// ═══════════════════════════════════════════════════════
+
+describe("resolveRecordedSales — legacy collision handling", () => {
+  /** Helper to build a legacy SaleRecord (no sourceTransactionId) */
+  function legacyRecord(saleDate: string, amountSold: number, opts?: { isDonation?: boolean; costBasis?: number }): SaleRecord {
+    return {
+      id: crypto.randomUUID(),
+      saleDate: new Date(saleDate + "T12:00:00").toISOString(),
+      amountSold,
+      salePricePerBTC: opts?.isDonation ? 0 : 50000,
+      totalProceeds: opts?.isDonation ? 0 : amountSold * 50000,
+      costBasis: opts?.costBasis ?? amountSold * 30000,
+      gainLoss: opts?.isDonation ? 0 : amountSold * 50000 - (opts?.costBasis ?? amountSold * 30000),
+      lotDetails: [{ id: crypto.randomUUID(), purchaseDate: "2024-01-01T12:00:00.000Z", amountBTC: amountSold, costBasisPerBTC: 30000, totalCost: amountSold * 30000, daysHeld: 180, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 180,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      isDonation: opts?.isDonation || undefined,
+      // No sourceTransactionId — this is the legacy format
+    };
+  }
+
+  it("two legacy records with same date|amount|type map one-to-one deterministically", () => {
+    // Two sells on the same day for the same amount — each should get its own legacy record
+    const s1 = sell("2024-06-15", 0.5, 50000);
+    const s2 = sell("2024-06-15", 0.5, 50000);
+    const b1 = buy("2024-01-01", 2.0, 30000);
+
+    const rec1 = legacyRecord("2024-06-15", 0.5);
+    const rec2 = legacyRecord("2024-06-15", 0.5);
+
+    const resolved = resolveRecordedSales([b1, s1, s2], [rec1, rec2]);
+
+    // Both sells should be matched, each to a different record
+    expect(resolved.has(s1.id)).toBe(true);
+    expect(resolved.has(s2.id)).toBe(true);
+    expect(resolved.get(s1.id)!.id).not.toBe(resolved.get(s2.id)!.id);
+    // First chronological sell gets the first record (shift order)
+    expect(resolved.get(s1.id)!.id).toBe(rec1.id);
+    expect(resolved.get(s2.id)!.id).toBe(rec2.id);
+  });
+
+  it("legacy type discrimination — sell record does not match donation transaction", () => {
+    const s1 = sell("2024-06-15", 0.5, 50000);
+    const d1 = donation("2024-06-15", 0.5, 50000);
+    const b1 = buy("2024-01-01", 2.0, 30000);
+
+    // Only a sale-type legacy record exists (no donation record)
+    const saleRec = legacyRecord("2024-06-15", 0.5, { isDonation: false });
+
+    const resolved = resolveRecordedSales([b1, s1, d1], [saleRec]);
+
+    expect(resolved.has(s1.id)).toBe(true); // Sale matches sale record
+    expect(resolved.has(d1.id)).toBe(false); // Donation does NOT match sale record
+  });
+
+  it("delete cascade — resolver does not match Buy transaction to legacy sale record", () => {
+    // A Buy with the same date+amount as a legacy sale record should NOT be matched
+    const b1 = buy("2024-06-15", 0.5, 50000);
+    const s1 = sell("2024-06-15", 0.5, 50000);
+    const b2 = buy("2024-01-01", 2.0, 30000);
+
+    const saleRec = legacyRecord("2024-06-15", 0.5);
+
+    const resolved = resolveRecordedSales([b2, b1, s1], [saleRec]);
+
+    // Only the sell should be matched, not the buy
+    expect(resolved.has(s1.id)).toBe(true);
+    expect(resolved.has(b1.id)).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// calculateUpTo — excludeSaleRecordId
+// ═══════════════════════════════════════════════════════
+
+describe("calculateUpTo — legacy record exclusion", () => {
+  it("excludes target transaction's own SaleRecord to prevent legacy key contamination", () => {
+    // Setup: buy 2 BTC, then two sells of 0.5 BTC on the same day
+    const b1 = buy("2024-01-01", 2.0, 30000);
+    const s1 = sell("2024-06-15", 0.5, 50000);
+    const s2 = sell("2024-06-15", 0.5, 50000);
+
+    // Both sells have legacy Specific ID records (no sourceTransactionId)
+    const rec1: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{ id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+    };
+    const rec2: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s2.date,
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{ id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+    };
+
+    const allTxns = [b1, s1, s2];
+    const allRecords = [rec1, rec2];
+
+    // Calculate up to s2, excluding s2's own record (rec2).
+    // Without exclusion, rec2 could be consumed by s1 (same legacy key),
+    // making s1 consume 2 records and s2 consume 0.
+    const result = calculateUpTo(allTxns, AccountingMethod.FIFO, s2.id, allRecords, rec2.id);
+
+    // s1 should consume 0.5 BTC via rec1 (Specific ID), leaving 1.5 BTC available
+    const availableBTC = result.lots.reduce((sum, l) => sum + l.remainingBTC, 0);
+    expect(availableBTC).toBeCloseTo(1.5, 8);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// AUDIT FIX: batchOptimizeSpecificId rejects partial fills
+// ═══════════════════════════════════════════════════════
+
+describe("batchOptimizeSpecificId — partial fill rejection", () => {
+  it("skips a sell when available lots cannot fully cover the disposition", () => {
+    // Buy 0.5 BTC, then try to sell 1.0 BTC — insufficient inventory
+    const b1 = buy("2025-01-01", 0.5, 40000);
+    const s1 = sell("2025-06-01", 1.0, 50000);
+    const txns = [b1, s1];
+
+    const result = batchOptimizeSpecificId(txns, [], 2025);
+
+    // Should skip (not create a partial record)
+    expect(result.records).toHaveLength(0);
+    expect(result.skipped).toBe(1);
+    expect(result.failed).toContain(s1.id);
+  });
+
+  it("succeeds when lots fully cover the disposition", () => {
+    const b1 = buy("2025-01-01", 1.0, 40000);
+    const s1 = sell("2025-06-01", 0.5, 50000);
+    const txns = [b1, s1];
+
+    const result = batchOptimizeSpecificId(txns, [], 2025);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.skipped).toBe(0);
+    expect(result.failed).toHaveLength(0);
+  });
+
+  it("skips partially-coverable sells but succeeds on fully-coverable ones", () => {
+    // Buy 0.8 BTC total, sell 0.5 then sell 0.5 — second sell only has 0.3 left
+    const b1 = buy("2025-01-01", 0.8, 40000);
+    const s1 = sell("2025-06-01", 0.5, 50000);
+    const s2 = sell("2025-06-02", 0.5, 50000);
+    const txns = [b1, s1, s2];
+
+    const result = batchOptimizeSpecificId(txns, [], 2025);
+
+    // First sell succeeds (0.5 <= 0.8), second fails (0.5 > 0.3 remaining)
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].sourceTransactionId).toBe(s1.id);
+    expect(result.skipped).toBe(1);
+    expect(result.failed).toContain(s2.id);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// AUDIT FIX: optimizeLotSelections returns partial when insufficient
+// ═══════════════════════════════════════════════════════
+
+describe("optimizeLotSelections — partial fill behavior", () => {
+  it("returns partial selections when lots are insufficient", () => {
+    const b1 = buy("2025-01-01", 0.5, 40000);
+    const result = calculate([b1], AccountingMethod.FIFO, []);
+    const lots = result.lots;
+
+    // Request 1.0 BTC but only 0.5 available
+    const selections = optimizeLotSelections(lots, 1.0, 50000, "2025-06-01");
+
+    const totalSelected = selections.reduce((sum, s) => sum + s.amountBTC, 0);
+    expect(totalSelected).toBeCloseTo(0.5, 8);
+    expect(totalSelected).toBeLessThan(1.0);
   });
 });

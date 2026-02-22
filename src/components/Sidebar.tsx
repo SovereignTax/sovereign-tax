@@ -8,29 +8,33 @@ const navSections = [
   {
     title: "Data",
     items: [
-      { id: "import", label: "Import Data", icon: "📥" },
+      { id: "import", label: "Import", icon: "📥" },
       { id: "addTransaction", label: "Add Transaction", icon: "➕" },
       { id: "transactions", label: "Transactions", icon: "📋" },
-      { id: "reconciliation", label: "Reconciliation", icon: "🔍" },
     ],
   },
   {
-    title: "Analysis",
+    title: "Portfolio",
     items: [
       { id: "holdings", label: "Holdings", icon: "₿" },
+      { id: "reconciliation", label: "Reconciliation", icon: "🔗" },
+      { id: "simulation", label: "Simulate Sale", icon: "📈" },
+    ],
+  },
+  {
+    title: "Tax",
+    items: [
       { id: "taxReport", label: "Tax Report", icon: "📄" },
       { id: "income", label: "Income", icon: "💰" },
       { id: "comparison", label: "Compare Methods", icon: "⚖️" },
-      { id: "multiYear", label: "Multi-Year", icon: "📅" },
-      { id: "taxLossHarvesting", label: "Tax Harvesting", icon: "🌾" },
-      { id: "lotMaturity", label: "Lot Maturity", icon: "⏳" },
     ],
   },
   {
-    title: "Actions",
+    title: "Insights",
     items: [
-      { id: "simulation", label: "Simulate Sale", icon: "📈" },
-      { id: "recordSale", label: "Record Sale", icon: "✅" },
+      { id: "multiYear", label: "Multi-Year", icon: "📅" },
+      { id: "taxLossHarvesting", label: "Tax Harvesting", icon: "🌾" },
+      { id: "lotMaturity", label: "Lot Maturity", icon: "⏳" },
     ],
   },
 ];

@@ -7,10 +7,10 @@ import { SaleRecord } from "../lib/models";
 import { HelpPanel } from "./HelpPanel";
 
 export function TaxLossHarvestingView() {
-  const { allTransactions, selectedYear, setSelectedYear, availableYears, priceState, fetchPrice, selectedMethod, recordedSales } = useAppState();
+  const { allTransactions, selectedYear, setSelectedYear, availableYears, priceState, fetchPrice, recordedSales } = useAppState();
   const [harvestResult, setHarvestResult] = useState<SaleRecord | null>(null);
 
-  const result = useMemo(() => calculate(allTransactions, selectedMethod, recordedSales), [allTransactions, selectedMethod, recordedSales]);
+  const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
   const currentPrice = priceState.currentPrice;
 
   const lotsWithGL = useMemo(() => {
@@ -38,7 +38,7 @@ export function TaxLossHarvestingView() {
 
   const simulateHarvest = () => {
     if (!currentPrice || totalHarvestBTC <= 0) return;
-    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, selectedMethod);
+    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, AccountingMethod.FIFO);
     if (sim) setHarvestResult(sim);
   };
 

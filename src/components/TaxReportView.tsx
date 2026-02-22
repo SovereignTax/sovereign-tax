@@ -1,23 +1,102 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useAppState } from "../lib/app-state";
-import { calculate } from "../lib/cost-basis";
+import { calculate, resolveRecordedSales, batchOptimizeSpecificId } from "../lib/cost-basis";
 import { exportForm8949CSV, exportLegacyCSV, exportTurboTaxTXF, exportTurboTaxCSV, exportForm8283CSV, buildDonationSummary } from "../lib/export";
 import { exportForm8949PDF } from "../lib/pdf-export";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
-import { AccountingMethod } from "../lib/types";
+import { AccountingMethod, TransactionType } from "../lib/types";
+import { SaleRecord } from "../lib/models";
 import { computeCarryforward } from "../lib/carryforward";
 import { HelpPanel } from "./HelpPanel";
 
 export function TaxReportView() {
-  const { allTransactions, recordedSales, selectedYear, setSelectedYear, selectedMethod, setSelectedMethod, availableYears } = useAppState();
+  const state = useAppState();
+  const { allTransactions, recordedSales, selectedYear, setSelectedYear, availableYears } = state;
 
-  const result = useMemo(() => calculate(allTransactions, selectedMethod, recordedSales), [allTransactions, selectedMethod, recordedSales]);
+  const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
+
+  // Batch optimize state
+  const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number } | null>(null);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // Count unassigned sells/donations for optimize button
+  const recordedByTxnId = useMemo(
+    () => resolveRecordedSales(allTransactions, recordedSales),
+    [recordedSales, allTransactions]
+  );
+  const unassignedCount = useMemo(() => {
+    return allTransactions.filter((t) => {
+      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
+      if (new Date(t.date).getFullYear() !== selectedYear) return false;
+      if (recordedByTxnId.has(t.id)) return false;
+      return true;
+    }).length;
+  }, [allTransactions, selectedYear, recordedByTxnId]);
+
+  const handleBatchOptimize = useCallback(() => {
+    const { records, skipped } = batchOptimizeSpecificId(allTransactions, recordedSales, selectedYear);
+    const fifoResult = calculate(allTransactions, AccountingMethod.FIFO, recordedSales);
+    const fifoGainLoss = fifoResult.sales
+      .filter((s: SaleRecord) => new Date(s.saleDate).getFullYear() === selectedYear && !s.isDonation)
+      .reduce((sum: number, s: SaleRecord) => sum + s.gainLoss, 0);
+    const allSales = [...recordedSales, ...records];
+    const optResult = calculate(allTransactions, AccountingMethod.FIFO, allSales);
+    const optimizedGainLoss = optResult.sales
+      .filter((s: SaleRecord) => new Date(s.saleDate).getFullYear() === selectedYear && !s.isDonation)
+      .reduce((sum: number, s: SaleRecord) => sum + s.gainLoss, 0);
+    setBatchOptimizeResult({ records, skipped, fifoGainLoss, optimizedGainLoss });
+  }, [allTransactions, recordedSales, selectedYear]);
+
+  const handleBatchSave = useCallback(async () => {
+    if (!batchOptimizeResult) return;
+    setBatchSaving(true);
+    await state.recordSalesBatch(batchOptimizeResult.records);
+    setBatchSaving(false);
+    setBatchOptimizeResult(null);
+  }, [batchOptimizeResult, state.recordSalesBatch]);
+
+  // Count assigned Specific ID elections for the year (for clear all)
+  const assignedCount = useMemo(() => {
+    return allTransactions.filter((t) => {
+      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
+      if (new Date(t.date).getFullYear() !== selectedYear) return false;
+      return recordedByTxnId.has(t.id);
+    }).length;
+  }, [allTransactions, selectedYear, recordedByTxnId]);
+
+  const handleClearAll = useCallback(async () => {
+    setClearing(true);
+    const idsToDelete: string[] = [];
+    // Use transaction date (not record.saleDate) to match assignedCount filtering
+    for (const t of allTransactions) {
+      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) continue;
+      if (new Date(t.date).getFullYear() !== selectedYear) continue;
+      const record = recordedByTxnId.get(t.id);
+      if (record) idsToDelete.push(record.id);
+    }
+    await state.deleteSaleRecordsByIds(idsToDelete);
+    setClearing(false);
+    setShowClearConfirm(false);
+  }, [allTransactions, recordedByTxnId, selectedYear, state.deleteSaleRecordsByIds]);
 
   // Filter sales to selected year — calculate() now handles Specific ID natively
   // (recorded lot elections are respected during engine replay, no overlay needed)
   const salesForYear = useMemo(() => {
     return result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
   }, [result.sales, selectedYear]);
+
+  // Determine effective method from actual sales data for accurate export labels.
+  // Each SaleRecord carries its own method (FIFO or SpecificID).
+  const effectiveMethod = useMemo(() => {
+    const taxable = salesForYear.filter((s) => !s.isDonation);
+    const hasSpecificId = taxable.some((s) => s.method === AccountingMethod.SpecificID);
+    const hasFifo = taxable.some((s) => s.method !== AccountingMethod.SpecificID);
+    if (hasSpecificId && !hasFifo) return AccountingMethod.SpecificID;
+    if (hasSpecificId && hasFifo) return AccountingMethod.SpecificID; // Specific ID overrides are applied
+    return AccountingMethod.FIFO;
+  }, [salesForYear]);
 
   // Exclude donations from all summary totals and ST/LT breakdown:
   // - Donations have zero proceeds/gainLoss but retain costBasis (proceeds - costBasis ≠ totalGL)
@@ -64,7 +143,7 @@ export function TaxReportView() {
     <div className="p-8 max-w-5xl">
       <h1 className="text-3xl font-bold mb-1">Tax Report</h1>
       <HelpPanel
-        subtitle="Form 8949 and Schedule D data for your selected tax year and accounting method."
+        subtitle="Form 8949 and Schedule D data for your selected tax year. Specific ID elections from Transactions are automatically applied."
         expandedContent={
           <>
             <p><strong>Short-term vs. long-term:</strong> Assets held one year or less are short-term (taxed as ordinary income). Assets held more than one year are long-term (lower capital gains rate).</p>
@@ -82,10 +161,34 @@ export function TaxReportView() {
             {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <div className="segmented">
-          {Object.values(AccountingMethod).map((m) => (
-            <button key={m} className={`segmented-btn ${selectedMethod === m ? "active" : ""}`} onClick={() => setSelectedMethod(m)}>{m}</button>
-          ))}
+      </div>
+
+      {/* Optimize Specific ID card */}
+      <div className="card mb-6 border-l-4 border-l-blue-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-sm mb-1">Optimize with Specific ID</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {unassignedCount > 0
+                ? `You have ${unassignedCount} sell${unassignedCount === 1 ? "" : "s"}/donation${unassignedCount === 1 ? "" : "s"} in ${selectedYear} using the default FIFO method. Click Optimize to automatically assign the best lots to each sale using Specific ID, minimizing your tax liability. You'll see a comparison before applying.`
+                : `All sells and donations in ${selectedYear} already have Specific ID lot elections assigned. Your tax report reflects your optimized selections.`
+              }
+            </p>
+          </div>
+          <div className="flex gap-2 ml-4 shrink-0">
+            {unassignedCount > 0 ? (
+              <button className="text-sm px-4 py-1.5 btn-primary" onClick={handleBatchOptimize}>
+                Optimize All ({unassignedCount})
+              </button>
+            ) : (
+              <span className="text-sm px-4 py-1.5 btn-secondary opacity-50 cursor-default">All Optimized</span>
+            )}
+            {assignedCount > 0 && (
+              <button className="text-sm px-4 py-1.5 btn-secondary text-red-500 hover:text-red-600" onClick={() => setShowClearConfirm(true)}>
+                Revert to FIFO
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -98,7 +201,7 @@ export function TaxReportView() {
         <>
           {/* Summary */}
           <div className="card mb-6">
-            <h3 className="font-semibold mb-3">Summary — {selectedYear} ({selectedMethod})</h3>
+            <h3 className="font-semibold mb-3">Summary — {selectedYear}</h3>
             <div className="grid grid-cols-5 gap-4">
               <div><div className="text-xs text-gray-500">Total Proceeds</div><div className="font-semibold tabular-nums">{formatUSD(totalProceeds)}</div></div>
               <div><div className="text-xs text-gray-500">Cost Basis</div><div className="font-semibold tabular-nums">{formatUSD(totalCostBasis)}</div></div>
@@ -222,10 +325,10 @@ export function TaxReportView() {
           <div className="card mb-6">
             <h3 className="font-semibold mb-3">Export Tax Documents</h3>
             <div className="flex gap-3 flex-wrap">
-              <button className="btn-secondary" onClick={() => downloadCSV(exportForm8949CSV(salesForYear, selectedYear, selectedMethod), `form_8949_${selectedYear}_${selectedMethod}.csv`)}>
+              <button className="btn-secondary" onClick={() => downloadCSV(exportForm8949CSV(salesForYear, selectedYear, effectiveMethod), `form_8949_${selectedYear}.csv`)}>
                 📊 Form 8949 CSV
               </button>
-              <button className="btn-secondary" onClick={() => downloadCSV(exportLegacyCSV(salesForYear), `btc_tax_${selectedYear}_${selectedMethod}.csv`)}>
+              <button className="btn-secondary" onClick={() => downloadCSV(exportLegacyCSV(salesForYear), `btc_tax_${selectedYear}.csv`)}>
                 📋 Raw Data CSV
               </button>
               <button className="btn-secondary" onClick={() => downloadCSV(exportTurboTaxCSV(salesForYear, selectedYear), `turbotax_${selectedYear}.csv`)}>
@@ -234,7 +337,7 @@ export function TaxReportView() {
               <button className="btn-secondary" onClick={() => downloadCSV(exportTurboTaxTXF(salesForYear, selectedYear), `turbotax_${selectedYear}.txf`)}>
                 📑 TurboTax TXF
               </button>
-              <button className="btn-secondary" onClick={() => { exportForm8949PDF(salesForYear, selectedYear, selectedMethod); setExportToast(`form_8949_${selectedYear}_${selectedMethod}.pdf`); }}>
+              <button className="btn-secondary" onClick={() => { exportForm8949PDF(salesForYear, selectedYear, effectiveMethod); setExportToast(`form_8949_${selectedYear}.pdf`); }}>
                 📄 PDF Report
               </button>
             </div>
@@ -295,6 +398,79 @@ export function TaxReportView() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Batch Optimize Confirmation Modal */}
+      {batchOptimizeResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchOptimizeResult(null)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Optimize All — {selectedYear}</h3>
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
+              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Transactions to optimize:</span>
+                <span className="font-medium">{batchOptimizeResult.records.length}</span>
+              </div>
+              {batchOptimizeResult.skipped > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Skipped (insufficient lots):</span>
+                  <span className="font-medium text-orange-500">{batchOptimizeResult.skipped}</span>
+                </div>
+              )}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Current gain/loss ({selectedYear}):</span>
+                  <span className={`font-medium tabular-nums ${batchOptimizeResult.fifoGainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
+                    {batchOptimizeResult.fifoGainLoss >= 0 ? "+" : ""}{formatUSD(batchOptimizeResult.fifoGainLoss)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Optimized gain/loss ({selectedYear}):</span>
+                  <span className={`font-medium tabular-nums ${batchOptimizeResult.optimizedGainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
+                    {batchOptimizeResult.optimizedGainLoss >= 0 ? "+" : ""}{formatUSD(batchOptimizeResult.optimizedGainLoss)}
+                  </span>
+                </div>
+                {batchOptimizeResult.fifoGainLoss !== batchOptimizeResult.optimizedGainLoss && (
+                  <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium">Estimated savings:</span>
+                    <span className="font-bold tabular-nums text-green-600">
+                      {formatUSD(batchOptimizeResult.fifoGainLoss - batchOptimizeResult.optimizedGainLoss)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => setBatchOptimizeResult(null)}>Cancel</button>
+              <button className="btn-primary text-sm" disabled={batchSaving || batchOptimizeResult.records.length === 0} onClick={async () => { await handleBatchSave(); }}>
+                {batchSaving ? "Saving..." : `Apply Specific ID (${batchOptimizeResult.records.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowClearConfirm(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-3">Revert to FIFO — {selectedYear}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              This will remove all {assignedCount} Specific ID lot election{assignedCount === 1 ? "" : "s"} for {selectedYear}. All sells and donations will fall back to the default FIFO method. You can re-optimize at any time.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+              <button className="text-sm px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg" disabled={clearing} onClick={async () => { await handleClearAll(); }}>
+                {clearing ? "Clearing..." : `Remove All (${assignedCount})`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Export toast notification */}
