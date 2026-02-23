@@ -19,10 +19,12 @@ export function TaxLossHarvestingView() {
       .filter((l) => l.remainingBTC > 0)
       .map((lot) => {
         const currentValue = lot.remainingBTC * currentPrice;
-        const costBasis = lot.remainingBTC * lot.pricePerBTC;
+        const costBasisPerBTC = lot.totalCost / lot.amountBTC; // Fee-inclusive cost basis
+        const costBasis = lot.remainingBTC * costBasisPerBTC;
         const unrealizedGL = currentValue - costBasis;
-        const daysHeld = daysBetween(lot.purchaseDate, new Date().toISOString());
-        return { ...lot, currentValue, costBasis, unrealizedGL, daysHeld, isLongTerm: isMoreThanOneYear(lot.purchaseDate, new Date().toISOString()) };
+        const now = new Date().toISOString();
+        const daysHeld = daysBetween(lot.purchaseDate, now);
+        return { ...lot, currentValue, costBasis, unrealizedGL, daysHeld, isLongTerm: isMoreThanOneYear(lot.purchaseDate, now) };
       })
       .sort((a, b) => a.unrealizedGL - b.unrealizedGL); // Biggest losses first
   }, [result.lots, currentPrice]);

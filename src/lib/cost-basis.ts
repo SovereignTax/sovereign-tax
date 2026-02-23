@@ -192,9 +192,67 @@ export function calculate(
         break;
       }
 
-      case TransactionType.TransferIn:
+      case TransactionType.TransferIn: {
+        // Non-taxable self-transfer (IRS FAQ 81). If the user assigned a sourceWallet,
+        // FIFO-consume lots from that wallet and re-tag them to the TransferIn's wallet.
+        // Cost basis and holding period carry over — no taxable event.
+        if (trans.sourceWallet) {
+          const destWallet = trans.wallet || trans.exchange;
+          const sourceNorm = trans.sourceWallet.trim().toLowerCase();
+          let remaining = trans.amountBTC;
+
+          // FIFO order: oldest lots from the source wallet first
+          const sourceIndices = lots
+            .map((lot, idx) => ({ lot, idx }))
+            .filter(({ lot }) =>
+              lot.remainingBTC > 0 &&
+              (lot.wallet || lot.exchange || "").trim().toLowerCase() === sourceNorm
+            )
+            .sort((a, b) => new Date(a.lot.purchaseDate).getTime() - new Date(b.lot.purchaseDate).getTime())
+            .map(({ idx }) => idx);
+
+          for (const idx of sourceIndices) {
+            if (remaining <= 0.00000001) break;
+            const take = Math.min(lots[idx].remainingBTC, remaining);
+
+            if (Math.abs(take - lots[idx].remainingBTC) < 1e-10) {
+              // Re-tag entire lot in place (avoids splitting)
+              lots[idx].wallet = destWallet;
+            } else {
+              // Split: reduce original lot, create new re-tagged lot with the taken portion
+              lots[idx].remainingBTC -= take;
+              if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-10) {
+                lots[idx].remainingBTC = 0;
+              }
+              const retagged = createLot({
+                id: lots[idx].id + "-xfer-" + trans.id.slice(0, 8),
+                purchaseDate: lots[idx].purchaseDate,
+                amountBTC: take,
+                pricePerBTC: lots[idx].pricePerBTC,
+                totalCost: (lots[idx].totalCost / lots[idx].amountBTC) * take,
+                fee: lots[idx].fee ? (lots[idx].fee! / lots[idx].amountBTC) * take : undefined,
+                exchange: lots[idx].exchange,
+                wallet: destWallet,
+                remainingBTC: take,
+              });
+              lots.push(retagged);
+            }
+            remaining -= take;
+          }
+
+          if (remaining > 0.00000001) {
+            warnings.push(
+              `TransferIn on ${formatDateShort(trans.date)}: Could not find ${remaining.toFixed(8)} BTC in "${trans.sourceWallet}" to re-tag. Some lots may remain at the source wallet.`
+            );
+          }
+        }
+        // If no sourceWallet assigned, do nothing (same as before)
+        break;
+      }
+
       case TransactionType.TransferOut:
-        // Non-taxable movements, do nothing
+        // Non-taxable movement — lots stay where they are.
+        // The corresponding TransferIn (with sourceWallet) handles re-tagging.
         break;
     }
   }

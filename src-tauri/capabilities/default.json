@@ -24,6 +24,7 @@
         { "path": "$APPDATA/**" }
       ]
     },
+    "fs:allow-write-text-file",
     {
       "identifier": "fs:allow-exists",
       "allow": [

@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash } from "../lib/csv-import";
 import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
+import { saveTextFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
 
 type ImportStatus = { type: "success"; count: number; skipped: number; duplicates: number; nonBtcSkipped: number } | { type: "error"; message: string };
@@ -93,7 +94,11 @@ export function ImportView() {
       finalMapping.defaultType = defaultType;
     }
 
-    const exchange = exchangeName || "Unknown";
+    if (!exchangeName.trim()) {
+      setImportStatus({ type: "error", message: "Exchange name is required. Enter the exchange or platform name above before importing." });
+      return;
+    }
+    const exchange = exchangeName.trim();
     const result = parseCSVContent(pendingContent, exchange, finalMapping);
 
     if (result.transactions.length === 0 && result.skippedRows.length > 0) {
@@ -110,7 +115,7 @@ export function ImportView() {
     await state.recordImport(hash, pendingFileName || "unknown.csv", dedup.added);
 
     // Save mapping
-    if (exchange !== "Unknown") {
+    if (exchange) {
       const mappings = await state.loadMappings();
       mappings[exchange] = finalMapping;
       await state.saveMappings(mappings);
@@ -162,24 +167,21 @@ export function ImportView() {
       <div className="text-center mb-4">
         <button
           className="text-xs text-orange-500 hover:text-orange-400 underline"
-          onClick={() => {
+          onClick={async () => {
             const template = "Date,Type,Amount (BTC),Price (USD),Total (USD),Fee (USD),Exchange,Wallet,Notes\n2026-01-15,Buy,0.10000000,97500.00,9750.00,5.00,Coinbase,Coinbase,Example buy\n2026-01-20,Sell,0.05000000,99000.00,4950.00,2.50,Kraken,Kraken,Example sell";
-            const blob = new Blob([template], { type: "text/csv" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "sovereign-tax-import-template.csv";
-            a.click();
-            URL.revokeObjectURL(url);
+            await saveTextFile(template, {
+              defaultPath: "sovereign-tax-import-template.csv",
+              filters: [{ name: "CSV", extensions: ["csv"] }],
+            });
           }}
         >
           📄 Download CSV template (for manual data entry)
         </button>
       </div>
 
-      {/* Exchange name */}
-      <div className="flex items-center gap-3 mb-6">
-        <span className="text-gray-500">Exchange Name:</span>
+      {/* Exchange name (required) */}
+      <div className="flex items-center gap-3 mb-2">
+        <span className="text-gray-500">Exchange Name <span className="text-red-500">*</span>:</span>
         <input
           className="input w-64"
           placeholder="e.g., Coinbase, Swan, Strike"
@@ -187,6 +189,12 @@ export function ImportView() {
           onChange={(e) => setExchangeName(e.target.value)}
         />
         <span className="text-xs text-gray-400">Used as default — overridden if your CSV has an Exchange column</span>
+      </div>
+      <div className="ml-[calc(0.75rem+theme(spacing.3))] mb-6">
+        <span className="text-xs text-gray-400">
+          The name must match exactly across all CSVs from the same exchange (e.g., always "Coinbase", not sometimes "coinbase").
+          This is required for per-wallet cost basis tracking under IRS regulations.
+        </span>
       </div>
 
       {/* Column Mapping */}
@@ -314,9 +322,17 @@ export function ImportView() {
       {/* Import Button */}
       {pendingContent && isMappingValid(mapping) && (
         <div className="text-center mb-6">
-          <button className="btn-primary text-lg px-8 py-3" onClick={handleImport}>
+          <button
+            className="btn-primary text-lg px-8 py-3"
+            disabled={!exchangeName.trim()}
+            title={!exchangeName.trim() ? "Enter an exchange name above before importing" : undefined}
+            onClick={handleImport}
+          >
             📥 Import Transactions
           </button>
+          {!exchangeName.trim() && (
+            <p className="text-xs text-orange-500 mt-2">Enter an exchange name above to enable import.</p>
+          )}
         </div>
       )}
 
@@ -324,11 +340,14 @@ export function ImportView() {
       {importStatus && (
         <div className={`p-4 rounded-lg mb-6 ${importStatus.type === "success" ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`}>
           {importStatus.type === "success" ? (
-            <div className="flex items-center gap-2">
-              <span className="text-green-500">✅</span>
-              <span className="font-medium">Imported {importStatus.count} transactions</span>
-              {importStatus.duplicates > 0 && <span className="text-orange-500">({importStatus.duplicates} duplicates skipped)</span>}
-              {importStatus.skipped > 0 && <span className="text-gray-500">({importStatus.skipped} rows skipped)</span>}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-green-500">✅</span>
+                <span className="font-medium">Imported {importStatus.count} transactions</span>
+                {importStatus.duplicates > 0 && <span className="text-orange-500">({importStatus.duplicates} duplicates skipped)</span>}
+                {importStatus.skipped > 0 && <span className="text-gray-500">({importStatus.skipped} rows skipped)</span>}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Dates are converted to your local timezone for IRS reporting purposes. They may differ from your CSV if your exchange uses UTC.</p>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-red-500">

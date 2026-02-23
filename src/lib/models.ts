@@ -10,6 +10,7 @@ export interface Transaction {
   fee?: number; // Exchange fee in USD
   exchange: string;
   wallet?: string; // Wallet/account for per-wallet cost basis tracking
+  sourceWallet?: string; // For TransferIn: which wallet/exchange the lots came from (user-assigned)
   incomeType?: IncomeType; // For mining, rewards — classified as ordinary income
   notes: string;
 }

@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { fetch } from "@tauri-apps/plugin-http";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
 import { isEncryptedBackup } from "../lib/backup";
 
@@ -232,7 +232,7 @@ export function SettingsView() {
                 value={backupPasswordConfirm}
                 onChange={(e) => { setBackupPasswordConfirm(e.target.value); setBackupPasswordError(null); }}
                 onKeyDown={async (e) => {
-                  if (e.key === "Enter" && backupPassword && backupPassword === backupPasswordConfirm) {
+                  if (e.key === "Enter" && backupPassword && backupPassword.length >= 4 && backupPassword === backupPasswordConfirm) {
                     try {
                       setShowBackupPasswordModal(false);
                       setBackupStatus("Encrypting and creating backup...");
@@ -420,7 +420,12 @@ export function SettingsView() {
               onClick={async () => {
                 setUpdateStatus({ type: "checking", message: "Checking for updates..." });
                 try {
-                  const response = await fetch(VERSION_CHECK_URL, { cache: "no-store" });
+                  let response: Response;
+                  try {
+                    response = await tauriFetch(VERSION_CHECK_URL, { cache: "no-store" });
+                  } catch {
+                    response = await window.fetch(VERSION_CHECK_URL, { cache: "no-store" });
+                  }
                   if (!response.ok) throw new Error("Could not reach update server");
                   const data = await response.json();
                   const latest = data.latest;

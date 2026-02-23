@@ -37,6 +37,7 @@ const columnVariations: Record<string, string[]> = {
   fee: [
     "fee", "fees", "commission", "spread", "trading fee", "transaction fee",
     "fee amount", "fee (usd)", "fee usd", "total fee",
+    "fees and/or spread",
   ],
   wallet: ["wallet", "wallet name", "sub-account", "sub account"],
   exchange: ["exchange", "source", "platform", "venue", "account", "portfolio"],
@@ -96,10 +97,35 @@ export function parseCSVLine(line: string): string[] {
   return fields;
 }
 
+/** Convert an Excel serial date number to a JS Date.
+ *  Excel epoch is Jan 1, 1900 (serial 1), but includes the Lotus 1-2-3
+ *  leap-year bug where Feb 29, 1900 is serial 60 despite 1900 not being
+ *  a leap year. We subtract 1 for serials > 59 to correct for this. */
+export function excelSerialToDate(serial: number): Date {
+  // Excel day 1 = Jan 1, 1900. We need day 0 = Dec 31, 1899.
+  const excelEpoch = new Date(Date.UTC(1899, 11, 31)); // Dec 31, 1899
+  // Lotus 1-2-3 bug: serial 60 = Feb 29, 1900 (doesn't exist).
+  // For serials > 59, the real date is one day less than Excel thinks.
+  const corrected = serial > 59 ? serial - 1 : serial;
+  const ms = excelEpoch.getTime() + corrected * 86400000;
+  return new Date(ms);
+}
+
 /** Parse a date string trying multiple formats */
 export function parseDate(dateStr: string): Date | null {
   let trimmed = dateStr.trim();
   if (!trimmed) return null;
+
+  // Detect Excel serial date numbers (integers like "44192" or decimals like "44192.5").
+  // The fractional part is a time component (0.5 = noon). Range 1–60000 covers
+  // Excel dates from Jan 1, 1900 through ~2064.
+  // Must check BEFORE new Date() because new Date("44192") parses as year 44192.
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const serial = parseFloat(trimmed);
+    if (serial >= 1 && serial <= 60000) {
+      return excelSerialToDate(serial);
+    }
+  }
 
   // Try ISO 8601 first (most common)
   const isoDate = new Date(trimmed);

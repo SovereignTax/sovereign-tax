@@ -1,6 +1,7 @@
 import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences } from "./models";
 import { AuditEntry } from "./audit";
 import { deriveEncryptionKey, encryptData, decryptData, generateSalt } from "./crypto";
+import { saveTextFile } from "./file-save";
 
 /**
  * Encrypted backup format (v2):
@@ -201,15 +202,12 @@ function validateBackupData(data: BackupData): void {
   }
 }
 
-/** Download backup as .sovereigntax file */
-export function downloadBackup(bundle: EncryptedBackupBundle): void {
+/** Save backup as .sovereigntax file via native save dialog */
+export async function downloadBackup(bundle: EncryptedBackupBundle): Promise<void> {
   const json = JSON.stringify(bundle);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
   const dateStr = new Date().toISOString().split("T")[0];
-  a.download = `sovereign-tax-backup-${dateStr}.sovereigntax`;
-  a.click();
-  URL.revokeObjectURL(url);
+  await saveTextFile(json, {
+    defaultPath: `sovereign-tax-backup-${dateStr}.sovereigntax`,
+    filters: [{ name: "Sovereign Tax Backup", extensions: ["sovereigntax"] }],
+  });
 }

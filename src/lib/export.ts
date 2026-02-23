@@ -25,7 +25,8 @@ function formatUSD(value: number): string {
 export function exportForm8949CSV(
   sales: SaleRecord[],
   year: number,
-  method: AccountingMethod
+  method: AccountingMethod,
+  walletMismatchCount?: number
 ): string {
   // Exclude donations — they are not capital gain/loss events (IRC §170)
   sales = sales.filter((s) => !s.isDonation);
@@ -36,6 +37,16 @@ export function exportForm8949CSV(
   lines.push(`Tax Year: ${year}`);
   lines.push(`Accounting Method: ${method} (${AccountingMethodDisplayNames[method]})`);
   lines.push(`Generated: ${formatDate(new Date().toISOString())}`);
+
+  // Wallet mismatch disclaimer — per-wallet tracking required by Treasury Reg. §1.1012-1(j)
+  if (walletMismatchCount && walletMismatchCount > 0) {
+    lines.push("");
+    lines.push(`WARNING: ${walletMismatchCount} sale(s) in this report used lots from a different wallet than where the sale occurred.`);
+    lines.push("Treasury Reg. §1.1012-1(j) (effective Jan 1 2025) requires per-wallet cost basis tracking.");
+    lines.push("These sales fell back to a global lot pool which may not satisfy IRS per-wallet requirements.");
+    lines.push("To fix: assign source wallets on your Transfer In transactions so lots are re-tagged to the correct wallet.");
+  }
+
   lines.push("");
 
   // Collect all lot details split by term across ALL sales (handles mixed-term sales)
@@ -120,11 +131,17 @@ export function exportForm8949CSV(
   lines.push(`Long-term (Part II),${formatCSVDecimal(ltProceeds)},${formatCSVDecimal(ltBasis)},${formatCSVDecimal(ltGainLoss)}`);
   lines.push(`NET TOTAL,${formatCSVDecimal(stProceeds + ltProceeds)},${formatCSVDecimal(stBasis + ltBasis)},${formatCSVDecimal(stGainLoss + ltGainLoss)}`);
 
+  // Repeat wallet mismatch disclaimer at end of document for visibility
+  if (walletMismatchCount && walletMismatchCount > 0) {
+    lines.push("");
+    lines.push(`WARNING: ${walletMismatchCount} sale(s) used lots from a different wallet (see header for details).`);
+  }
+
   return lines.join("\n");
 }
 
 /** Export legacy CSV */
-export function exportLegacyCSV(sales: SaleRecord[]): string {
+export function exportLegacyCSV(sales: SaleRecord[], walletMismatchCount?: number): string {
   // Exclude donations — they are not capital gain/loss events
   sales = sales.filter((s) => !s.isDonation);
   const lines = [
@@ -150,6 +167,14 @@ export function exportLegacyCSV(sales: SaleRecord[]): string {
         ].join(",")
       );
     }
+  }
+
+  // Wallet mismatch disclaimer
+  if (walletMismatchCount && walletMismatchCount > 0) {
+    lines.push("");
+    lines.push(`# WARNING: ${walletMismatchCount} sale(s) used lots from a different wallet than where the sale occurred.`);
+    lines.push("# Treasury Reg. §1.1012-1(j) requires per-wallet cost basis tracking (effective Jan 1 2025).");
+    lines.push("# To fix: assign source wallets on Transfer In transactions so lots are re-tagged to the correct wallet.");
   }
 
   return lines.join("\n");
@@ -185,7 +210,7 @@ export function exportIncomeCSV(transactions: Transaction[], year: number): stri
 }
 
 /** Export TurboTax TXF format */
-export function exportTurboTaxTXF(sales: SaleRecord[], year: number): string {
+export function exportTurboTaxTXF(sales: SaleRecord[], year: number, walletMismatchCount?: number): string {
   // Exclude donations — they are not capital gain/loss events
   sales = sales.filter((s) => !s.isDonation);
   const lines: string[] = [];
@@ -216,7 +241,7 @@ export function exportTurboTaxTXF(sales: SaleRecord[], year: number): string {
 }
 
 /** Export TurboTax CSV format */
-export function exportTurboTaxCSV(sales: SaleRecord[], year: number): string {
+export function exportTurboTaxCSV(sales: SaleRecord[], year: number, walletMismatchCount?: number): string {
   // Exclude donations — they are not capital gain/loss events
   sales = sales.filter((s) => !s.isDonation);
   const lines = [
@@ -230,6 +255,14 @@ export function exportTurboTaxCSV(sales: SaleRecord[], year: number): string {
         `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatCSVDecimal(detail.totalCost)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)}`
       );
     }
+  }
+
+  // Wallet mismatch disclaimer
+  if (walletMismatchCount && walletMismatchCount > 0) {
+    lines.push("");
+    lines.push(`# WARNING: ${walletMismatchCount} sale(s) used lots from a different wallet than where the sale occurred.`);
+    lines.push("# Treasury Reg. §1.1012-1(j) requires per-wallet cost basis tracking (effective Jan 1 2025).");
+    lines.push("# Assign source wallets on Transfer In transactions to fix.");
   }
 
   return lines.join("\n");

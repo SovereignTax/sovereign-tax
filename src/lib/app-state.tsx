@@ -36,8 +36,53 @@ export function isMaterialChange(
     (updates.pricePerBTC !== undefined && usdDiff(updates.pricePerBTC, original.pricePerBTC)) ||
     (updates.totalUSD !== undefined && usdDiff(updates.totalUSD, original.totalUSD)) ||
     (updates.wallet !== undefined && updates.wallet !== original.wallet) ||
+    ("sourceWallet" in updates && updates.sourceWallet !== original.sourceWallet) ||
     (updates.transactionType !== undefined && updates.transactionType !== original.transactionType)
   );
+}
+
+/**
+ * Pure function: given a TransferIn edit, determines which downstream Specific ID
+ * SaleRecords should be invalidated.
+ * Returns the IDs of stale SaleRecords that should be removed.
+ *
+ * Affected wallets = old source + new source + destination + new destination.
+ * Only invalidates Specific ID elections on sells/donations in affected wallets
+ * at or after the transfer date. Sells in unrelated wallets are untouched.
+ */
+export function findStaleDownstreamRecords(
+  original: Transaction,
+  updates: Partial<Omit<Transaction, "id">>,
+  allTransactions: Transaction[],
+  allSaleRecords: SaleRecord[]
+): string[] {
+  if (original.transactionType !== TransactionType.TransferIn) return [];
+  if (!isMaterialChange(original, updates)) return [];
+
+  const transferDate = new Date(updates.date || original.date).getTime();
+  const norm = (s?: string) => (s || "").trim().toLowerCase();
+  const affectedWallets = new Set<string>();
+  if (original.sourceWallet) affectedWallets.add(norm(original.sourceWallet));
+  if (updates.sourceWallet) affectedWallets.add(norm(updates.sourceWallet));
+  affectedWallets.add(norm(original.wallet || original.exchange));
+  if (updates.wallet) affectedWallets.add(norm(updates.wallet));
+  affectedWallets.delete(""); // Prevent empty-string from matching transactions with no wallet
+
+  const downstreamIds = new Set(
+    allTransactions
+      .filter((t) =>
+        (t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.Donation) &&
+        new Date(t.date).getTime() >= transferDate &&
+        affectedWallets.has(norm(t.wallet || t.exchange))
+      )
+      .map((t) => t.id)
+  );
+
+  return allSaleRecords
+    .filter(
+      (s) => s.sourceTransactionId && downstreamIds.has(s.sourceTransactionId) && s.method === "SpecificID"
+    )
+    .map((s) => s.id);
 }
 
 /** Session-only saved lot selections from Simulation → Record Sale / Add Transaction */
@@ -302,12 +347,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return [...transactions];
   }, [transactions]);
 
-  // Available years
+  // Available years — bounds-checked to filter out nonsense values (e.g., Excel serial dates
+  // that slipped through as year 44192). Bitcoin launched in 2009; cap at current year + 1.
   const availableYears = React.useMemo(() => {
+    const currentYear = new Date().getFullYear();
     const years = new Set<number>();
-    years.add(new Date().getFullYear());
+    years.add(currentYear);
     for (const t of allTransactions) {
-      years.add(new Date(t.date).getFullYear());
+      const y = new Date(t.date).getFullYear();
+      if (y >= 2009 && y <= currentYear + 1) {
+        years.add(y);
+      }
     }
     return Array.from(years).sort();
   }, [allTransactions]);
@@ -334,6 +384,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const addTransactions = useCallback(async (txns: Transaction[]) => {
     const next = [...transactionsRef.current, ...txns];
     setTransactions(next);
+    transactionsRef.current = next;
     await persistence.saveTransactions(next);
     await appendAuditLog(AuditAction.TransactionImport, `Imported ${txns.length} transactions`);
   }, [appendAuditLog]);
@@ -348,6 +399,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (unique.length > 0) {
         const next = [...prev, ...unique];
         setTransactions(next);
+        transactionsRef.current = next;
         await persistence.saveTransactions(next);
       }
       if (added > 0) {
@@ -370,6 +422,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const deleted = prev.find((t) => t.id === id);
     const next = prev.filter((t) => t.id !== id);
     setTransactions(next);
+    transactionsRef.current = next;
     await persistence.saveTransactions(next);
 
     // Cascade: remove any linked Specific ID SaleRecord to prevent orphaned entries.
@@ -395,6 +448,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return { ...t, ...updates };
     });
     setTransactions(next);
+    transactionsRef.current = next;
     await persistence.saveTransactions(next);
 
     // Invalidate linked Specific ID election only when material fields change.
@@ -415,6 +469,20 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // TransferIn sourceWallet changes invalidate downstream Specific ID elections,
+    // but ONLY for sells/donations in the affected wallets (old source, new source, destination).
+    if (original && original.transactionType === TransactionType.TransferIn) {
+      const staleIds = findStaleDownstreamRecords(original, updates, transactionsRef.current, recordedSalesRef.current);
+      if (staleIds.length > 0) {
+        const staleSet = new Set(staleIds);
+        const nextSales = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
+        setRecordedSales(nextSales);
+        recordedSalesRef.current = nextSales;
+        await persistence.saveRecordedSales(nextSales);
+        await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${staleIds.length} downstream Specific ID election(s) after TransferIn edit`);
+      }
+    }
+
     const updated = next.find((t) => t.id === id);
     if (updated) {
       await appendAuditLog(AuditAction.TransactionEdit, `Edited ${updated.transactionType} of ${updated.amountBTC.toFixed(8)} BTC from ${updated.exchange}`);
@@ -428,6 +496,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return { ...t, pricePerBTC: price, totalUSD };
     });
     setTransactions(next);
+    transactionsRef.current = next;
     await persistence.saveTransactions(next);
   }, []);
 
@@ -521,8 +590,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const clearAllData = useCallback(async () => {
     setTransactions([]);
+    transactionsRef.current = [];
     setRecordedSales([]);
+    recordedSalesRef.current = [];
     setImportHistory({});
+    importHistoryRef.current = {};
     setSavedLotSelections(null);
     persistence.clearAllData();
     await appendAuditLog(AuditAction.DataCleared, "All transaction data cleared");
@@ -551,6 +623,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       };
       const next = { ...importHistoryRef.current, [hash]: record };
       setImportHistory(next);
+      importHistoryRef.current = next;
       await persistence.saveImportHistory(next);
     },
     []
@@ -576,7 +649,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       data.preferences,
       password
     );
-    downloadBackup(bundle);
+    await downloadBackup(bundle);
     await appendAuditLog(AuditAction.BackupCreated, `Encrypted backup created with ${data.transactions.length} transactions`);
   }, [appendAuditLog]);
 
@@ -587,11 +660,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     // Restore all data
     await persistence.restoreAllData(result.data);
 
-    // Reload state
+    // Reload state — sync refs immediately so appendAuditLog reads from restored data
     setTransactions(result.data.transactions);
+    transactionsRef.current = result.data.transactions;
     setRecordedSales(result.data.recordedSales);
+    recordedSalesRef.current = result.data.recordedSales;
     setImportHistory(result.data.importHistory);
+    importHistoryRef.current = result.data.importHistory;
     setAuditLog(result.data.auditLog);
+    auditLogRef.current = result.data.auditLog;
     // Invalidate session-only state — restored dataset may have different lots
     setSavedLotSelections(null);
 

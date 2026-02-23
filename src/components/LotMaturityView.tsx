@@ -9,9 +9,8 @@ export function LotMaturityView() {
   const { allTransactions, setSelectedNav, recordedSales } = useAppState();
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
-  const now = new Date().toISOString();
-
   const lotsWithMaturity = useMemo(() => {
+    const now = new Date().toISOString();
     return result.lots
       .filter((l) => l.remainingBTC > 0)
       .map((lot) => {
@@ -26,7 +25,7 @@ export function LotMaturityView() {
         return { ...lot, daysHeld, daysUntilLongTerm, longTermDate, isLongTerm };
       })
       .sort((a, b) => a.daysUntilLongTerm - b.daysUntilLongTerm);
-  }, [result.lots, now]);
+  }, [result.lots]);
 
   const approaching30 = lotsWithMaturity.filter((l) => !l.isLongTerm && l.daysUntilLongTerm <= 30);
   const approaching90 = lotsWithMaturity.filter((l) => !l.isLongTerm && l.daysUntilLongTerm > 30 && l.daysUntilLongTerm <= 90);
@@ -100,7 +99,7 @@ export function LotMaturityView() {
           <div key={lot.id} className="grid grid-cols-7 gap-2 py-2 text-sm border-b border-gray-100 dark:border-gray-800">
             <div>{formatDate(lot.purchaseDate)}</div>
             <div className="text-right tabular-nums">{formatBTC(lot.remainingBTC)}</div>
-            <div className="text-right tabular-nums">{formatUSD(lot.pricePerBTC)}</div>
+            <div className="text-right tabular-nums">{formatUSD(lot.totalCost / lot.amountBTC)}</div>
             <div className="text-right tabular-nums">{lot.daysHeld}</div>
             <div>{lot.isLongTerm ? "—" : formatDate(lot.longTermDate)}</div>
             <div>{getBadge(lot.daysUntilLongTerm, lot.isLongTerm)}</div>

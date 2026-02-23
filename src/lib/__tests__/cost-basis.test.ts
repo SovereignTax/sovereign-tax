@@ -63,17 +63,20 @@ function transferOut(date: string, amount: number, opts?: { exchange?: string; w
   });
 }
 
-function transferIn(date: string, amount: number, opts?: { exchange?: string; wallet?: string }): ReturnType<typeof createTransaction> {
-  return createTransaction({
-    date: new Date(date + "T12:00:00").toISOString(),
-    transactionType: TransactionType.TransferIn,
-    amountBTC: amount,
-    pricePerBTC: 0,
-    totalUSD: 0,
-    exchange: opts?.exchange ?? "Ledger",
-    wallet: opts?.wallet ?? opts?.exchange ?? "Ledger",
-    notes: "",
-  });
+function transferIn(date: string, amount: number, opts?: { exchange?: string; wallet?: string; sourceWallet?: string }): ReturnType<typeof createTransaction> {
+  return {
+    ...createTransaction({
+      date: new Date(date + "T12:00:00").toISOString(),
+      transactionType: TransactionType.TransferIn,
+      amountBTC: amount,
+      pricePerBTC: 0,
+      totalUSD: 0,
+      exchange: opts?.exchange ?? "Ledger",
+      wallet: opts?.wallet ?? opts?.exchange ?? "Ledger",
+      notes: "",
+    }),
+    sourceWallet: opts?.sourceWallet,
+  };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -450,7 +453,7 @@ describe("Epsilon snap — no phantom lots", () => {
 // ═══════════════════════════════════════════════════════
 
 describe("Transfers — non-taxable", () => {
-  it("transfers do not create lots or sales", () => {
+  it("transfers without sourceWallet do not create lots or sales", () => {
     const txns = [
       buy("2024-01-01", 1.0, 40000),
       transferOut("2024-03-01", 0.5, { wallet: "Coinbase" }),
@@ -461,6 +464,151 @@ describe("Transfers — non-taxable", () => {
     expect(result.sales).toHaveLength(0);
     // The lot is untouched
     expect(result.lots[0].remainingBTC).toBeCloseTo(1.0, 8);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// TRANSFER-IN LOT RE-TAGGING (sourceWallet)
+// ═══════════════════════════════════════════════════════
+
+describe("TransferIn lot re-tagging", () => {
+  it("re-tags lots from sourceWallet to destination wallet", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    // The lot should now be tagged "River" instead of "Coinbase"
+    const lot = result.lots.find((l) => l.remainingBTC > 0);
+    expect(lot).toBeDefined();
+    expect(lot!.wallet).toBe("River");
+    // No sales, no warnings
+    expect(result.sales).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it("re-tagged lots are usable for sell from destination wallet", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-02-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+      sell("2024-06-01", 0.5, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    // Should sell from the re-tagged lot without wallet mismatch
+    expect(result.sales[0].amountSold).toBeCloseTo(0.5, 8);
+    expect(result.sales[0].costBasis).toBeCloseTo(20000, 2); // 0.5 * 40000
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("preserves cost basis and holding period through transfer", () => {
+    const txns = [
+      buy("2023-01-01", 1.0, 30000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+      sell("2024-06-01", 1.0, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    // Cost basis carries over from original buy
+    expect(result.sales[0].costBasis).toBeCloseTo(30000, 2);
+    // Holding period should be from Jan 2023 to Jun 2024 (long-term)
+    expect(result.sales[0].isLongTerm).toBe(true);
+  });
+
+  it("partial transfer splits lot and re-tags only the transferred portion", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 0.6, { wallet: "River", sourceWallet: "Coinbase" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    // Should have 2 lots now: 0.4 at Coinbase, 0.6 at River
+    const coinbaseLots = result.lots.filter(
+      (l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "coinbase"
+    );
+    const riverLots = result.lots.filter(
+      (l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "river"
+    );
+    expect(coinbaseLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.4, 8);
+    expect(riverLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.6, 8);
+    // Cost basis carries over proportionally
+    const riverLot = riverLots[0];
+    expect(riverLot.totalCost).toBeCloseTo(0.6 * 40000, 2);
+  });
+
+  it("FIFO order: re-tags oldest lots first", () => {
+    const txns = [
+      buy("2024-01-01", 0.5, 30000, { wallet: "Coinbase" }),
+      buy("2024-02-01", 0.5, 50000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 0.5, { wallet: "River", sourceWallet: "Coinbase" }),
+      sell("2024-06-01", 0.5, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    // Should have transferred the Jan lot (older, $30k), not the Feb lot ($50k)
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 2); // 0.5 * 30000
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("multiple transfers chain correctly", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-02-01", 1.0, { wallet: "ColdStorage", sourceWallet: "Coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "ColdStorage" }),
+      sell("2024-06-01", 1.0, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(40000, 2);
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("warns when sourceWallet has insufficient lots", () => {
+    const txns = [
+      buy("2024-01-01", 0.5, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    // Should re-tag what's available (0.5) and warn about the missing 0.5
+    expect(result.warnings.some((w) => w.includes("Could not find"))).toBe(true);
+    const riverLots = result.lots.filter(
+      (l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "river"
+    );
+    expect(riverLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.5, 8);
+  });
+
+  it("case-insensitive wallet matching for sourceWallet", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+      sell("2024-06-01", 1.0, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("without sourceWallet, TransferIn does nothing (backward compat)", () => {
+    const txns = [
+      buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2024-03-01", 1.0, { wallet: "River" }), // no sourceWallet
+      sell("2024-06-01", 0.5, 60000, { wallet: "River" }),
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    // No lots at River, should fall back to global pool with mismatch warning
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].walletMismatch).toBe(true);
+  });
+
+  it("re-tagging works with batchOptimizeSpecificId", () => {
+    const txns = [
+      buy("2025-01-01", 1.0, 40000, { wallet: "Coinbase" }),
+      transferIn("2025-02-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+      sell("2025-06-01", 0.5, 60000, { wallet: "River" }),
+    ];
+    const result = batchOptimizeSpecificId(txns, [], 2025);
+    expect(result.records).toHaveLength(1);
+    // Should not have wallet mismatches since lots are properly re-tagged
+    expect(result.walletMismatches).toHaveLength(0);
   });
 });
 

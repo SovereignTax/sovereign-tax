@@ -22,13 +22,14 @@ function formatUSD(value: number): string {
 
 /**
  * Generate a Form 8949 PDF report using jsPDF + autoTable.
- * Downloads the PDF immediately.
+ * Returns the PDF as a Uint8Array for saving via Tauri dialog.
  */
 export function exportForm8949PDF(
   sales: SaleRecord[],
   year: number,
-  method: AccountingMethod
-): void {
+  method: AccountingMethod,
+  walletMismatchCount?: number
+): Uint8Array {
   // Exclude donations — they are not capital gain/loss events (IRC §170)
   sales = sales.filter((s) => !s.isDonation);
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
@@ -47,6 +48,34 @@ export function exportForm8949PDF(
   doc.text("Sovereign Tax", pageWidth - 14, 15, { align: "right" });
 
   let yPos = 40;
+
+  // --- Wallet mismatch disclaimer ---
+  if (walletMismatchCount && walletMismatchCount > 0) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(180, 100, 0);
+    doc.text(
+      `WARNING: ${walletMismatchCount} sale(s) used lots from a different wallet than where the sale occurred.`,
+      14,
+      yPos
+    );
+    yPos += 4;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(
+      "Treasury Reg. \u00A71.1012-1(j) (effective Jan 1, 2025) requires per-wallet cost basis. These sales used a global lot pool fallback.",
+      14,
+      yPos
+    );
+    yPos += 4;
+    doc.text(
+      "To fix: assign source wallets on Transfer In transactions so lots are re-tagged to the correct wallet before exporting.",
+      14,
+      yPos
+    );
+    doc.setTextColor(0, 0, 0);
+    yPos += 8;
+  }
 
   // Build detail rows at the lot-detail level across ALL sales (handles mixed-term correctly)
   const stRows = buildDetailRows(sales, false);
@@ -174,8 +203,8 @@ export function exportForm8949PDF(
   // Reset text color
   doc.setTextColor(0, 0, 0);
 
-  // Download
-  doc.save(`form_8949_${year}_${method}.pdf`);
+  // Return as binary for Tauri file save
+  return new Uint8Array(doc.output("arraybuffer"));
 }
 
 /** Build detail rows from ALL sales, filtering lot details by term */

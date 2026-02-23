@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { AuditAction, AuditActionDisplayNames } from "../lib/audit";
 import { exportAuditLogCSV } from "../lib/export";
 import { formatDateTime } from "../lib/utils";
+import { saveTextFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
 
 export function AuditLogView() {
@@ -18,15 +19,12 @@ export function AuditLogView() {
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  const downloadCSV = () => {
+  const downloadCSV = async () => {
     const content = exportAuditLogCSV(sorted);
-    const blob = new Blob([content], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "audit_log.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    await saveTextFile(content, {
+      defaultPath: "audit_log.csv",
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
   };
 
   return (

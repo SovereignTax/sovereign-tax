@@ -7,6 +7,7 @@ import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod, TransactionType } from "../lib/types";
 import { SaleRecord } from "../lib/models";
 import { computeCarryforward } from "../lib/carryforward";
+import { saveTextFile, saveBinaryFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
 
 export function TaxReportView() {
@@ -14,6 +15,13 @@ export function TaxReportView() {
   const { allTransactions, recordedSales, selectedYear, setSelectedYear, availableYears } = state;
 
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
+
+  // Count unassigned TransferIn transactions (no sourceWallet)
+  const unassignedTransferCount = useMemo(() => {
+    return allTransactions.filter(
+      (t) => t.transactionType === TransactionType.TransferIn && !t.sourceWallet
+    ).length;
+  }, [allTransactions]);
 
   // Count wallet mismatches for the selected year
   const walletMismatchCount = useMemo(() => {
@@ -135,15 +143,13 @@ export function TaxReportView() {
     return () => clearTimeout(timer);
   }, [exportToast]);
 
-  const downloadCSV = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExportToast(filename);
+  const downloadCSV = async (content: string, filename: string) => {
+    const ext = filename.endsWith(".txf") ? "txf" : "csv";
+    const saved = await saveTextFile(content, {
+      defaultPath: filename,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    });
+    if (saved) setExportToast(filename);
   };
 
   return (
@@ -181,14 +187,37 @@ export function TaxReportView() {
               </h3>
               <p className="text-xs text-yellow-700 dark:text-yellow-400/80 mb-2">
                 {walletMismatchCount === 1 ? "A sale" : "Some sales"} in {selectedYear} used lots from a different wallet than where the sale occurred.
-                As of January 1, 2025, IRS regulations require cost basis to be tracked per wallet or account
-                (Treasury Reg. §1.1012-1(j)). This typically happens when Bitcoin was transferred between wallets
-                but the transfer wasn't recorded in the app.
+                This happens when Bitcoin was bought on one exchange, transferred to another wallet, and then sold — but the transfer hasn't been linked yet.
+                Until fixed, the affected sales are using lots from all wallets, which may not comply with IRS per-wallet rules (Treasury Reg. §1.1012-1(j), effective Jan 1, 2025).
               </p>
               <p className="text-xs text-yellow-700 dark:text-yellow-400/80">
-                <strong>To fix:</strong> Go to <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("reconciliation")}>Reconciliation</button> to
-                match your transfers, or manually add transfer records so your lots are tracked at the correct wallet.
-                Until resolved, the affected sales are using lots from all available wallets, which may not be IRS-compliant.
+                <strong>How to fix:</strong> Go to{" "}
+                <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("transactions")}>Transactions</button>,
+                find your Transfer In transactions (highlighted in red if unassigned), and click <strong>"Assign"</strong> to set which wallet the Bitcoin came from.
+                This re-tags your lots to the correct wallet so the cost basis matches where the sale happened.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unassigned Transfer Warning */}
+      {unassignedTransferCount > 0 && (
+        <div className="card mb-6 border-l-4 border-l-red-500 bg-red-50 dark:bg-red-900/10">
+          <div className="flex items-start gap-3">
+            <span className="text-red-500 text-lg mt-0.5">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-sm text-red-700 dark:text-red-400 mb-1">
+                {unassignedTransferCount} Transfer In{unassignedTransferCount === 1 ? "" : "s"} without source wallet
+              </h3>
+              <p className="text-xs text-red-700 dark:text-red-400/80">
+                Some Transfer In transactions have not been assigned a source wallet. Without this,
+                the engine cannot re-tag lots to the correct wallet, which may cause wallet mismatch warnings
+                and non-compliant cost basis under IRS per-wallet rules (Treasury Reg. §1.1012-1(j)).
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-400/80 mt-1">
+                <strong>To fix:</strong> Go to <button className="underline font-medium hover:text-red-900 dark:hover:text-red-300" onClick={() => state.setSelectedNav("transactions")}>Transactions</button> and
+                click "Assign" on the highlighted Transfer In rows.
               </p>
             </div>
           </div>
@@ -357,19 +386,19 @@ export function TaxReportView() {
           <div className="card mb-6">
             <h3 className="font-semibold mb-3">Export Tax Documents</h3>
             <div className="flex gap-3 flex-wrap">
-              <button className="btn-secondary" onClick={() => downloadCSV(exportForm8949CSV(salesForYear, selectedYear, effectiveMethod), `form_8949_${selectedYear}.csv`)}>
+              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportForm8949CSV(salesForYear, selectedYear, effectiveMethod, walletMismatchCount), `form_8949_${selectedYear}.csv`); }}>
                 📊 Form 8949 CSV
               </button>
-              <button className="btn-secondary" onClick={() => downloadCSV(exportLegacyCSV(salesForYear), `btc_tax_${selectedYear}.csv`)}>
+              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportLegacyCSV(salesForYear, walletMismatchCount), `btc_tax_${selectedYear}.csv`); }}>
                 📋 Raw Data CSV
               </button>
-              <button className="btn-secondary" onClick={() => downloadCSV(exportTurboTaxCSV(salesForYear, selectedYear), `turbotax_${selectedYear}.csv`)}>
+              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportTurboTaxCSV(salesForYear, selectedYear, walletMismatchCount), `turbotax_${selectedYear}.csv`); }}>
                 💼 TurboTax CSV
               </button>
-              <button className="btn-secondary" onClick={() => downloadCSV(exportTurboTaxTXF(salesForYear, selectedYear), `turbotax_${selectedYear}.txf`)}>
+              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportTurboTaxTXF(salesForYear, selectedYear, walletMismatchCount), `turbotax_${selectedYear}.txf`); }}>
                 📑 TurboTax TXF
               </button>
-              <button className="btn-secondary" onClick={() => { exportForm8949PDF(salesForYear, selectedYear, effectiveMethod); setExportToast(`form_8949_${selectedYear}.pdf`); }}>
+              <button className="btn-secondary" onClick={async () => { const pdf = exportForm8949PDF(salesForYear, selectedYear, effectiveMethod, walletMismatchCount); const saved = await saveBinaryFile(pdf, { defaultPath: `form_8949_${selectedYear}_${effectiveMethod}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] }); if (saved) setExportToast(`form_8949_${selectedYear}.pdf`); }}>
                 📄 PDF Report
               </button>
             </div>
@@ -384,7 +413,8 @@ export function TaxReportView() {
             </p>
             {walletMismatchCount > 0 && (
               <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-medium">
-                ⚠️ {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in this report used lots from a different wallet. Review the wallet mismatch warning above before filing.
+                ⚠️ {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in this report used lots from a different wallet.
+                Go to Transactions and assign source wallets on your Transfer In records to fix this before exporting.
               </p>
             )}
           </div>
@@ -410,7 +440,7 @@ export function TaxReportView() {
                     {sale.gainLoss >= 0 ? "+" : ""}{formatUSD(sale.gainLoss)}
                   </span>
                   {sale.walletMismatch && (
-                    <span className="text-yellow-500 text-xs" title="Wallet mismatch: This sale used lots from a different wallet. Record your transfers in Reconciliation so lots are tracked at the correct location.">⚠️</span>
+                    <span className="text-yellow-500 text-xs" title="Wallet mismatch: This sale used lots from a different wallet. To fix, assign a source wallet on the Transfer In that moved Bitcoin to this wallet.">⚠️</span>
                   )}
                   {sale.isDonation ? (
                     <span className="badge" style={{ background: "rgba(168,85,247,0.15)", color: "#a855f7" }}>Donation</span>
@@ -450,6 +480,14 @@ export function TaxReportView() {
               IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
             </div>
 
+            <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
+              <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale. Applying Specific ID to transactions that were already completed without a contemporaneous lot identification may not satisfy IRS requirements.
+              {selectedYear >= 2025
+                ? <span className="block mt-1"><strong>What to do:</strong> For {selectedYear} transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
+                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO for pre-2025 sales or consulting a tax professional.</span>
+              }
+            </div>
+
             <div className="space-y-3 mb-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Transactions to optimize:</span>
@@ -487,9 +525,9 @@ export function TaxReportView() {
 
             {batchOptimizeResult.walletMismatches > 0 && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
-                ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet.
-                IRS requires per-wallet cost basis (Treasury Reg. §1.1012-1(j)).
-                Record your transfers in Reconciliation so lots are tracked at the correct wallet.
+                ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet because no lots were found in the selling wallet.
+                This usually means a transfer between wallets hasn't been recorded yet.
+                You can still apply these optimizations, but consider assigning source wallets on your Transfer In transactions first for full IRS compliance.
               </div>
             )}
 

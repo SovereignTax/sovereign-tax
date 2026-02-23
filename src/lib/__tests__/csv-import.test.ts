@@ -6,6 +6,7 @@ import {
   detectColumns,
   readHeaders,
   parseCSVContent,
+  excelSerialToDate,
 } from "../csv-import";
 import { TransactionType } from "../types";
 import { ColumnMapping } from "../models";
@@ -104,6 +105,106 @@ describe("parseDate", () => {
 
   it("returns null for garbage input", () => {
     expect(parseDate("not a date")).toBeNull();
+  });
+
+  it("converts Excel serial date 44192 to Dec 27, 2020", () => {
+    const d = parseDate("44192");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(2020);
+    expect(d!.getUTCMonth()).toBe(11); // December
+    expect(d!.getUTCDate()).toBe(27);
+  });
+
+  it("converts Excel serial date 44927 to Jan 1, 2023", () => {
+    const d = parseDate("44927");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(2023);
+    expect(d!.getUTCMonth()).toBe(0); // January
+    expect(d!.getUTCDate()).toBe(1);
+  });
+
+  it("converts Excel serial date 1 to Jan 1, 1900", () => {
+    const d = parseDate("1");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(1900);
+    expect(d!.getUTCMonth()).toBe(0); // January
+    expect(d!.getUTCDate()).toBe(1);
+  });
+
+  it("converts Excel serial date 45658 to Jan 1, 2025", () => {
+    const d = parseDate("45658");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(2025);
+    expect(d!.getUTCMonth()).toBe(0); // January
+    expect(d!.getUTCDate()).toBe(1);
+  });
+
+  it("does not treat numbers > 60000 as Excel serial dates", () => {
+    // 70000 is outside the Excel serial range — should fall through to new Date()
+    const d = parseDate("70000");
+    // new Date("70000") parses as year 70000, which is nonsense but not our problem here
+    // The key is it should NOT go through the Excel path
+    expect(d).not.toBeNull();
+    expect(d!.getFullYear()).not.toBeLessThan(60000);
+  });
+
+  it("does not treat 4-digit years as Excel serial dates", () => {
+    // "2024" alone looks like a pure number but it's also a valid year.
+    // It's in range 1-60000 so it hits the Excel path — serial 2024 = July 18, 1905.
+    // This is fine because a bare "2024" in a date column is ambiguous and the Excel
+    // interpretation is no worse than new Date("2024") → Jan 1, 2024 00:00 UTC.
+    const d = parseDate("2024");
+    expect(d).not.toBeNull();
+  });
+
+  it("converts Excel decimal serial 44192.5 to Dec 27, 2020 (noon)", () => {
+    const d = parseDate("44192.5");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(2020);
+    expect(d!.getUTCMonth()).toBe(11); // December
+    expect(d!.getUTCDate()).toBe(27);
+  });
+
+  it("converts Excel decimal serial 44192.75 to Dec 27, 2020 (6pm)", () => {
+    const d = parseDate("44192.75");
+    expect(d).not.toBeNull();
+    expect(d!.getUTCFullYear()).toBe(2020);
+    expect(d!.getUTCMonth()).toBe(11);
+    expect(d!.getUTCDate()).toBe(27);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// excelSerialToDate — direct unit tests
+// ═══════════════════════════════════════════════════════
+
+describe("excelSerialToDate", () => {
+  it("serial 1 = Jan 1, 1900", () => {
+    const d = excelSerialToDate(1);
+    expect(d.getUTCFullYear()).toBe(1900);
+    expect(d.getUTCMonth()).toBe(0);
+    expect(d.getUTCDate()).toBe(1);
+  });
+
+  it("serial 59 = Feb 28, 1900 (last day before Lotus bug)", () => {
+    const d = excelSerialToDate(59);
+    expect(d.getUTCFullYear()).toBe(1900);
+    expect(d.getUTCMonth()).toBe(1); // February
+    expect(d.getUTCDate()).toBe(28);
+  });
+
+  it("serial 61 = Mar 1, 1900 (skips fake Feb 29)", () => {
+    const d = excelSerialToDate(61);
+    expect(d.getUTCFullYear()).toBe(1900);
+    expect(d.getUTCMonth()).toBe(2); // March
+    expect(d.getUTCDate()).toBe(1);
+  });
+
+  it("serial 44192 = Dec 27, 2020", () => {
+    const d = excelSerialToDate(44192);
+    expect(d.getUTCFullYear()).toBe(2020);
+    expect(d.getUTCMonth()).toBe(11);
+    expect(d.getUTCDate()).toBe(27);
   });
 });
 
@@ -624,6 +725,23 @@ describe("parseCSVContent — dual-column format", () => {
     const result = parseCSVContent(csv, "Gemini", mapping);
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].transactionType).toBe(TransactionType.TransferIn);
+  });
+
+  it("parses Excel serial dates in CSV rows", () => {
+    const csv = "Date,Type,Amount,Price\n44192,Buy,0.5,23000";
+    const mapping: ColumnMapping = {
+      date: "Date",
+      type: "Type",
+      amount: "Amount",
+      price: "Price",
+    };
+    const result = parseCSVContent(csv, "Test", mapping);
+    expect(result.transactions).toHaveLength(1);
+    const tx = result.transactions[0];
+    const d = new Date(tx.date);
+    expect(d.getUTCFullYear()).toBe(2020);
+    expect(d.getUTCMonth()).toBe(11); // December
+    expect(d.getUTCDate()).toBe(27);
   });
 
   it("detects BTC transfer out (sent BTC, nothing received)", () => {

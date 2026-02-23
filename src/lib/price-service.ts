@@ -1,5 +1,5 @@
 import { loadPriceCache, savePriceCache } from "./persistence";
-import { fetch } from "@tauri-apps/plugin-http";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 const API_URL =
   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd";
@@ -23,14 +23,29 @@ export interface PriceData {
   error: string | null;
 }
 
+/**
+ * Fetch wrapper: tries Tauri HTTP plugin first, falls back to browser fetch.
+ * On Linux, the Tauri HTTP plugin can fail if system TLS libraries are missing.
+ */
+async function robustFetch(url: string): Promise<Response> {
+  try {
+    return await tauriFetch(url);
+  } catch (tauriErr) {
+    console.warn("[price-service] Tauri HTTP plugin failed, falling back to browser fetch:", tauriErr);
+    // Fallback to browser's native fetch (works if CSP connect-src allows the domain)
+    return await window.fetch(url);
+  }
+}
+
 export async function fetchBTCPrice(): Promise<{
   price: number;
   timestamp: Date;
 }> {
-  const response = await fetch(API_URL);
-  if (!response.ok) throw new Error("API request failed");
+  const response = await robustFetch(API_URL);
+  if (!response.ok) throw new Error(`API request failed: ${response.status} ${response.statusText}`);
 
   const data: CoinGeckoResponse = await response.json();
+  if (!data?.bitcoin?.usd) throw new Error("Invalid API response — no price data");
   return {
     price: data.bitcoin.usd,
     timestamp: new Date(),
@@ -69,7 +84,7 @@ export async function fetchHistoricalPrice(date: Date): Promise<number | null> {
   const url = `https://api.coingecko.com/api/v3/coins/bitcoin/history?date=${dd}-${mm}-${yyyy}&localization=false`;
 
   try {
-    const response = await fetch(url);
+    const response = await robustFetch(url);
     if (!response.ok) return null;
 
     const data: CoinGeckoHistoryResponse = await response.json();
@@ -81,7 +96,8 @@ export async function fetchHistoricalPrice(date: Date): Promise<number | null> {
     savePriceCache(cache);
 
     return price;
-  } catch {
+  } catch (err) {
+    console.warn("[price-service] Historical price fetch failed:", err);
     return null;
   }
 }

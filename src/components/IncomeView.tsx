@@ -3,6 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { TransactionType, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
 import { exportIncomeCSV } from "../lib/export";
+import { saveTextFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
 
 export function IncomeView() {
@@ -27,14 +28,11 @@ export function IncomeView() {
   const totalIncome = incomeTransactions.reduce((a, t) => a + t.totalUSD, 0);
   const totalBTC = incomeTransactions.reduce((a, t) => a + t.amountBTC, 0);
 
-  const downloadCSV = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+  const downloadCSV = async (content: string, filename: string) => {
+    await saveTextFile(content, {
+      defaultPath: filename,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
   };
 
   return (
