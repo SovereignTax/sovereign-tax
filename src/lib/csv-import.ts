@@ -476,16 +476,10 @@ function parseDualColumnTransaction(
   if (amountBTC <= 0) throw new Error("BTC amount is zero");
 
   const notes = mapping.notes && row[mapping.notes] ? row[mapping.notes].slice(0, 100) : "";
-  let finalExchange = exchange;
-  if (mapping.exchange && row[mapping.exchange]?.trim()) {
-    finalExchange = row[mapping.exchange];
-  }
 
-  // Wallet
-  let wallet: string | undefined;
-  if (mapping.wallet && row[mapping.wallet]?.trim()) {
-    wallet = row[mapping.wallet].trim();
-  }
+  // The user-entered exchange name always wins — it's the canonical wallet/exchange
+  // name for IRS per-wallet cost basis tracking. CSV column values are ignored.
+  const finalExchange = exchange;
 
   // Income classification
   const typeStr = mapping.type && row[mapping.type]?.trim() ? row[mapping.type].trim() : "";
@@ -499,7 +493,7 @@ function parseDualColumnTransaction(
     totalUSD,
     fee: fee > 0 ? fee : undefined,
     exchange: finalExchange,
-    wallet: wallet || finalExchange,
+    wallet: finalExchange,
     incomeType: incomeType || undefined,
     notes,
   });
@@ -566,16 +560,10 @@ function parseStandardTransaction(
   }
 
   const notes = mapping.notes && row[mapping.notes] ? row[mapping.notes].slice(0, 100) : "";
-  let finalExchange = exchange;
-  if (mapping.exchange && row[mapping.exchange]?.trim()) {
-    finalExchange = row[mapping.exchange];
-  }
 
-  // Wallet
-  let wallet: string | undefined;
-  if (mapping.wallet && row[mapping.wallet]?.trim()) {
-    wallet = row[mapping.wallet].trim();
-  }
+  // The user-entered exchange name always wins — it's the canonical wallet/exchange
+  // name for IRS per-wallet cost basis tracking. CSV column values are ignored.
+  const finalExchange = exchange;
 
   // Income classification
   const typeStr = mapping.type && row[mapping.type]?.trim() ? row[mapping.type].trim() : "";
@@ -589,7 +577,7 @@ function parseStandardTransaction(
     totalUSD: total,
     fee: fee > 0 ? fee : undefined,
     exchange: finalExchange,
-    wallet: wallet || finalExchange,
+    wallet: finalExchange,
     incomeType: incomeType || undefined,
     notes,
   });

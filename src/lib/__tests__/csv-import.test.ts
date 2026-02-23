@@ -515,7 +515,7 @@ describe("parseCSVContent", () => {
     expect(result.skippedRows[0].reason).toContain("Status");
   });
 
-  it("uses exchange from CSV over provided exchange name", () => {
+  it("user-entered exchange name overrides CSV exchange column", () => {
     const csv =
       "Date,Type,Amount,Price,Exchange\n2024-01-15,Buy,1.0,40000,Kraken";
     const mapping: ColumnMapping = {
@@ -526,10 +526,12 @@ describe("parseCSVContent", () => {
       exchange: "Exchange",
     };
     const result = parseCSVContent(csv, "DefaultExchange", mapping);
-    expect(result.transactions[0].exchange).toBe("Kraken");
+    // The user-entered name always wins for IRS per-wallet tracking
+    expect(result.transactions[0].exchange).toBe("DefaultExchange");
+    expect(result.transactions[0].wallet).toBe("DefaultExchange");
   });
 
-  it("falls back to provided exchange name when CSV column empty", () => {
+  it("user-entered exchange name used when CSV exchange column empty", () => {
     const csv = 'Date,Type,Amount,Price,Exchange\n2024-01-15,Buy,1.0,40000,""';
     const mapping: ColumnMapping = {
       date: "Date",
@@ -542,7 +544,7 @@ describe("parseCSVContent", () => {
     expect(result.transactions[0].exchange).toBe("Coinbase");
   });
 
-  it("parses wallet from CSV", () => {
+  it("user-entered exchange name overrides CSV wallet column", () => {
     const csv =
       "Date,Type,Amount,Price,Wallet\n2024-01-15,Buy,1.0,40000,My Ledger";
     const mapping: ColumnMapping = {
@@ -553,7 +555,9 @@ describe("parseCSVContent", () => {
       wallet: "Wallet",
     };
     const result = parseCSVContent(csv, "Coinbase", mapping);
-    expect(result.transactions[0].wallet).toBe("My Ledger");
+    // The user-entered name always wins — CSV wallet column is ignored
+    expect(result.transactions[0].wallet).toBe("Coinbase");
+    expect(result.transactions[0].exchange).toBe("Coinbase");
   });
 
   it("parses notes from CSV (truncated to 100 chars)", () => {

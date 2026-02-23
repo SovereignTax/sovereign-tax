@@ -23,6 +23,8 @@ export function TransactionsView() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [assigningSourceWallet, setAssigningSourceWallet] = useState<string | null>(null); // txn.id being assigned
+  const [showClearAssignments, setShowClearAssignments] = useState(false);
+  const [clearingAssignments, setClearingAssignments] = useState(false);
 
   // Shared resolver: maps each disposition transaction to its recorded Specific ID SaleRecord.
   // Uses the same function as the engine — guarantees UI badges and engine use identical matching.
@@ -46,11 +48,23 @@ export function TransactionsView() {
     }
     return ids;
   }, [calcResult.sales]);
-  const walletMismatchCount = useMemo(() => {
+  // Compute BTC balance per wallet from current lots (for source wallet assignment UI)
+  const walletBalances = useMemo(() => {
+    const balances = new Map<string, number>();
+    for (const lot of calcResult.lots) {
+      if (lot.remainingBTC <= 0) continue;
+      const w = lot.wallet || lot.exchange;
+      if (w) balances.set(w, (balances.get(w) || 0) + lot.remainingBTC);
+    }
+    return balances;
+  }, [calcResult.lots]);
+
+  const walletMismatchSales = useMemo(() => {
     return calcResult.sales.filter(
       (s) => s.walletMismatch && new Date(s.saleDate).getFullYear() === state.selectedYear
-    ).length;
+    );
   }, [calcResult.sales, state.selectedYear]);
+  const walletMismatchCount = walletMismatchSales.length;
 
   // Count unassigned sells/donations in the selected year for the batch optimize button
   const unassignedCount = useMemo(() => {
@@ -186,6 +200,25 @@ export function TransactionsView() {
     setShowClearConfirm(false);
   }, [transactions, recordedByTxnId, state.selectedYear, state.deleteSaleRecordsByIds]);
 
+  // Count Transfer In transactions with source wallet assigned (for clear assignments button)
+  const assignedTransferCount = useMemo(() => {
+    return transactions.filter(
+      (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
+    ).length;
+  }, [transactions]);
+
+  const handleClearAssignments = useCallback(async () => {
+    setClearingAssignments(true);
+    const transferIns = transactions.filter(
+      (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
+    );
+    for (const t of transferIns) {
+      await state.updateTransaction(t.id, { sourceWallet: undefined });
+    }
+    setClearingAssignments(false);
+    setShowClearAssignments(false);
+  }, [transactions, state.updateTransaction]);
+
   if (transactions.length === 0) {
     return (
       <div className="p-8 flex flex-col items-center justify-center h-full">
@@ -211,14 +244,33 @@ export function TransactionsView() {
             <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">
               Wallet Mismatch — {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in {state.selectedYear} used lots from a different wallet.
             </span>
-            <p className="text-xs text-yellow-700 dark:text-yellow-400/80 mt-1">
-              IRS requires each wallet to have its own cost basis ledger (Treasury Reg. §1.1012-1(j), effective Jan 1, 2025).
-              When you sell from one wallet but your lots are still tagged to another, the cost basis calculation may not be IRS-compliant.
-            </p>
-            <p className="text-xs text-yellow-700 dark:text-yellow-400/80 mt-1">
-              <strong>How to fix:</strong> If you transferred Bitcoin between wallets before selling, make sure you have both a Transfer Out and Transfer In recorded.
-              Then click the <strong>"Assign"</strong> button on each Transfer In row (highlighted in red below) and select which wallet the Bitcoin came from.
-              This re-tags your lots to the correct wallet so the engine can match them properly.
+            <div className="mt-2 mb-2 space-y-1">
+              {walletMismatchSales.map((sale) => {
+                // Find the originating transaction: try sourceTransactionId first, fall back to date+amount match
+                let txn = sale.sourceTransactionId ? transactions.find((t) => t.id === sale.sourceTransactionId) : undefined;
+                if (!txn) {
+                  txn = transactions.find((t) =>
+                    (t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.Donation) &&
+                    Math.abs(t.amountBTC - sale.amountSold) < 1e-8 &&
+                    new Date(t.date).toDateString() === new Date(sale.saleDate).toDateString()
+                  );
+                }
+                const wallet = txn ? (txn.wallet || txn.exchange || "untagged") : "untagged";
+                return (
+                  <div key={sale.id} className="flex items-center gap-2 text-xs bg-yellow-100 dark:bg-yellow-900/30 rounded px-2 py-1">
+                    <span className="text-yellow-600 dark:text-yellow-400">⚠️</span>
+                    <span className="text-yellow-800 dark:text-yellow-300 font-medium">
+                      {new Date(sale.saleDate).toLocaleDateString()} — Sold {formatBTC(sale.amountSold)} BTC on "{wallet}"
+                    </span>
+                    <span className="text-yellow-600 dark:text-yellow-400">— no lots found in this wallet</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-yellow-700 dark:text-yellow-400/80">
+              <strong>Common causes:</strong> (1) A Transfer In needs a source wallet assigned — click <strong>"Assign"</strong> on Transfer In rows to re-tag lots to the selling wallet.
+              (2) The Bitcoin was purchased elsewhere and needs a Transfer In to move lots to the selling wallet.
+              (3) Not enough lots exist in the source wallet to cover the full transfer amount.
             </p>
           </div>
         </div>
@@ -270,10 +322,10 @@ export function TransactionsView() {
             onClick={handleBatchOptimize}
             title={`Auto-assign optimal Specific ID lots for ${unassignedCount} unassigned sells/donations in ${state.selectedYear}`}
           >
-            Optimize All ({unassignedCount})
+            Optimize Sells ({unassignedCount})
           </button>
         ) : (
-          <span className="text-xs px-3 py-1 btn-secondary opacity-50 cursor-default">All Optimized</span>
+          <span className="text-xs px-3 py-1 btn-secondary opacity-50 cursor-default" title="All sells and donations in this year already have Specific ID lot elections assigned. Use Revert to FIFO to remove them.">All Optimized</span>
         )}
         {assignedCount > 0 && (
           <button
@@ -282,6 +334,15 @@ export function TransactionsView() {
             title={`Remove all ${assignedCount} Specific ID elections for ${state.selectedYear}`}
           >
             Revert to FIFO
+          </button>
+        )}
+        {assignedTransferCount > 0 && (
+          <button
+            className="text-xs px-3 py-1 btn-secondary text-orange-500 hover:text-orange-600"
+            onClick={() => setShowClearAssignments(true)}
+            title={`Clear all ${assignedTransferCount} source wallet assignments — lots will return to their original purchase wallets and you may see wallet mismatch warnings until you re-assign`}
+          >
+            Clear Assignments ({assignedTransferCount})
           </button>
         )}
       </div>
@@ -305,8 +366,14 @@ export function TransactionsView() {
           {/* Table Body */}
           {filtered.map((t, i) => {
             const isUnassignedTransfer = t.transactionType === TransactionType.TransferIn && !t.sourceWallet;
+            const isWalletMismatch = walletMismatchIds.has(t.id);
+            const rowHighlight = isUnassignedTransfer
+              ? "bg-red-50 dark:bg-red-900/10 border-l-2 border-l-red-400"
+              : isWalletMismatch
+                ? "bg-yellow-50 dark:bg-yellow-900/10 border-l-2 border-l-yellow-400"
+                : i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30";
             return (
-            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center ${isUnassignedTransfer ? "bg-red-50 dark:bg-red-900/10 border-l-2 border-l-red-400" : i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30"}`} style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }}>
+            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center ${rowHighlight}`} style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }}>
               <div className="tabular-nums">{formatDateTime(t.date)}</div>
               <div className={typeColor(t.transactionType)}>
                 {typeIcon(t.transactionType)} {TransactionTypeDisplayNames[t.transactionType]}
@@ -429,7 +496,7 @@ export function TransactionsView() {
       {batchOptimizeResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchOptimizeResult(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Optimize All — {state.selectedYear}</h3>
+            <h3 className="text-lg font-bold mb-4">Optimize Sells — {state.selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
               IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
@@ -501,6 +568,7 @@ export function TransactionsView() {
         <SourceWalletModal
           txn={transactions.find((t) => t.id === assigningSourceWallet)!}
           availableWallets={state.availableWallets}
+          walletBalances={walletBalances}
           onSave={async (sourceWallet) => {
             await updateTransaction(assigningSourceWallet, { sourceWallet: sourceWallet || undefined });
             setAssigningSourceWallet(null);
@@ -525,6 +593,27 @@ export function TransactionsView() {
               <button className="btn-secondary text-sm" onClick={() => setShowClearConfirm(false)}>Cancel</button>
               <button className="text-sm px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg" disabled={clearing} onClick={async () => { await handleClearAll(); }}>
                 {clearing ? "Clearing..." : `Remove All (${assignedCount})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Source Wallet Assignments Modal */}
+      {showClearAssignments && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowClearAssignments(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-3">Clear Source Wallet Assignments</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+              This will remove source wallet assignments from all {assignedTransferCount} Transfer In transaction{assignedTransferCount === 1 ? "" : "s"}.
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Lots will no longer be re-tagged between wallets and will remain where they were originally purchased. You may see wallet mismatch warnings on sales until you re-assign.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => setShowClearAssignments(false)}>Cancel</button>
+              <button className="text-sm px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg" disabled={clearingAssignments} onClick={async () => { await handleClearAssignments(); }}>
+                {clearingAssignments ? "Clearing..." : `Clear All (${assignedTransferCount})`}
               </button>
             </div>
           </div>
@@ -994,24 +1083,29 @@ function EditLotsModal({
 function SourceWalletModal({
   txn,
   availableWallets,
+  walletBalances,
   onSave,
   onClear,
   onClose,
 }: {
   txn: Transaction;
   availableWallets: string[];
+  walletBalances: Map<string, number>;
   onSave: (sourceWallet: string) => Promise<void>;
   onClear: () => Promise<void>;
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState(txn.sourceWallet || "");
+  const [customWallet, setCustomWallet] = useState("");
   const [saving, setSaving] = useState(false);
   const destWallet = txn.wallet || txn.exchange;
 
-  // Filter out the destination wallet from options (can't transfer from yourself)
-  const options = availableWallets.filter(
-    (w) => w.toLowerCase() !== (destWallet || "").toLowerCase()
-  );
+  // Show all wallets — don't filter out the destination. The source CAN be the
+  // same exchange (e.g., buy on Gemini → cold storage → back to Gemini to sell).
+  const options = availableWallets;
+
+  // The effective value to save: custom input takes priority when "custom" is selected
+  const effectiveValue = selected === "__custom__" ? customWallet.trim() : selected;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
@@ -1021,26 +1115,50 @@ function SourceWalletModal({
           Transfer In of {formatBTC(txn.amountBTC)} BTC to <span className="font-medium">{destWallet}</span> on {formatDateTime(txn.date)}
         </p>
         <p className="text-sm text-gray-500 mb-4">
-          Where did this Bitcoin come from? Select the exchange or wallet that sent it, so lots are re-tagged to the correct location for IRS per-wallet cost basis tracking.
+          Select the exchange or wallet where this Bitcoin was originally purchased. Under IRS per-wallet rules, when you sell or dispose of Bitcoin, the cost basis must come from lots held in the same wallet as the sale. By identifying where these coins were bought, the app can carry those original purchase lots forward to {destWallet ? `"${destWallet}"` : "the destination"} so your cost basis is accurate when you sell.
         </p>
 
         <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
-          IRS FAQ 81: Self-transfers are non-taxable. Cost basis and holding period carry over from the source wallet.
-          Lots will be FIFO-consumed from the source and re-tagged to "{destWallet}".
+          Transfers between your own wallets are not taxable (IRS FAQ 81). The original cost basis and holding period carry over automatically — only the wallet tag changes so the lots are in the right place at the time of sale.
         </div>
 
-        <select
-          className="select w-full mb-4"
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          <option value="">— Select source wallet —</option>
-          {options.map((w) => (
-            <option key={w} value={w}>{w}</option>
-          ))}
-        </select>
+        <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-zinc-700 mb-2">
+          {options.map((w) => {
+            const bal = walletBalances.get(w) || 0;
+            const isSelected = selected === w;
+            return (
+              <button
+                key={w}
+                className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${isSelected ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : "border-l-2 border-l-transparent"}`}
+                onClick={() => setSelected(isSelected ? "" : w)}
+              >
+                <span className={isSelected ? "font-medium text-orange-600 dark:text-orange-400" : ""}>{w}</span>
+                <span className={`tabular-nums text-xs ${bal > 0 ? "text-gray-500" : "text-gray-300 dark:text-gray-600"}`}>
+                  {bal > 0 ? `${bal.toFixed(8)} BTC` : "0 BTC"}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${selected === "__custom__" ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : "border-l-2 border-l-transparent"}`}
+            onClick={() => setSelected(selected === "__custom__" ? "" : "__custom__")}
+          >
+            <span className={selected === "__custom__" ? "font-medium text-orange-600 dark:text-orange-400" : "text-gray-500"}>Other (type a name)...</span>
+          </button>
+        </div>
 
-        <div className="flex gap-3 justify-end">
+        {selected === "__custom__" && (
+          <input
+            type="text"
+            className="input w-full mb-2"
+            placeholder="e.g., Coinbase, Cold Storage, Trezor"
+            value={customWallet}
+            onChange={(e) => setCustomWallet(e.target.value)}
+            autoFocus
+          />
+        )}
+
+        <div className="flex gap-3 justify-end mt-3">
           {txn.sourceWallet && (
             <button
               className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400"
@@ -1054,8 +1172,8 @@ function SourceWalletModal({
           <button className="btn-secondary text-sm" onClick={onClose}>Cancel</button>
           <button
             className="btn-primary text-sm"
-            disabled={!selected || saving}
-            onClick={async () => { setSaving(true); await onSave(selected); setSaving(false); }}
+            disabled={!effectiveValue || saving}
+            onClick={async () => { setSaving(true); await onSave(effectiveValue); setSaving(false); }}
           >
             {saving ? "Saving..." : "Save"}
           </button>

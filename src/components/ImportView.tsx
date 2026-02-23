@@ -179,21 +179,20 @@ export function ImportView() {
         </button>
       </div>
 
-      {/* Exchange name (required) */}
+      {/* Exchange/Wallet name (required) */}
       <div className="flex items-center gap-3 mb-2">
-        <span className="text-gray-500">Exchange Name <span className="text-red-500">*</span>:</span>
+        <span className="text-gray-500">Wallet / Exchange Name <span className="text-red-500">*</span>:</span>
         <input
           className="input w-64"
           placeholder="e.g., Coinbase, Swan, Strike"
           value={exchangeName}
           onChange={(e) => setExchangeName(e.target.value)}
         />
-        <span className="text-xs text-gray-400">Used as default — overridden if your CSV has an Exchange column</span>
       </div>
       <div className="ml-[calc(0.75rem+theme(spacing.3))] mb-6">
         <span className="text-xs text-gray-400">
-          The name must match exactly across all CSVs from the same exchange (e.g., always "Coinbase", not sometimes "coinbase").
-          This is required for per-wallet cost basis tracking under IRS regulations.
+          Every transaction in this CSV will be tagged with this name. Use the same name consistently across all imports from the same platform
+          (e.g., always "Coinbase", not sometimes "coinbase"). This is required for per-wallet cost basis tracking under IRS regulations.
         </span>
       </div>
 
@@ -253,16 +252,9 @@ export function ImportView() {
             tooltip="Trading fees or commissions charged (optional — defaults to zero)"
             value={mapping.fee} field="fee" headers={detectedHeaders} onChange={updateMapping}
           />
-          <MappingRow
-            label="Wallet"
-            tooltip="Which wallet or sub-account this transaction belongs to (optional)"
-            value={mapping.wallet} field="wallet" headers={detectedHeaders} onChange={updateMapping}
-          />
-          <MappingRow
-            label="Exchange"
-            tooltip="The exchange or platform where the transaction happened (optional)"
-            value={mapping.exchange} field="exchange" headers={detectedHeaders} onChange={updateMapping}
-          />
+          {/* Wallet and Exchange columns removed — the user-entered exchange name
+              above is always used as the canonical wallet/exchange for all imported
+              transactions. This ensures consistent naming for IRS per-wallet tracking. */}
           <MappingRow
             label="Notes"
             tooltip="Any extra notes or description for the transaction (optional)"

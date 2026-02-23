@@ -186,15 +186,15 @@ export function TaxReportView() {
                 Wallet Mismatch — {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} affected
               </h3>
               <p className="text-xs text-yellow-700 dark:text-yellow-400/80 mb-2">
-                {walletMismatchCount === 1 ? "A sale" : "Some sales"} in {selectedYear} used lots from a different wallet than where the sale occurred.
-                This happens when Bitcoin was bought on one exchange, transferred to another wallet, and then sold — but the transfer hasn't been linked yet.
-                Until fixed, the affected sales are using lots from all wallets, which may not comply with IRS per-wallet rules (Treasury Reg. §1.1012-1(j), effective Jan 1, 2025).
+                IRS per-wallet rules (Treasury Reg. §1.1012-1(j), effective 2025) require that cost basis comes from lots held in the same wallet as the sale.
+                The {walletMismatchCount === 1 ? "sale" : "sales"} flagged below had no matching lots in {walletMismatchCount === 1 ? "its" : "their"} wallet, so the engine used lots from other wallets as a fallback.
               </p>
               <p className="text-xs text-yellow-700 dark:text-yellow-400/80">
-                <strong>How to fix:</strong> Go to{" "}
-                <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("transactions")}>Transactions</button>,
-                find your Transfer In transactions (highlighted in red if unassigned), and click <strong>"Assign"</strong> to set which wallet the Bitcoin came from.
-                This re-tags your lots to the correct wallet so the cost basis matches where the sale happened.
+                <strong>Common causes:</strong> (1) A Transfer In needs a source wallet assigned — go to{" "}
+                <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("transactions")}>Transactions</button>{" "}
+                and click <strong>"Assign"</strong> on Transfer In rows to re-tag lots to the selling wallet.
+                (2) The Bitcoin was purchased elsewhere and needs a Transfer In to move lots to the selling wallet.
+                (3) Not enough lots exist in the source wallet to cover the full transfer amount.
               </p>
             </div>
           </div>
@@ -239,10 +239,10 @@ export function TaxReportView() {
           <div className="flex gap-2 ml-4 shrink-0">
             {unassignedCount > 0 ? (
               <button className="text-sm px-4 py-1.5 btn-primary" onClick={handleBatchOptimize}>
-                Optimize All ({unassignedCount})
+                Optimize Sells ({unassignedCount})
               </button>
             ) : (
-              <span className="text-sm px-4 py-1.5 btn-secondary opacity-50 cursor-default">All Optimized</span>
+              <span className="text-sm px-4 py-1.5 btn-secondary opacity-50 cursor-default" title="All sells and donations in this year already have Specific ID lot elections assigned. Use Revert to FIFO to remove them.">All Optimized</span>
             )}
             {assignedCount > 0 && (
               <button className="text-sm px-4 py-1.5 btn-secondary text-red-500 hover:text-red-600" onClick={() => setShowClearConfirm(true)}>
@@ -474,7 +474,7 @@ export function TaxReportView() {
       {batchOptimizeResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchOptimizeResult(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Optimize All — {selectedYear}</h3>
+            <h3 className="text-lg font-bold mb-4">Optimize Sells — {selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
               IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
