@@ -17,7 +17,7 @@ export function TransactionsView() {
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
   const [deletingTxn, setDeletingTxn] = useState<Transaction | null>(null);
   const [editingLotsTxn, setEditingLotsTxn] = useState<Transaction | null>(null);
-  const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number } | null>(null);
+  const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number; walletMismatches: number } | null>(null);
   const [batchSaving, setBatchSaving] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -28,6 +28,27 @@ export function TransactionsView() {
     () => resolveRecordedSales(transactions, state.recordedSales),
     [state.recordedSales, transactions]
   );
+
+  // Run calculate() to get wallet mismatch flags on sale records
+  const calcResult = useMemo(
+    () => calculate(state.allTransactions, AccountingMethod.FIFO, state.recordedSales),
+    [state.allTransactions, state.recordedSales]
+  );
+  // Build set of transaction IDs with wallet mismatches for quick lookup
+  const walletMismatchIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const sale of calcResult.sales) {
+      if (sale.walletMismatch && sale.sourceTransactionId) {
+        ids.add(sale.sourceTransactionId);
+      }
+    }
+    return ids;
+  }, [calcResult.sales]);
+  const walletMismatchCount = useMemo(() => {
+    return calcResult.sales.filter(
+      (s) => s.walletMismatch && new Date(s.saleDate).getFullYear() === state.selectedYear
+    ).length;
+  }, [calcResult.sales, state.selectedYear]);
 
   // Count unassigned sells/donations in the selected year for the batch optimize button
   const unassignedCount = useMemo(() => {
@@ -106,7 +127,7 @@ export function TransactionsView() {
 
   const handleBatchOptimize = useCallback(() => {
     // Run the batch optimizer and compute FIFO baseline for comparison
-    const { records, skipped, failed } = batchOptimizeSpecificId(
+    const { records, skipped, failed, walletMismatches } = batchOptimizeSpecificId(
       state.allTransactions, state.recordedSales, state.selectedYear
     );
 
@@ -123,7 +144,7 @@ export function TransactionsView() {
       .filter((s: SaleRecord) => new Date(s.saleDate).getFullYear() === state.selectedYear && !s.isDonation)
       .reduce((sum: number, s: SaleRecord) => sum + s.gainLoss, 0);
 
-    setBatchOptimizeResult({ records, skipped, fifoGainLoss, optimizedGainLoss });
+    setBatchOptimizeResult({ records, skipped, fifoGainLoss, optimizedGainLoss, walletMismatches: walletMismatches.length });
   }, [state.allTransactions, state.recordedSales, state.selectedYear]);
 
   const handleBatchSave = useCallback(async () => {
@@ -174,6 +195,22 @@ export function TransactionsView() {
         <h1 className="text-3xl font-bold">All Transactions</h1>
         <HelpPanel subtitle={`${transactions.length} transactions imported — click any column header to sort.`} />
       </div>
+
+      {/* Wallet Mismatch Warning */}
+      {walletMismatchCount > 0 && (
+        <div className="mx-6 mb-3 px-4 py-3 rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/10 flex items-start gap-3">
+          <span className="text-yellow-500 text-base mt-0.5">⚠️</span>
+          <div>
+            <span className="text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+              Wallet Mismatch — {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in {state.selectedYear} used lots from a different wallet.
+            </span>
+            <span className="text-xs text-yellow-700 dark:text-yellow-400/80 ml-1">
+              IRS requires per-wallet cost basis tracking (Treasury Reg. §1.1012-1(j)).
+              Record your transfers in <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("reconciliation")}>Reconciliation</button> to fix.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-4 px-6 pb-3">
@@ -251,6 +288,9 @@ export function TransactionsView() {
               <div className="truncate">{t.exchange}</div>
               <div className="text-gray-500 truncate">{t.notes}</div>
               <div className="flex gap-1 justify-end">
+                {walletMismatchIds.has(t.id) && (
+                  <span className="text-yellow-500 text-xs px-0.5" title="Wallet mismatch: This sale used lots from a different wallet. Record your transfers in Reconciliation so lots are tracked at the correct location.">⚠️</span>
+                )}
                 {(t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.Donation) && (
                   <button
                     className={`text-xs px-1.5 py-0.5 rounded ${recordedByTxnId.has(t.id) ? "text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30" : "text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700"}`}
@@ -386,6 +426,14 @@ export function TransactionsView() {
                 )}
               </div>
             </div>
+
+            {batchOptimizeResult.walletMismatches > 0 && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
+                ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet.
+                IRS requires per-wallet cost basis (Treasury Reg. §1.1012-1(j)).
+                Record your transfers in Reconciliation so lots are tracked at the correct wallet.
+              </div>
+            )}
 
             <div className="flex gap-3 justify-end">
               <button className="btn-secondary text-sm" onClick={() => setBatchOptimizeResult(null)}>Cancel</button>
@@ -635,7 +683,7 @@ function EditLotsModal({
   // elections (only records for transactions AFTER txn — prior records are already reflected
   // in lotsAtPoint via calculateUpTo), then wallet-filter (per-wallet cost basis, TD 9989).
   const walletName = txn.wallet || txn.exchange;
-  const walletLots = useMemo(() => {
+  const walletLotsResult = useMemo(() => {
     const available = lotsAtPoint.filter((l) => l.remainingBTC > 0);
 
     // Build set of transaction IDs that come before (or are) the target — these are already
@@ -677,13 +725,16 @@ function EditLotsModal({
     }).filter((l): l is NonNullable<typeof l> => l !== null);
 
     const walletNorm = (walletName || "").trim().toLowerCase();
-    if (!walletNorm) return adjusted;
+    if (!walletNorm) return { lots: adjusted, isMismatch: false };
     const walletFiltered = adjusted.filter(
       (l) => (l.wallet || l.exchange || "").toLowerCase() === walletNorm
     );
     // Fall back to all available lots if no wallet match (same behavior as processSale)
-    return walletFiltered.length > 0 ? walletFiltered : adjusted;
+    const isMismatch = walletFiltered.length === 0 && adjusted.length > 0;
+    return { lots: walletFiltered.length > 0 ? walletFiltered : adjusted, isMismatch };
   }, [lotsAtPoint, walletName, recordedSales, existingRecord, allTransactions, txn.id]);
+  const walletLots = walletLotsResult.lots;
+  const isWalletMismatch = walletLotsResult.isMismatch;
 
   // Extract existing lot selections to pre-fill the LotPicker (if editing an existing record)
   const initialSelections = useMemo((): LotSelection[] | undefined => {
@@ -767,6 +818,14 @@ function EditLotsModal({
         <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
           IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). If you use Specific ID for any {isDonation ? "donation" : "sale"}, use it for all dispositions from this wallet in the same year.
         </div>
+
+        {isWalletMismatch && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
+            ⚠️ <strong>Wallet mismatch:</strong> No lots found in wallet "{walletName}". Showing lots from all wallets as a fallback.
+            As of January 1, 2025, IRS requires cost basis to be tracked per wallet (Treasury Reg. §1.1012-1(j)).
+            To fix this, record the transfer of Bitcoin to this wallet in Reconciliation.
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 text-red-500 text-sm p-3 rounded-lg mb-4">

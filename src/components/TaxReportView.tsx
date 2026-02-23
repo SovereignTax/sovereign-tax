@@ -15,8 +15,15 @@ export function TaxReportView() {
 
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
+  // Count wallet mismatches for the selected year
+  const walletMismatchCount = useMemo(() => {
+    return result.sales.filter(
+      (s) => s.walletMismatch && new Date(s.saleDate).getFullYear() === selectedYear
+    ).length;
+  }, [result.sales, selectedYear]);
+
   // Batch optimize state
-  const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number } | null>(null);
+  const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number; walletMismatches: number } | null>(null);
   const [batchSaving, setBatchSaving] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -36,7 +43,7 @@ export function TaxReportView() {
   }, [allTransactions, selectedYear, recordedByTxnId]);
 
   const handleBatchOptimize = useCallback(() => {
-    const { records, skipped } = batchOptimizeSpecificId(allTransactions, recordedSales, selectedYear);
+    const { records, skipped, walletMismatches } = batchOptimizeSpecificId(allTransactions, recordedSales, selectedYear);
     const fifoResult = calculate(allTransactions, AccountingMethod.FIFO, recordedSales);
     const fifoGainLoss = fifoResult.sales
       .filter((s: SaleRecord) => new Date(s.saleDate).getFullYear() === selectedYear && !s.isDonation)
@@ -46,7 +53,7 @@ export function TaxReportView() {
     const optimizedGainLoss = optResult.sales
       .filter((s: SaleRecord) => new Date(s.saleDate).getFullYear() === selectedYear && !s.isDonation)
       .reduce((sum: number, s: SaleRecord) => sum + s.gainLoss, 0);
-    setBatchOptimizeResult({ records, skipped, fifoGainLoss, optimizedGainLoss });
+    setBatchOptimizeResult({ records, skipped, fifoGainLoss, optimizedGainLoss, walletMismatches: walletMismatches.length });
   }, [allTransactions, recordedSales, selectedYear]);
 
   const handleBatchSave = useCallback(async () => {
@@ -162,6 +169,31 @@ export function TaxReportView() {
           </select>
         </div>
       </div>
+
+      {/* Wallet Mismatch Warning */}
+      {walletMismatchCount > 0 && (
+        <div className="card mb-6 border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-900/10">
+          <div className="flex items-start gap-3">
+            <span className="text-yellow-500 text-lg mt-0.5">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-sm text-yellow-700 dark:text-yellow-400 mb-1">
+                Wallet Mismatch — {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} affected
+              </h3>
+              <p className="text-xs text-yellow-700 dark:text-yellow-400/80 mb-2">
+                {walletMismatchCount === 1 ? "A sale" : "Some sales"} in {selectedYear} used lots from a different wallet than where the sale occurred.
+                As of January 1, 2025, IRS regulations require cost basis to be tracked per wallet or account
+                (Treasury Reg. §1.1012-1(j)). This typically happens when Bitcoin was transferred between wallets
+                but the transfer wasn't recorded in the app.
+              </p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-400/80">
+                <strong>To fix:</strong> Go to <button className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-300" onClick={() => state.setSelectedNav("reconciliation")}>Reconciliation</button> to
+                match your transfers, or manually add transfer records so your lots are tracked at the correct wallet.
+                Until resolved, the affected sales are using lots from all available wallets, which may not be IRS-compliant.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Optimize Specific ID card */}
       <div className="card mb-6 border-l-4 border-l-blue-500">
@@ -350,6 +382,11 @@ export function TaxReportView() {
               capital gains may be subject to an additional 3.8% Net Investment Income Tax (NIIT).
               Consult IRS Form 8960 or a tax professional.
             </p>
+            {walletMismatchCount > 0 && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-medium">
+                ⚠️ {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in this report used lots from a different wallet. Review the wallet mismatch warning above before filing.
+              </p>
+            )}
           </div>
 
           {/* Sales List */}
@@ -372,6 +409,9 @@ export function TaxReportView() {
                   <span className={`font-medium tabular-nums ${sale.gainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
                     {sale.gainLoss >= 0 ? "+" : ""}{formatUSD(sale.gainLoss)}
                   </span>
+                  {sale.walletMismatch && (
+                    <span className="text-yellow-500 text-xs" title="Wallet mismatch: This sale used lots from a different wallet. Record your transfers in Reconciliation so lots are tracked at the correct location.">⚠️</span>
+                  )}
                   {sale.isDonation ? (
                     <span className="badge" style={{ background: "rgba(168,85,247,0.15)", color: "#a855f7" }}>Donation</span>
                   ) : sale.isMixedTerm ? (
@@ -444,6 +484,14 @@ export function TaxReportView() {
                 )}
               </div>
             </div>
+
+            {batchOptimizeResult.walletMismatches > 0 && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
+                ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet.
+                IRS requires per-wallet cost basis (Treasury Reg. §1.1012-1(j)).
+                Record your transfers in Reconciliation so lots are tracked at the correct wallet.
+              </div>
+            )}
 
             <div className="flex gap-3 justify-end">
               <button className="btn-secondary text-sm" onClick={() => setBatchOptimizeResult(null)}>Cancel</button>

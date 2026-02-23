@@ -57,6 +57,7 @@ export interface SaleRecord {
   donationFmvPerBTC?: number; // Original FMV per BTC from the donation transaction
   donationFmvTotal?: number; // Original total FMV (amount × FMV) from the donation transaction
   sourceTransactionId?: string; // Links to originating Sell/Donation transaction for unique keying
+  walletMismatch?: boolean; // true when sale used lots from a different wallet (global fallback)
 }
 
 export interface CalculationResult {

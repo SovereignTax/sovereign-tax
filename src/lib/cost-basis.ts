@@ -349,7 +349,7 @@ export function batchOptimizeSpecificId(
   recordedSales: SaleRecord[],
   taxYear: number,
   includeExisting = false
-): { records: SaleRecord[]; skipped: number; failed: string[] } {
+): { records: SaleRecord[]; skipped: number; failed: string[]; walletMismatches: string[] } {
   const resolved = resolveRecordedSales(transactions, recordedSales);
   const sorted = [...transactions].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -365,6 +365,7 @@ export function batchOptimizeSpecificId(
 
   const records: SaleRecord[] = [];
   const failed: string[] = [];
+  const walletMismatches: string[] = [];
   let skipped = 0;
 
   // Build a working copy of recordedSales that accumulates new records as we go
@@ -379,11 +380,16 @@ export function batchOptimizeSpecificId(
     const walletName = txn.wallet || txn.exchange;
     const walletNorm = (walletName || "").trim().toLowerCase();
     let pool = available;
+    let isMismatch = false;
     if (walletNorm) {
       const filtered = available.filter(
         (l) => (l.wallet || l.exchange || "").toLowerCase() === walletNorm
       );
-      if (filtered.length > 0) pool = filtered;
+      if (filtered.length > 0) {
+        pool = filtered;
+      } else if (available.length > 0) {
+        isMismatch = true;
+      }
     }
 
     const isDonation = txn.transactionType === TransactionType.Donation;
@@ -426,14 +432,16 @@ export function batchOptimizeSpecificId(
       saleDate: txn.date,
       method: AccountingMethod.SpecificID,
       sourceTransactionId: txn.id,
+      walletMismatch: isMismatch || undefined,
     };
 
+    if (isMismatch) walletMismatches.push(txn.id);
     records.push(record);
     // Add to working sales so the next iteration's calculateUpTo sees this assignment
     workingSales = [...workingSales, record];
   }
 
-  return { records, skipped, failed };
+  return { records, skipped, failed, walletMismatches };
 }
 
 /**
@@ -505,16 +513,20 @@ function processSale(
     .map(({ idx }) => idx);
 
   // Fallback: if no lots match the wallet, use all available lots with a warning
+  let walletMismatch = false;
   if (availableIndices.length === 0) {
     availableIndices = lots
       .map((lot, idx) => ({ lot, idx }))
       .filter(({ lot }) => lot.remainingBTC > 0)
       .map(({ idx }) => idx);
 
-    if (availableIndices.length > 0 && warnings) {
-      warnings.push(
-        `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`
-      );
+    if (availableIndices.length > 0) {
+      walletMismatch = true;
+      if (warnings) {
+        warnings.push(
+          `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`
+        );
+      }
     }
   }
 
@@ -643,5 +655,6 @@ function processSale(
     isDonation: isDonation || undefined,
     donationFmvPerBTC: isDonation ? fmvPerBTC : undefined,
     donationFmvTotal: isDonation ? amountSold * (fmvPerBTC ?? 0) : undefined,
+    walletMismatch: walletMismatch || undefined,
   };
 }
