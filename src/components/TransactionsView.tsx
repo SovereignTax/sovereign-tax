@@ -4,7 +4,9 @@ import { formatUSD, formatBTC, formatDateTime, formatDate } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames, AccountingMethod } from "../lib/types";
 import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
+import { getUnassignedTransfers, getAssignedTransferCount, getWalletMismatchSales, getWalletMismatchIds, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
 import { saveTextFile } from "../lib/file-save";
+import { suggestSourceWallet } from "../lib/reconciliation";
 import { LotPicker } from "./LotPicker";
 import { HelpPanel } from "./HelpPanel";
 
@@ -25,6 +27,7 @@ export function TransactionsView() {
   const [assigningSourceWallet, setAssigningSourceWallet] = useState<string | null>(null); // txn.id being assigned
   const [showClearAssignments, setShowClearAssignments] = useState(false);
   const [clearingAssignments, setClearingAssignments] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Shared resolver: maps each disposition transaction to its recorded Specific ID SaleRecord.
   // Uses the same function as the engine — guarantees UI badges and engine use identical matching.
@@ -39,15 +42,7 @@ export function TransactionsView() {
     [state.allTransactions, state.recordedSales]
   );
   // Build set of transaction IDs with wallet mismatches for quick lookup
-  const walletMismatchIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const sale of calcResult.sales) {
-      if (sale.walletMismatch && sale.sourceTransactionId) {
-        ids.add(sale.sourceTransactionId);
-      }
-    }
-    return ids;
-  }, [calcResult.sales]);
+  const walletMismatchIds = useMemo(() => getWalletMismatchIds(calcResult.sales), [calcResult.sales]);
   // Compute BTC balance per wallet from current lots (for source wallet assignment UI)
   const walletBalances = useMemo(() => {
     const balances = new Map<string, number>();
@@ -59,29 +54,14 @@ export function TransactionsView() {
     return balances;
   }, [calcResult.lots]);
 
-  const walletMismatchSales = useMemo(() => {
-    return calcResult.sales.filter(
-      (s) => s.walletMismatch && new Date(s.saleDate).getFullYear() === state.selectedYear
-    );
-  }, [calcResult.sales, state.selectedYear]);
+  const walletMismatchSales = useMemo(() => getWalletMismatchSales(calcResult.sales, state.selectedYear), [calcResult.sales, state.selectedYear]);
   const walletMismatchCount = walletMismatchSales.length;
 
   // Count unassigned sells/donations in the selected year for the batch optimize button
-  const unassignedCount = useMemo(() => {
-    return transactions.filter((t) => {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
-      if (new Date(t.date).getFullYear() !== state.selectedYear) return false;
-      if (recordedByTxnId.has(t.id)) return false;
-      return true;
-    }).length;
-  }, [transactions, state.selectedYear, recordedByTxnId]);
+  const unassignedCount = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, state.selectedYear).length, [transactions, state.selectedYear, recordedByTxnId]);
 
   // Count unassigned TransferIn transactions (no sourceWallet set)
-  const unassignedTransferCount = useMemo(() => {
-    return transactions.filter(
-      (t) => t.transactionType === TransactionType.TransferIn && !t.sourceWallet
-    ).length;
-  }, [transactions]);
+  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(transactions).length, [transactions]);
 
   const filtered = useMemo(() => {
     let result = [...transactions];
@@ -171,52 +151,62 @@ export function TransactionsView() {
   const handleBatchSave = useCallback(async () => {
     if (!batchOptimizeResult) return;
     setBatchSaving(true);
-    await state.recordSalesBatch(batchOptimizeResult.records);
-    setBatchSaving(false);
-    setBatchOptimizeResult(null);
+    setErrorMessage(null);
+    try {
+      await state.recordSalesBatch(batchOptimizeResult.records);
+      setBatchOptimizeResult(null);
+    } catch (err) {
+      setErrorMessage(`Failed to save optimized elections: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setBatchSaving(false);
+    }
   }, [batchOptimizeResult, state.recordSalesBatch]);
 
   // Count assigned Specific ID elections for the year (for clear all)
-  const assignedCount = useMemo(() => {
-    return transactions.filter((t) => {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
-      if (new Date(t.date).getFullYear() !== state.selectedYear) return false;
-      return recordedByTxnId.has(t.id);
-    }).length;
-  }, [transactions, state.selectedYear, recordedByTxnId]);
+  const assignedCount = useMemo(() => getAssignedSells(transactions, recordedByTxnId, state.selectedYear).length, [transactions, state.selectedYear, recordedByTxnId]);
 
   const handleClearAll = useCallback(async () => {
     setClearing(true);
-    const idsToDelete: string[] = [];
-    // Use transaction date (not record.saleDate) to match assignedCount filtering
-    for (const t of transactions) {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) continue;
-      if (new Date(t.date).getFullYear() !== state.selectedYear) continue;
-      const record = recordedByTxnId.get(t.id);
-      if (record) idsToDelete.push(record.id);
+    setErrorMessage(null);
+    try {
+      const idsToDelete: string[] = [];
+      // Use transaction date (not record.saleDate) to match assignedCount filtering
+      for (const t of transactions) {
+        if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) continue;
+        if (new Date(t.date).getFullYear() !== state.selectedYear) continue;
+        const record = recordedByTxnId.get(t.id);
+        if (record) idsToDelete.push(record.id);
+      }
+      await state.deleteSaleRecordsByIds(idsToDelete);
+      setShowClearConfirm(false);
+    } catch (err) {
+      setErrorMessage(`Failed to clear elections: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setShowClearConfirm(false);
+    } finally {
+      setClearing(false);
     }
-    await state.deleteSaleRecordsByIds(idsToDelete);
-    setClearing(false);
-    setShowClearConfirm(false);
   }, [transactions, recordedByTxnId, state.selectedYear, state.deleteSaleRecordsByIds]);
 
   // Count Transfer In transactions with source wallet assigned (for clear assignments button)
-  const assignedTransferCount = useMemo(() => {
-    return transactions.filter(
-      (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
-    ).length;
-  }, [transactions]);
+  const assignedTransferCount = useMemo(() => getAssignedTransferCount(transactions), [transactions]);
 
   const handleClearAssignments = useCallback(async () => {
     setClearingAssignments(true);
-    const transferIns = transactions.filter(
-      (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
-    );
-    for (const t of transferIns) {
-      await state.updateTransaction(t.id, { sourceWallet: undefined });
+    setErrorMessage(null);
+    try {
+      const transferIns = transactions.filter(
+        (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
+      );
+      for (const t of transferIns) {
+        await state.updateTransaction(t.id, { sourceWallet: undefined });
+      }
+      setShowClearAssignments(false);
+    } catch (err) {
+      setErrorMessage(`Failed to clear assignments: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setShowClearAssignments(false);
+    } finally {
+      setClearingAssignments(false);
     }
-    setClearingAssignments(false);
-    setShowClearAssignments(false);
   }, [transactions, state.updateTransaction]);
 
   if (transactions.length === 0) {
@@ -235,6 +225,12 @@ export function TransactionsView() {
         <h1 className="text-3xl font-bold">All Transactions</h1>
         <HelpPanel subtitle={`${transactions.length} transactions imported — click any column header to sort.`} />
       </div>
+      {errorMessage && (
+        <div className="mx-6 mb-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg flex items-center gap-2">
+          <span>⚠️ {errorMessage}</span>
+          <button className="ml-auto text-xs underline" onClick={() => setErrorMessage(null)}>Dismiss</button>
+        </div>
+      )}
 
       {/* Wallet Mismatch Warning */}
       {walletMismatchCount > 0 && (
@@ -504,9 +500,9 @@ export function TransactionsView() {
 
             <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
               <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale. Applying Specific ID to transactions that were already completed without a contemporaneous lot identification may not satisfy IRS requirements.
-              {state.selectedYear >= 2025
-                ? <span className="block mt-1"><strong>What to do:</strong> For {state.selectedYear} transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
-                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {state.selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO for pre-2025 sales or consulting a tax professional.</span>
+              {state.selectedYear === 2025
+                ? <span className="block mt-1"><strong>What to do:</strong> For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
+                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {state.selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO or consulting a tax professional.</span>
               }
             </div>
 
@@ -534,14 +530,18 @@ export function TransactionsView() {
                     {batchOptimizeResult.optimizedGainLoss >= 0 ? "+" : ""}{formatUSD(batchOptimizeResult.optimizedGainLoss)}
                   </span>
                 </div>
-                {batchOptimizeResult.fifoGainLoss !== batchOptimizeResult.optimizedGainLoss && (
-                  <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                    <span className="text-gray-500 font-medium">Estimated savings:</span>
-                    <span className="font-bold tabular-nums text-green-600">
-                      {formatUSD(batchOptimizeResult.fifoGainLoss - batchOptimizeResult.optimizedGainLoss)}
-                    </span>
-                  </div>
-                )}
+                {batchOptimizeResult.fifoGainLoss !== batchOptimizeResult.optimizedGainLoss && (() => {
+                  const savings = batchOptimizeResult.fifoGainLoss - batchOptimizeResult.optimizedGainLoss;
+                  const isPositive = savings > 0;
+                  return (
+                    <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                      <span className="text-gray-500 font-medium">{isPositive ? "Estimated savings:" : "Additional tax liability:"}</span>
+                      <span className={`font-bold tabular-nums ${isPositive ? "text-green-600" : "text-red-500"}`}>
+                        {isPositive ? formatUSD(savings) : `+${formatUSD(Math.abs(savings))}`}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -564,22 +564,26 @@ export function TransactionsView() {
       )}
 
       {/* Source Wallet Assignment Modal */}
-      {assigningSourceWallet && transactions.find((t) => t.id === assigningSourceWallet) && (
-        <SourceWalletModal
-          txn={transactions.find((t) => t.id === assigningSourceWallet)!}
-          availableWallets={state.availableWallets}
-          walletBalances={walletBalances}
-          onSave={async (sourceWallet) => {
-            await updateTransaction(assigningSourceWallet, { sourceWallet: sourceWallet || undefined });
-            setAssigningSourceWallet(null);
-          }}
-          onClear={async () => {
-            await updateTransaction(assigningSourceWallet, { sourceWallet: undefined });
-            setAssigningSourceWallet(null);
-          }}
-          onClose={() => setAssigningSourceWallet(null)}
-        />
-      )}
+      {assigningSourceWallet && transactions.find((t) => t.id === assigningSourceWallet) && (() => {
+        const modalTxn = transactions.find((t) => t.id === assigningSourceWallet)!;
+        return (
+          <SourceWalletModal
+            txn={modalTxn}
+            availableWallets={state.availableWallets}
+            walletBalances={walletBalances}
+            suggestion={suggestSourceWallet(modalTxn, state.allTransactions)}
+            onSave={async (sourceWallet) => {
+              await updateTransaction(assigningSourceWallet, { sourceWallet: sourceWallet || undefined });
+              setAssigningSourceWallet(null);
+            }}
+            onClear={async () => {
+              await updateTransaction(assigningSourceWallet, { sourceWallet: undefined });
+              setAssigningSourceWallet(null);
+            }}
+            onClose={() => setAssigningSourceWallet(null)}
+          />
+        );
+      })()}
 
       {/* Clear All Confirmation Modal */}
       {showClearConfirm && (
@@ -934,15 +938,18 @@ function EditLotsModal({
   const handleSave = async () => {
     if (!preview) return;
     setSaving(true);
-    const record: SaleRecord = {
-      ...preview,
-      id: crypto.randomUUID(),
-      saleDate: txn.date,
-      method: AccountingMethod.SpecificID,
-      sourceTransactionId: txn.id,
-    };
-    await onSave(record);
-    setSaving(false);
+    try {
+      const record: SaleRecord = {
+        ...preview,
+        id: crypto.randomUUID(),
+        saleDate: txn.date,
+        method: AccountingMethod.SpecificID,
+        sourceTransactionId: txn.id,
+      };
+      await onSave(record);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -978,11 +985,11 @@ function EditLotsModal({
 
         <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
           <strong>IRS timing requirement:</strong> Specific ID elections must be made no later than the date and time of the sale (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82). If this {isDonation ? "donation" : "sale"} occurred before you used this software, applying Specific ID retroactively may not satisfy IRS requirements.
-          {new Date(txn.date).getFullYear() >= 2025
+          {new Date(txn.date).getFullYear() === 2025
             ? " For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping — your lot selections are saved as your identification record."
             : ` This transaction is from ${new Date(txn.date).getFullYear()}. Notice 2025-07 temporary relief applies only to 2025.`
           }
-          <span className="block mt-1"><strong>What to do:</strong> {new Date(txn.date).getFullYear() >= 2025
+          <span className="block mt-1"><strong>What to do:</strong> {new Date(txn.date).getFullYear() === 2025
             ? "Proceed with Specific ID — Notice 2025-07 covers 2025. Sovereign Tax stores your lot identifications as required records."
             : "If you made a contemporaneous lot identification at the time of the original sale (e.g., written records or broker confirmation), you can record it here. If not, FIFO is the safer method for pre-2025 transactions. Consult a tax professional if unsure."
           }</span>
@@ -1084,6 +1091,7 @@ function SourceWalletModal({
   txn,
   availableWallets,
   walletBalances,
+  suggestion,
   onSave,
   onClear,
   onClose,
@@ -1091,6 +1099,7 @@ function SourceWalletModal({
   txn: Transaction;
   availableWallets: string[];
   walletBalances: Map<string, number>;
+  suggestion?: { wallet: string; reason: string; confidence: "confident" | "flagged" } | null;
   onSave: (sourceWallet: string) => Promise<void>;
   onClear: () => Promise<void>;
   onClose: () => void;
@@ -1102,7 +1111,10 @@ function SourceWalletModal({
 
   // Show all wallets — don't filter out the destination. The source CAN be the
   // same exchange (e.g., buy on Gemini → cold storage → back to Gemini to sell).
-  const options = availableWallets;
+  // If we have a suggestion, move it to the top of the list.
+  const options = suggestion && availableWallets.includes(suggestion.wallet)
+    ? [suggestion.wallet, ...availableWallets.filter((w) => w !== suggestion.wallet)]
+    : availableWallets;
 
   // The effective value to save: custom input takes priority when "custom" is selected
   const effectiveValue = selected === "__custom__" ? customWallet.trim() : selected;
@@ -1126,16 +1138,29 @@ function SourceWalletModal({
           {options.map((w) => {
             const bal = walletBalances.get(w) || 0;
             const isSelected = selected === w;
+            const isSuggested = suggestion?.wallet === w;
             return (
               <button
                 key={w}
-                className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${isSelected ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : "border-l-2 border-l-transparent"}`}
+                className={`w-full flex flex-col px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${isSelected ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : isSuggested ? "bg-green-50 dark:bg-green-900/10 border-l-2 border-l-green-500" : "border-l-2 border-l-transparent"}`}
                 onClick={() => setSelected(isSelected ? "" : w)}
               >
-                <span className={isSelected ? "font-medium text-orange-600 dark:text-orange-400" : ""}>{w}</span>
-                <span className={`tabular-nums text-xs ${bal > 0 ? "text-gray-500" : "text-gray-300 dark:text-gray-600"}`}>
-                  {bal > 0 ? `${bal.toFixed(8)} BTC` : "0 BTC"}
-                </span>
+                <div className="flex items-center justify-between w-full">
+                  <span className="flex items-center gap-2">
+                    <span className={isSelected ? "font-medium text-orange-600 dark:text-orange-400" : ""}>{w}</span>
+                    {isSuggested && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${suggestion.confidence === "confident" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"}`}>
+                        {suggestion.confidence === "confident" ? "Suggested" : "Possible match"}
+                      </span>
+                    )}
+                  </span>
+                  <span className={`tabular-nums text-xs ${bal > 0 ? "text-gray-500" : "text-gray-300 dark:text-gray-600"}`}>
+                    {bal > 0 ? `${bal.toFixed(8)} BTC` : "0 BTC"}
+                  </span>
+                </div>
+                {isSuggested && (
+                  <span className="text-[11px] text-green-600 dark:text-green-400 mt-0.5">{suggestion.reason}</span>
+                )}
               </button>
             );
           })}
@@ -1162,7 +1187,7 @@ function SourceWalletModal({
           {txn.sourceWallet && (
             <button
               className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400"
-              onClick={async () => { setSaving(true); await onClear(); setSaving(false); }}
+              onClick={async () => { setSaving(true); try { await onClear(); } finally { setSaving(false); } }}
               disabled={saving}
             >
               Clear Assignment
@@ -1173,7 +1198,7 @@ function SourceWalletModal({
           <button
             className="btn-primary text-sm"
             disabled={!effectiveValue || saving}
-            onClick={async () => { setSaving(true); await onSave(effectiveValue); setSaving(false); }}
+            onClick={async () => { setSaving(true); try { await onSave(effectiveValue); } finally { setSaving(false); } }}
           >
             {saving ? "Saving..." : "Save"}
           </button>

@@ -74,7 +74,7 @@ export function reconcileTransfers(transactions: Transaction[]): ReconciliationR
 
     for (const inp of transferIns) {
       if (usedIns.has(inp.id)) continue;
-      if (inp.exchange === out.exchange) continue; // Same exchange transfers aren't cross-exchange
+      if ((inp.exchange || "").trim().toLowerCase() === (out.exchange || "").trim().toLowerCase()) continue; // Same exchange transfers aren't cross-exchange
 
       // Implied fee: amount sent minus amount received
       // Should be >= 0 (miner fee reduces the received amount)
@@ -168,5 +168,41 @@ export function reconcileTransfers(transactions: Transaction[]): ReconciliationR
     unmatchedTransferIns,
     exchangeBalances: Object.values(balances).sort((a, b) => a.exchange.localeCompare(b.exchange)),
     suggestedMissing,
+  };
+}
+
+export interface SourceWalletSuggestion {
+  wallet: string;
+  reason: string;
+  confidence: MatchConfidence;
+}
+
+/**
+ * Given a TransferIn transaction, checks if the reconciliation engine can identify
+ * a matching TransferOut. If so, returns the source wallet as a suggestion.
+ * Returns null if no match is found.
+ */
+export function suggestSourceWallet(
+  txn: Transaction,
+  allTransactions: Transaction[]
+): SourceWalletSuggestion | null {
+  if (txn.transactionType !== TransactionType.TransferIn) return null;
+
+  const { matchedTransfers } = reconcileTransfers(allTransactions);
+  const match = matchedTransfers.find((p) => p.transferIn.id === txn.id);
+  if (!match) return null;
+
+  const sourceWallet = match.transferOut.wallet || match.transferOut.exchange;
+  const amount = match.transferOut.amountBTC.toFixed(8);
+  const date = new Date(match.transferOut.date).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  return {
+    wallet: sourceWallet,
+    reason: `Matches ${amount} BTC withdrawal from ${sourceWallet} on ${date}`,
+    confidence: match.confidence,
   };
 }

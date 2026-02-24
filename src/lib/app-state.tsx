@@ -30,13 +30,14 @@ export function isMaterialChange(
 ): boolean {
   const btcDiff = (a: number, b: number) => Math.round(a * 1e8) !== Math.round(b * 1e8);
   const usdDiff = (a: number, b: number) => Math.round(a * 100) !== Math.round(b * 100);
+  const norm = (s: string | undefined) => (s || "").trim().toLowerCase();
   return (
     (updates.amountBTC !== undefined && btcDiff(updates.amountBTC, original.amountBTC)) ||
     (updates.date !== undefined && updates.date !== original.date) ||
     (updates.pricePerBTC !== undefined && usdDiff(updates.pricePerBTC, original.pricePerBTC)) ||
     (updates.totalUSD !== undefined && usdDiff(updates.totalUSD, original.totalUSD)) ||
-    (updates.wallet !== undefined && updates.wallet !== original.wallet) ||
-    ("sourceWallet" in updates && updates.sourceWallet !== original.sourceWallet) ||
+    (updates.wallet !== undefined && norm(updates.wallet) !== norm(original.wallet)) ||
+    ("sourceWallet" in updates && norm(updates.sourceWallet) !== norm(original.sourceWallet)) ||
     (updates.transactionType !== undefined && updates.transactionType !== original.transactionType)
   );
 }
@@ -159,7 +160,7 @@ interface AppStateContextType {
   loadMappings: () => Promise<Record<string, ColumnMapping>>;
 
   // Backup
-  createBackup: (password: string) => Promise<void>;
+  createBackup: (password: string) => Promise<boolean>;
   restoreBackup: (file: File, password?: string) => Promise<void>;
 
   // Audit
@@ -413,6 +414,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = useCallback(async (txn: Transaction) => {
     const next = [...transactionsRef.current, txn];
     setTransactions(next);
+    transactionsRef.current = next;
     await persistence.saveTransactions(next);
     await appendAuditLog(AuditAction.TransactionAdd, `Added ${txn.transactionType} of ${txn.amountBTC.toFixed(8)} BTC`);
   }, [appendAuditLog]);
@@ -437,12 +439,35 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       await persistence.saveRecordedSales(nextSales);
     }
 
+    // Cascade: when a Buy (or TransferIn) is deleted, any Specific ID elections
+    // referencing it as a lot source become stale. Remove them proactively so the
+    // user isn't silently served wrong cost-basis numbers.
+    if (deleted && (deleted.transactionType === TransactionType.Buy || deleted.transactionType === TransactionType.TransferIn)) {
+      const staleSaleIds = recordedSalesRef.current
+        .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === id))
+        .map((s) => s.id);
+      if (staleSaleIds.length > 0) {
+        const staleSet = new Set(staleSaleIds);
+        const nextSales2 = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
+        setRecordedSales(nextSales2);
+        recordedSalesRef.current = nextSales2;
+        await persistence.saveRecordedSales(nextSales2);
+        await appendAuditLog(AuditAction.SaleRecorded,
+          `Auto-removed ${staleSaleIds.length} Specific ID election(s) referencing deleted ${deleted.transactionType} lot. ` +
+          `Affected sales will use FIFO until lots are re-assigned via Edit Lots.`
+        );
+      }
+    }
+
     if (deleted) {
       await appendAuditLog(AuditAction.TransactionDelete, `Deleted ${deleted.transactionType} of ${deleted.amountBTC.toFixed(8)} BTC from ${deleted.exchange}`);
     }
   }, [appendAuditLog]);
 
   const updateTransaction = useCallback(async (id: string, updates: Partial<Omit<Transaction, "id">>) => {
+    // Capture pre-edit transaction BEFORE mutating the ref — needed for invalidation checks below.
+    const original = transactionsRef.current.find((t) => t.id === id);
+
     const next = transactionsRef.current.map((t) => {
       if (t.id !== id) return t;
       return { ...t, ...updates };
@@ -452,7 +477,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await persistence.saveTransactions(next);
 
     // Invalidate linked Specific ID election only when material fields change.
-    const original = transactionsRef.current.find((t) => t.id === id);
     if (original && (original.transactionType === TransactionType.Sell || original.transactionType === TransactionType.Donation)) {
       if (isMaterialChange(original, updates)) {
         const resolved = resolveRecordedSales([original], recordedSalesRef.current);
@@ -480,6 +504,32 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         recordedSalesRef.current = nextSales;
         await persistence.saveRecordedSales(nextSales);
         await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${staleIds.length} downstream Specific ID election(s) after TransferIn edit`);
+      }
+    }
+
+    // Buy edits that break lot eligibility invalidate downstream Specific ID elections
+    // referencing this Buy as a lot source. Only triggers for truly destructive changes:
+    // amount decreased, wallet changed, or type changed away from Buy.
+    // Price/date/notes edits are safe — the engine reads current lot properties at calc time.
+    if (original && original.transactionType === TransactionType.Buy) {
+      const btcDecreased = updates.amountBTC !== undefined && Math.round(updates.amountBTC * 1e8) < Math.round(original.amountBTC * 1e8);
+      const walletChanged = updates.wallet !== undefined && (updates.wallet || "").trim().toLowerCase() !== (original.wallet || "").trim().toLowerCase();
+      const typeChanged = updates.transactionType !== undefined && updates.transactionType !== TransactionType.Buy;
+      if (btcDecreased || walletChanged || typeChanged) {
+        const staleSaleIds = recordedSalesRef.current
+          .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === id))
+          .map((s) => s.id);
+        if (staleSaleIds.length > 0) {
+          const staleSet = new Set(staleSaleIds);
+          const nextSales2 = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
+          setRecordedSales(nextSales2);
+          recordedSalesRef.current = nextSales2;
+          await persistence.saveRecordedSales(nextSales2);
+          await appendAuditLog(AuditAction.SaleRecorded,
+            `Auto-removed ${staleSaleIds.length} Specific ID election(s) after Buy edit (lot eligibility changed). ` +
+            `Affected sales will use FIFO until lots are re-assigned via Edit Lots.`
+          );
+        }
       }
     }
 
@@ -638,7 +688,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Backup & Restore
-  const createBackupAction = useCallback(async (password: string) => {
+  const createBackupAction = useCallback(async (password: string): Promise<boolean> => {
     const data = await persistence.loadAllDataForBackup();
     const bundle = await createBackupBundle(
       data.transactions,
@@ -649,8 +699,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       data.preferences,
       password
     );
-    await downloadBackup(bundle);
-    await appendAuditLog(AuditAction.BackupCreated, `Encrypted backup created with ${data.transactions.length} transactions`);
+    const saved = await downloadBackup(bundle);
+    if (saved) {
+      await appendAuditLog(AuditAction.BackupCreated, `Encrypted backup created with ${data.transactions.length} transactions`);
+    }
+    return saved;
   }, [appendAuditLog]);
 
   const restoreBackupAction = useCallback(async (file: File, password?: string) => {

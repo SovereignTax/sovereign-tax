@@ -236,8 +236,8 @@ export function SettingsView() {
                     try {
                       setShowBackupPasswordModal(false);
                       setBackupStatus("Encrypting and creating backup...");
-                      await state.createBackup(backupPassword);
-                      setBackupStatus("Encrypted backup downloaded successfully!");
+                      const saved = await state.createBackup(backupPassword);
+                      setBackupStatus(saved ? "Encrypted backup downloaded successfully!" : "Backup cancelled.");
                       setBackupPassword("");
                       setBackupPasswordConfirm("");
                       setTimeout(() => setBackupStatus(null), 3000);
@@ -265,8 +265,8 @@ export function SettingsView() {
                   try {
                     setShowBackupPasswordModal(false);
                     setBackupStatus("Encrypting and creating backup...");
-                    await state.createBackup(backupPassword);
-                    setBackupStatus("Encrypted backup downloaded successfully!");
+                    const saved = await state.createBackup(backupPassword);
+                    setBackupStatus(saved ? "Encrypted backup downloaded successfully!" : "Backup cancelled.");
                     setBackupPassword("");
                     setBackupPasswordConfirm("");
                     setTimeout(() => setBackupStatus(null), 3000);

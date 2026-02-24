@@ -40,6 +40,16 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
   };
 
   const [selections, setSelections] = useState<Record<string, number>>(buildInitialMap);
+  // String state for amount inputs — allows intermediate typing ("0.", "", etc.)
+  // without the controlled input snapping to a normalized number mid-keystroke.
+  const [inputTexts, setInputTexts] = useState<Record<string, string>>(() => {
+    const texts: Record<string, string> = {};
+    const initial = buildInitialMap();
+    for (const [id, amt] of Object.entries(initial)) {
+      texts[id] = amt.toFixed(8);
+    }
+    return texts;
+  });
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -50,31 +60,41 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
   const toggleLot = (lotId: string, maxAmount: number) => {
     setSelections((prev) => {
       const copy = { ...prev };
-      if (copy[lotId]) {
+      if (lotId in copy) {
         delete copy[lotId];
+        setInputTexts((t) => { const c = { ...t }; delete c[lotId]; return c; });
       } else {
         // Auto-fill remaining needed or max available
         const needed = targetAmount - Object.entries(copy).reduce((a, [, v]) => a + v, 0);
-        copy[lotId] = Math.min(maxAmount, Math.max(0, needed));
+        const amt = Math.min(maxAmount, Math.max(0, needed));
+        copy[lotId] = amt;
+        setInputTexts((t) => ({ ...t, [lotId]: amt.toFixed(8) }));
       }
       return copy;
     });
   };
 
   const updateAmount = (lotId: string, value: string, maxAvailable: number) => {
+    // Always update the display string so the user can type freely
+    setInputTexts((prev) => ({ ...prev, [lotId]: value }));
+    // Parse and commit to numeric selections when valid
     const num = Number(value);
-    if (isNaN(num) || num < 0) return;
-    // Clamp to lot's available BTC
-    const clamped = Math.min(num, maxAvailable);
-    setSelections((prev) => {
-      const copy = { ...prev };
-      if (clamped === 0) {
-        delete copy[lotId];
-      } else {
-        copy[lotId] = clamped;
-      }
-      return copy;
-    });
+    if (!isNaN(num) && num >= 0) {
+      const clamped = Math.min(num, maxAvailable);
+      setSelections((prev) => ({ ...prev, [lotId]: clamped }));
+    }
+  };
+
+  const handleAmountBlur = (lotId: string) => {
+    // On blur, normalize the display to the committed numeric value
+    const num = selections[lotId];
+    if (num !== undefined && num > 0) {
+      setInputTexts((prev) => ({ ...prev, [lotId]: num.toFixed(8) }));
+    } else {
+      // User left it empty/zero — show "0" but keep the lot checked
+      setInputTexts((prev) => ({ ...prev, [lotId]: "0" }));
+      setSelections((prev) => ({ ...prev, [lotId]: 0 }));
+    }
   };
 
   /**
@@ -86,10 +106,13 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
   const optimizeSelections = () => {
     const result = optimizeLotSelections(availableLots, targetAmount, salePrice, saleDate);
     const newSelections: Record<string, number> = {};
+    const newTexts: Record<string, string> = {};
     for (const s of result) {
       newSelections[s.lotId] = s.amountBTC;
+      newTexts[s.lotId] = s.amountBTC.toFixed(8);
     }
     setSelections(newSelections);
+    setInputTexts(newTexts);
   };
 
   const handleConfirm = () => {
@@ -179,7 +202,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
       </div>
 
       {sortedLots.map(({ lot, daysHeld, isLongTerm }) => {
-          const isSelected = !!selections[lot.id];
+          const isSelected = lot.id in selections;
           const termBg = isSelected
             ? "bg-blue-50 dark:bg-blue-900/10"
             : isLongTerm
@@ -208,8 +231,9 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
                 {isSelected && (
                   <input
                     className="input w-full text-right text-sm"
-                    value={selections[lot.id] || ""}
+                    value={inputTexts[lot.id] ?? ""}
                     onChange={(e) => updateAmount(lot.id, e.target.value, lot.remainingBTC)}
+                    onBlur={() => handleAmountBlur(lot.id)}
                     max={lot.remainingBTC}
                   />
                 )}

@@ -948,3 +948,132 @@ describe("optimizeLotSelections — partial fill behavior", () => {
     expect(totalSelected).toBeLessThan(1.0);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Engine Guard: stale lotId in extractLotSelections → FIFO fallback
+// ═══════════════════════════════════════════════════════
+
+describe("extractLotSelections engine guard (stale lotId fallback)", () => {
+  it("falls back to FIFO with warning when recorded election references a deleted Buy", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000);
+    const b2 = buy("2024-02-01", 1.0, 35000);
+    const s1 = sell("2024-06-15", 0.5, 50000);
+
+    // Create a Specific ID election referencing b1
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{ id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    // Calculate WITHOUT b1 (simulating it was deleted) — election references a missing lot
+    const result = calculate([b2, s1], AccountingMethod.FIFO, [record]);
+
+    // Should fall back to FIFO (using b2), not silently produce wrong cost basis
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(0.5 * 35000, 2); // b2 cost basis, not b1's
+    expect(result.warnings.some((w) => w.includes("could not be applied") && w.includes("Edit Lots"))).toBe(true);
+  });
+
+  it("applies election normally when all referenced lots exist", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000);
+    const b2 = buy("2024-02-01", 1.0, 35000);
+    const s1 = sell("2024-06-15", 0.5, 50000);
+
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{ id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    // Both buys present — election should apply correctly using b1
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(0.5 * 30000, 2); // b1 cost basis
+    expect(result.warnings.filter((w) => w.includes("could not be applied"))).toHaveLength(0);
+  });
+
+  it("falls back when one of multiple referenced lots is missing", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000);
+    const b2 = buy("2024-02-01", 1.0, 35000);
+    const s1 = sell("2024-06-15", 1.0, 50000);
+
+    // Election references BOTH b1 and b2
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 1.0,
+      salePricePerBTC: 50000,
+      totalProceeds: 50000,
+      costBasis: 32500,
+      gainLoss: 17500,
+      lotDetails: [
+        { id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false },
+        { id: crypto.randomUUID(), lotId: b2.id, purchaseDate: b2.date, amountBTC: 0.5, costBasisPerBTC: 35000, totalCost: 17500, daysHeld: 135, exchange: "Coinbase", isLongTerm: false },
+      ],
+      holdingPeriodDays: 150,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    // Only b2 present (b1 deleted) — entire election should fail, fall back to FIFO
+    const result = calculate([b2, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // FIFO with only b2 available: 1.0 BTC at $35k
+    expect(result.sales[0].costBasis).toBeCloseTo(1.0 * 35000, 2);
+    expect(result.warnings.some((w) => w.includes("could not be applied"))).toBe(true);
+  });
+
+  it("warning message tells user to use Edit Lots button", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000);
+    const s1 = sell("2024-06-15", 0.5, 50000);
+
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{ id: crypto.randomUUID(), lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5, costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 166, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    // b1 is missing — triggers the fallback warning
+    const result = calculate([sell("2024-03-01", 0.1, 40000), s1], AccountingMethod.FIFO, [record]);
+
+    const warning = result.warnings.find((w) => w.includes("could not be applied"));
+    expect(warning).toBeDefined();
+    expect(warning).toContain("Edit Lots");
+    expect(warning).toContain("no longer exist or were modified");
+  });
+});

@@ -6,6 +6,7 @@ import { exportForm8949PDF } from "../lib/pdf-export";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod, TransactionType } from "../lib/types";
 import { SaleRecord } from "../lib/models";
+import { getUnassignedTransfers, getWalletMismatchSales, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
 import { computeCarryforward } from "../lib/carryforward";
 import { saveTextFile, saveBinaryFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
@@ -17,38 +18,24 @@ export function TaxReportView() {
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
   // Count unassigned TransferIn transactions (no sourceWallet)
-  const unassignedTransferCount = useMemo(() => {
-    return allTransactions.filter(
-      (t) => t.transactionType === TransactionType.TransferIn && !t.sourceWallet
-    ).length;
-  }, [allTransactions]);
+  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(allTransactions).length, [allTransactions]);
 
   // Count wallet mismatches for the selected year
-  const walletMismatchCount = useMemo(() => {
-    return result.sales.filter(
-      (s) => s.walletMismatch && new Date(s.saleDate).getFullYear() === selectedYear
-    ).length;
-  }, [result.sales, selectedYear]);
+  const walletMismatchCount = useMemo(() => getWalletMismatchSales(result.sales, selectedYear).length, [result.sales, selectedYear]);
 
   // Batch optimize state
   const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number; walletMismatches: number } | null>(null);
   const [batchSaving, setBatchSaving] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Count unassigned sells/donations for optimize button
   const recordedByTxnId = useMemo(
     () => resolveRecordedSales(allTransactions, recordedSales),
     [recordedSales, allTransactions]
   );
-  const unassignedCount = useMemo(() => {
-    return allTransactions.filter((t) => {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
-      if (new Date(t.date).getFullYear() !== selectedYear) return false;
-      if (recordedByTxnId.has(t.id)) return false;
-      return true;
-    }).length;
-  }, [allTransactions, selectedYear, recordedByTxnId]);
+  const unassignedCount = useMemo(() => getOptimizableSells(allTransactions, recordedByTxnId, selectedYear).length, [allTransactions, selectedYear, recordedByTxnId]);
 
   const handleBatchOptimize = useCallback(() => {
     const { records, skipped, walletMismatches } = batchOptimizeSpecificId(allTransactions, recordedSales, selectedYear);
@@ -67,33 +54,40 @@ export function TaxReportView() {
   const handleBatchSave = useCallback(async () => {
     if (!batchOptimizeResult) return;
     setBatchSaving(true);
-    await state.recordSalesBatch(batchOptimizeResult.records);
-    setBatchSaving(false);
-    setBatchOptimizeResult(null);
+    setErrorMessage(null);
+    try {
+      await state.recordSalesBatch(batchOptimizeResult.records);
+      setBatchOptimizeResult(null);
+    } catch (err) {
+      setErrorMessage(`Failed to save optimized elections: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setBatchSaving(false);
+    }
   }, [batchOptimizeResult, state.recordSalesBatch]);
 
   // Count assigned Specific ID elections for the year (for clear all)
-  const assignedCount = useMemo(() => {
-    return allTransactions.filter((t) => {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
-      if (new Date(t.date).getFullYear() !== selectedYear) return false;
-      return recordedByTxnId.has(t.id);
-    }).length;
-  }, [allTransactions, selectedYear, recordedByTxnId]);
+  const assignedCount = useMemo(() => getAssignedSells(allTransactions, recordedByTxnId, selectedYear).length, [allTransactions, selectedYear, recordedByTxnId]);
 
   const handleClearAll = useCallback(async () => {
     setClearing(true);
-    const idsToDelete: string[] = [];
-    // Use transaction date (not record.saleDate) to match assignedCount filtering
-    for (const t of allTransactions) {
-      if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) continue;
-      if (new Date(t.date).getFullYear() !== selectedYear) continue;
-      const record = recordedByTxnId.get(t.id);
-      if (record) idsToDelete.push(record.id);
+    setErrorMessage(null);
+    try {
+      const idsToDelete: string[] = [];
+      // Use transaction date (not record.saleDate) to match assignedCount filtering
+      for (const t of allTransactions) {
+        if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) continue;
+        if (new Date(t.date).getFullYear() !== selectedYear) continue;
+        const record = recordedByTxnId.get(t.id);
+        if (record) idsToDelete.push(record.id);
+      }
+      await state.deleteSaleRecordsByIds(idsToDelete);
+      setShowClearConfirm(false);
+    } catch (err) {
+      setErrorMessage(`Failed to clear elections: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setShowClearConfirm(false);
+    } finally {
+      setClearing(false);
     }
-    await state.deleteSaleRecordsByIds(idsToDelete);
-    setClearing(false);
-    setShowClearConfirm(false);
   }, [allTransactions, recordedByTxnId, selectedYear, state.deleteSaleRecordsByIds]);
 
   // Filter sales to selected year — calculate() now handles Specific ID natively
@@ -165,6 +159,14 @@ export function TaxReportView() {
           </>
         }
       />
+
+      {/* Error banner */}
+      {errorMessage && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg mb-4 flex items-center gap-2">
+          <span>⚠️ {errorMessage}</span>
+          <button className="ml-auto text-xs underline" onClick={() => setErrorMessage(null)}>Dismiss</button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex items-center gap-6 mb-6">
@@ -482,9 +484,9 @@ export function TaxReportView() {
 
             <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
               <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale. Applying Specific ID to transactions that were already completed without a contemporaneous lot identification may not satisfy IRS requirements.
-              {selectedYear >= 2025
-                ? <span className="block mt-1"><strong>What to do:</strong> For {selectedYear} transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
-                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO for pre-2025 sales or consulting a tax professional.</span>
+              {selectedYear === 2025
+                ? <span className="block mt-1"><strong>What to do:</strong> For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
+                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO or consulting a tax professional.</span>
               }
             </div>
 
@@ -512,14 +514,18 @@ export function TaxReportView() {
                     {batchOptimizeResult.optimizedGainLoss >= 0 ? "+" : ""}{formatUSD(batchOptimizeResult.optimizedGainLoss)}
                   </span>
                 </div>
-                {batchOptimizeResult.fifoGainLoss !== batchOptimizeResult.optimizedGainLoss && (
-                  <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                    <span className="text-gray-500 font-medium">Estimated savings:</span>
-                    <span className="font-bold tabular-nums text-green-600">
-                      {formatUSD(batchOptimizeResult.fifoGainLoss - batchOptimizeResult.optimizedGainLoss)}
-                    </span>
-                  </div>
-                )}
+                {batchOptimizeResult.fifoGainLoss !== batchOptimizeResult.optimizedGainLoss && (() => {
+                  const savings = batchOptimizeResult.fifoGainLoss - batchOptimizeResult.optimizedGainLoss;
+                  const isPositive = savings > 0;
+                  return (
+                    <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                      <span className="text-gray-500 font-medium">{isPositive ? "Estimated savings:" : "Additional tax liability:"}</span>
+                      <span className={`font-bold tabular-nums ${isPositive ? "text-green-600" : "text-red-500"}`}>
+                        {isPositive ? formatUSD(savings) : `+${formatUSD(Math.abs(savings))}`}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

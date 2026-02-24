@@ -150,10 +150,12 @@ export function calculate(
         let lotSelections = recorded ? extractLotSelections(recorded, lots) : undefined;
         let effectiveMethod = recorded ? AccountingMethod.SpecificID : method;
 
-        // If recorded but lot matching failed (partial or total), fall back to current method with warning
+        // If recorded but lot matching failed (partial or total), fall back to current method with warning.
+        // This triggers when a Buy referenced by the election was edited or deleted.
         if (recorded && lotSelections === null) {
           warnings.push(
-            `Specific ID election for sale on ${formatDateShort(trans.date)} could not resolve lot IDs (legacy recording). Using ${method} as fallback.`
+            `Specific ID election for sale on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
+            `Using ${method} as fallback. To fix: open this sale in the Transactions view and re-assign lots using the Edit Lots button.`
           );
           lotSelections = undefined;
           effectiveMethod = method;
@@ -173,10 +175,12 @@ export function calculate(
         let lotSelections = recorded ? extractLotSelections(recorded, lots) : undefined;
         let effectiveMethod = recorded ? AccountingMethod.SpecificID : method;
 
-        // If recorded but lot matching failed (partial or total), fall back to current method with warning
+        // If recorded but lot matching failed (partial or total), fall back to current method with warning.
+        // This triggers when a Buy referenced by the election was edited or deleted.
         if (recorded && lotSelections === null) {
           warnings.push(
-            `Specific ID election for donation on ${formatDateShort(trans.date)} could not resolve lot IDs (legacy recording). Using ${method} as fallback.`
+            `Specific ID election for donation on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
+            `Using ${method} as fallback. To fix: open this donation in the Transactions view and re-assign lots using the Edit Lots button.`
           );
           lotSelections = undefined;
           effectiveMethod = method;
@@ -276,9 +280,13 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
 
   for (const d of recorded.lotDetails) {
     if (d.lotId) {
-      // New-style: has deterministic lotId
-      selections.push({ lotId: d.lotId, amountBTC: d.amountBTC });
-      usedLotIds.add(d.lotId);
+      // New-style: has deterministic lotId — verify lot still exists in current pool
+      if (currentLots && !currentLots.some((l) => l.id === d.lotId)) {
+        unmatchedCount++;
+      } else {
+        selections.push({ lotId: d.lotId, amountBTC: d.amountBTC });
+        usedLotIds.add(d.lotId);
+      }
     } else if (currentLots) {
       // Legacy migration: match by purchaseDate + costBasisPerBTC + exchange
       // These properties uniquely identify which Buy transaction (= lot) was used
@@ -441,7 +449,7 @@ export function batchOptimizeSpecificId(
     let isMismatch = false;
     if (walletNorm) {
       const filtered = available.filter(
-        (l) => (l.wallet || l.exchange || "").toLowerCase() === walletNorm
+        (l) => (l.wallet || l.exchange || "").trim().toLowerCase() === walletNorm
       );
       if (filtered.length > 0) {
         pool = filtered;
@@ -472,7 +480,7 @@ export function batchOptimizeSpecificId(
       txn.date
     );
 
-    if (!sim) {
+    if (!sim || sim.amountSold < txn.amountBTC - 1e-8) {
       failed.push(txn.id);
       skipped++;
       continue;
@@ -698,6 +706,7 @@ function processSale(
 
   return {
     id: crypto.randomUUID(),
+    sourceTransactionId: sale.id,
     saleDate: sale.date,
     amountSold,
     salePricePerBTC: isDonation ? 0 : sale.pricePerBTC,

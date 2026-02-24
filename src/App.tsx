@@ -18,6 +18,7 @@ import { TaxLossHarvestingView } from "./components/TaxLossHarvestingView";
 import { MultiYearDashboardView } from "./components/MultiYearDashboardView";
 import { LotMaturityView } from "./components/LotMaturityView";
 import { ReconciliationView } from "./components/ReconciliationView";
+import { ReviewView } from "./components/ReviewView";
 import { hasPIN, hasTOSAccepted } from "./lib/persistence";
 
 function AppContent() {
@@ -41,6 +42,7 @@ function AppContent() {
       case "import": return <ImportView />;
       case "transactions": return <TransactionsView />;
       case "holdings": return <HoldingsView />;
+      case "review": return <ReviewView />;
       case "taxReport": return <TaxReportView />;
       case "simulation": return <SimulationView />;
       case "addTransaction": return <AddTransactionView />;

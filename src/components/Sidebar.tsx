@@ -24,6 +24,7 @@ const navSections = [
   {
     title: "Tax",
     items: [
+      { id: "review", label: "Review", icon: "✅" },
       { id: "taxReport", label: "Tax Report", icon: "📄" },
       { id: "income", label: "Income", icon: "💰" },
       { id: "comparison", label: "Compare Methods", icon: "⚖️" },

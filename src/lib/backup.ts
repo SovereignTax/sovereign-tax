@@ -202,11 +202,11 @@ function validateBackupData(data: BackupData): void {
   }
 }
 
-/** Save backup as .sovereigntax file via native save dialog */
-export async function downloadBackup(bundle: EncryptedBackupBundle): Promise<void> {
+/** Save backup as .sovereigntax file via native save dialog. Returns true if saved, false if cancelled. */
+export async function downloadBackup(bundle: EncryptedBackupBundle): Promise<boolean> {
   const json = JSON.stringify(bundle);
   const dateStr = new Date().toISOString().split("T")[0];
-  await saveTextFile(json, {
+  return saveTextFile(json, {
     defaultPath: `sovereign-tax-backup-${dateStr}.sovereigntax`,
     filters: [{ name: "Sovereign Tax Backup", extensions: ["sovereigntax"] }],
   });

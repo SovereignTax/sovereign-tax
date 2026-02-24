@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAppState } from "../lib/app-state";
-import { calculate, daysBetween, simulateSale, isMoreThanOneYear } from "../lib/cost-basis";
+import { calculate, daysBetween, simulateSale, isMoreThanOneYear, LotSelection } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod } from "../lib/types";
 import { SaleRecord } from "../lib/models";
@@ -40,7 +40,10 @@ export function TaxLossHarvestingView() {
 
   const simulateHarvest = () => {
     if (!currentPrice || totalHarvestBTC <= 0) return;
-    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, AccountingMethod.FIFO);
+    // Build lot selections from the identified losing lots so the simulation
+    // sells exactly those lots, not FIFO across all lots (which would sell profitable lots first)
+    const lotSelections: LotSelection[] = losingLots.map((l) => ({ lotId: l.id, amountBTC: l.remainingBTC }));
+    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, AccountingMethod.SpecificID, lotSelections);
     if (sim) setHarvestResult(sim);
   };
 

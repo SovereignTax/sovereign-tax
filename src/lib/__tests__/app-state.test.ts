@@ -180,6 +180,29 @@ describe("isMaterialChange", () => {
     // sourceWallet is already undefined, clearing to undefined is no-op
     expect(isMaterialChange(txn, { sourceWallet: undefined } as any)).toBe(false);
   });
+
+  // ── Wallet normalization (case + whitespace) ──
+
+  it("returns false when wallet differs only in case", () => {
+    const txn = makeSell({ wallet: "Coinbase" });
+    expect(isMaterialChange(txn, { wallet: "coinbase" })).toBe(false);
+  });
+
+  it("returns false when wallet differs only in whitespace", () => {
+    const txn = makeSell({ wallet: "Coinbase" });
+    expect(isMaterialChange(txn, { wallet: "  Coinbase  " })).toBe(false);
+  });
+
+  it("returns false when sourceWallet differs only in case", () => {
+    const txn = makeSell();
+    (txn as any).sourceWallet = "Ledger Nano";
+    expect(isMaterialChange(txn, { sourceWallet: "ledger nano" } as any)).toBe(false);
+  });
+
+  it("returns true when wallet has a real change despite case difference", () => {
+    const txn = makeSell({ wallet: "Coinbase" });
+    expect(isMaterialChange(txn, { wallet: "Kraken" })).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════
@@ -535,7 +558,7 @@ describe("findStaleDownstreamRecords", () => {
 
   // ── Case-insensitive wallet matching ──
 
-  it("matches wallets case-insensitively", () => {
+  it("matches wallets case-insensitively (trim + lowercase)", () => {
     const transfer = makeTransferIn({ wallet: "LEDGER", sourceWallet: "coinbase" });
     const sell = createTransaction({
       date: new Date("2025-04-01T12:00:00").toISOString(),
@@ -675,5 +698,265 @@ describe("findStaleDownstreamRecords", () => {
       [record]
     );
     expect(staleIds).toContain(record.id);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// Buy edit/delete → Specific ID election invalidation
+// Tests the filtering logic used by deleteTransaction and updateTransaction
+// ═══════════════════════════════════════════════════════
+
+describe("Buy delete cascades to Specific ID elections", () => {
+  function makeBuy(overrides?: Partial<Parameters<typeof createTransaction>[0]>) {
+    return createTransaction({
+      date: new Date("2024-01-15T12:00:00").toISOString(),
+      transactionType: TransactionType.Buy,
+      amountBTC: 1.0,
+      pricePerBTC: 30000,
+      totalUSD: 30000,
+      exchange: "Coinbase",
+      wallet: "Coinbase",
+      notes: "",
+      ...overrides,
+    });
+  }
+
+  function makeSaleRecordWithLot(buyId: string, overrides?: Partial<SaleRecord>): SaleRecord {
+    return {
+      id: crypto.randomUUID(),
+      saleDate: new Date("2024-06-15T12:00:00").toISOString(),
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: buyId,
+        purchaseDate: "2024-01-15T12:00:00.000Z",
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 152,
+        exchange: "Coinbase",
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 152,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: crypto.randomUUID(),
+      ...overrides,
+    };
+  }
+
+  // Simulates the filtering logic from deleteTransaction's Buy cascade block
+  function simulateDeleteCascade(deletedId: string, deletedType: string, allSales: SaleRecord[]): SaleRecord[] {
+    if (deletedType !== TransactionType.Buy && deletedType !== TransactionType.TransferIn) return allSales;
+    const staleSaleIds = allSales
+      .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === deletedId))
+      .map((s) => s.id);
+    if (staleSaleIds.length === 0) return allSales;
+    const staleSet = new Set(staleSaleIds);
+    return allSales.filter((s) => !staleSet.has(s.id));
+  }
+
+  it("removes Specific ID elections referencing deleted Buy", () => {
+    const b1 = makeBuy();
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Buy, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("removes ALL elections referencing the same deleted Buy", () => {
+    const b1 = makeBuy();
+    const r1 = makeSaleRecordWithLot(b1.id);
+    const r2 = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Buy, [r1, r2]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("only removes elections referencing the deleted Buy, leaves others intact", () => {
+    const b1 = makeBuy();
+    const b2 = makeBuy({ date: new Date("2024-02-01T12:00:00").toISOString() });
+    const r1 = makeSaleRecordWithLot(b1.id);
+    const r2 = makeSaleRecordWithLot(b2.id);
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Buy, [r1, r2]);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe(r2.id);
+  });
+
+  it("does NOT remove FIFO sale records when Buy is deleted", () => {
+    const b1 = makeBuy();
+    const fifoRecord = makeSaleRecordWithLot(b1.id, { method: AccountingMethod.FIFO });
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Buy, [fifoRecord]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("does NOT cascade for Sell deletions (only Buy/TransferIn)", () => {
+    const b1 = makeBuy();
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Sell, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("cascades for TransferIn deletions", () => {
+    const ti = createTransaction({
+      date: new Date("2024-01-15T12:00:00").toISOString(),
+      transactionType: TransactionType.TransferIn,
+      amountBTC: 1.0,
+      pricePerBTC: 0,
+      totalUSD: 0,
+      exchange: "Ledger",
+      wallet: "Ledger",
+      notes: "",
+    });
+    const record = makeSaleRecordWithLot(ti.id);
+    const remaining = simulateDeleteCascade(ti.id, TransactionType.TransferIn, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+});
+
+describe("Buy edit invalidates Specific ID elections", () => {
+  function makeBuy(overrides?: Partial<Parameters<typeof createTransaction>[0]>) {
+    return createTransaction({
+      date: new Date("2024-01-15T12:00:00").toISOString(),
+      transactionType: TransactionType.Buy,
+      amountBTC: 1.0,
+      pricePerBTC: 30000,
+      totalUSD: 30000,
+      exchange: "Coinbase",
+      wallet: "Coinbase",
+      notes: "",
+      ...overrides,
+    });
+  }
+
+  function makeSaleRecordWithLot(buyId: string, overrides?: Partial<SaleRecord>): SaleRecord {
+    return {
+      id: crypto.randomUUID(),
+      saleDate: new Date("2024-06-15T12:00:00").toISOString(),
+      amountSold: 0.5,
+      salePricePerBTC: 50000,
+      totalProceeds: 25000,
+      costBasis: 15000,
+      gainLoss: 10000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: buyId,
+        purchaseDate: "2024-01-15T12:00:00.000Z",
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 152,
+        exchange: "Coinbase",
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 152,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: crypto.randomUUID(),
+      ...overrides,
+    };
+  }
+
+  // Simulates the Buy edit invalidation logic from updateTransaction
+  function simulateBuyEditInvalidation(
+    original: ReturnType<typeof createTransaction>,
+    updates: Partial<Omit<ReturnType<typeof createTransaction>, "id">>,
+    allSales: SaleRecord[]
+  ): SaleRecord[] {
+    if (original.transactionType !== TransactionType.Buy) return allSales;
+    const btcDecreased = updates.amountBTC !== undefined && Math.round(updates.amountBTC * 1e8) < Math.round(original.amountBTC * 1e8);
+    const walletChanged = updates.wallet !== undefined && updates.wallet !== original.wallet;
+    const typeChanged = updates.transactionType !== undefined && updates.transactionType !== TransactionType.Buy;
+    if (!btcDecreased && !walletChanged && !typeChanged) return allSales;
+    const staleSaleIds = allSales
+      .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === original.id))
+      .map((s) => s.id);
+    if (staleSaleIds.length === 0) return allSales;
+    const staleSet = new Set(staleSaleIds);
+    return allSales.filter((s) => !staleSet.has(s.id));
+  }
+
+  // ── Invalidating changes ──
+
+  it("invalidates elections when Buy amount is decreased", () => {
+    const b1 = makeBuy({ amountBTC: 1.0 });
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { amountBTC: 0.8 }, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("invalidates elections when Buy wallet changes", () => {
+    const b1 = makeBuy({ wallet: "Coinbase" });
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { wallet: "Ledger" }, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("invalidates elections when Buy type changes away from Buy", () => {
+    const b1 = makeBuy();
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { transactionType: TransactionType.TransferIn }, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  // ── Non-invalidating changes ──
+
+  it("does NOT invalidate when Buy price changes", () => {
+    const b1 = makeBuy({ pricePerBTC: 30000 });
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { pricePerBTC: 31000 }, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("does NOT invalidate when Buy date changes", () => {
+    const b1 = makeBuy();
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { date: new Date("2024-01-20T12:00:00").toISOString() }, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("does NOT invalidate when Buy notes change", () => {
+    const b1 = makeBuy();
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { notes: "updated note" } as any, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("does NOT invalidate when Buy amount INCREASES", () => {
+    const b1 = makeBuy({ amountBTC: 1.0 });
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { amountBTC: 1.5 }, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  it("does NOT invalidate when Buy exchange changes (non-material for lots)", () => {
+    const b1 = makeBuy({ exchange: "Coinbase" });
+    const record = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { exchange: "Kraken" } as any, [record]);
+    expect(remaining).toHaveLength(1);
+  });
+
+  // ── Selective invalidation ──
+
+  it("only invalidates elections referencing the edited Buy", () => {
+    const b1 = makeBuy();
+    const b2 = makeBuy({ date: new Date("2024-02-01T12:00:00").toISOString() });
+    const r1 = makeSaleRecordWithLot(b1.id);
+    const r2 = makeSaleRecordWithLot(b2.id);
+    const remaining = simulateBuyEditInvalidation(b1, { amountBTC: 0.5 }, [r1, r2]);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).toBe(r2.id);
+  });
+
+  it("invalidates ALL elections referencing the same edited Buy", () => {
+    const b1 = makeBuy();
+    const r1 = makeSaleRecordWithLot(b1.id);
+    const r2 = makeSaleRecordWithLot(b1.id);
+    const remaining = simulateBuyEditInvalidation(b1, { wallet: "Ledger" }, [r1, r2]);
+    expect(remaining).toHaveLength(0);
   });
 });
