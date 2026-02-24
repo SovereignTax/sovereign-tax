@@ -1,8 +1,8 @@
 {
-  "latest": "1.3.7",
+  "latest": "1.4.0",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-22",
-  "notes": "Specific ID management overhaul: Edit Lots, Optimize All batch, Compare Methods rewrite, 3 rounds of audit fixes. 317 automated tests passing.",
+  "releaseDate": "2026-02-24",
+  "notes": "Review View guided tax prep, transfer-aware lot re-tagging, source wallet suggestions, Buy/TransferIn edit invalidation, 8 audit rounds. 409 automated tests passing.",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",

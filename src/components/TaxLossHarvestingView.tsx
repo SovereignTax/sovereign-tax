@@ -7,8 +7,9 @@ import { SaleRecord } from "../lib/models";
 import { HelpPanel } from "./HelpPanel";
 
 export function TaxLossHarvestingView() {
-  const { allTransactions, selectedYear, setSelectedYear, availableYears, priceState, fetchPrice, recordedSales } = useAppState();
+  const { allTransactions, selectedYear, setSelectedYear, availableYears, priceState, fetchPrice, recordedSales, availableWallets } = useAppState();
   const [harvestResult, setHarvestResult] = useState<SaleRecord | null>(null);
+  const [selectedWallet, setSelectedWallet] = useState("");
 
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
   const currentPrice = priceState.currentPrice;
@@ -16,7 +17,15 @@ export function TaxLossHarvestingView() {
   const lotsWithGL = useMemo(() => {
     if (!currentPrice) return [];
     return result.lots
-      .filter((l) => l.remainingBTC > 0)
+      .filter((l) => {
+        if (l.remainingBTC <= 0) return false;
+        // Per-wallet filter (IRS Treasury Reg. §1.1012-1(j))
+        if (selectedWallet) {
+          const lotWallet = (l.wallet || l.exchange || "").trim().toLowerCase();
+          if (lotWallet !== selectedWallet.trim().toLowerCase()) return false;
+        }
+        return true;
+      })
       .map((lot) => {
         const currentValue = lot.remainingBTC * currentPrice;
         const costBasisPerBTC = lot.totalCost / lot.amountBTC; // Fee-inclusive cost basis
@@ -27,7 +36,7 @@ export function TaxLossHarvestingView() {
         return { ...lot, currentValue, costBasis, unrealizedGL, daysHeld, isLongTerm: isMoreThanOneYear(lot.purchaseDate, now) };
       })
       .sort((a, b) => a.unrealizedGL - b.unrealizedGL); // Biggest losses first
-  }, [result.lots, currentPrice]);
+  }, [result.lots, currentPrice, selectedWallet]);
 
   const losingLots = lotsWithGL.filter((l) => l.unrealizedGL < 0);
   const totalHarvestable = losingLots.reduce((a, l) => a + l.unrealizedGL, 0);
@@ -43,7 +52,8 @@ export function TaxLossHarvestingView() {
     // Build lot selections from the identified losing lots so the simulation
     // sells exactly those lots, not FIFO across all lots (which would sell profitable lots first)
     const lotSelections: LotSelection[] = losingLots.map((l) => ({ lotId: l.id, amountBTC: l.remainingBTC }));
-    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, AccountingMethod.SpecificID, lotSelections);
+    const wallet = selectedWallet || undefined;
+    const sim = simulateSale(totalHarvestBTC, currentPrice, result.lots, AccountingMethod.SpecificID, lotSelections, wallet);
     if (sim) setHarvestResult(sim);
   };
 
@@ -68,7 +78,23 @@ export function TaxLossHarvestingView() {
         <select className="select" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
           {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
+        {availableWallets.length > 1 && (
+          <>
+            <span className="text-gray-500 ml-4">Wallet:</span>
+            <select className="select" value={selectedWallet} onChange={(e) => { setSelectedWallet(e.target.value); setHarvestResult(null); }}>
+              <option value="">All Wallets</option>
+              {availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+          </>
+        )}
       </div>
+
+      {availableWallets.length > 1 && !selectedWallet && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-3 rounded-lg mb-6 flex items-start gap-2">
+          <span>&#9888;&#65039;</span>
+          <span>IRS per-wallet rules (Treasury Reg. §1.1012-1(j), effective 2025) require that sales come from lots in the same wallet. Select a specific wallet above to see per-wallet harvest opportunities. Actual sales must be recorded per-wallet.</span>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">

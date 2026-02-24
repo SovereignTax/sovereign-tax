@@ -13,7 +13,7 @@ export function HoldingsView() {
 
   const activeLots = result.lots.filter((l) => {
     if (l.remainingBTC <= 0) return false;
-    if (selectedWallet && (l.wallet || l.exchange) !== selectedWallet) return false;
+    if (selectedWallet && (l.wallet || l.exchange || "").trim().toLowerCase() !== selectedWallet.trim().toLowerCase()) return false;
     return true;
   });
   const totalBTC = activeLots.reduce((a, l) => a + l.remainingBTC, 0);
