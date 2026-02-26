@@ -351,11 +351,29 @@ export function ReviewView() {
       {/* Source Wallet Assignment Modal */}
       {assigningSourceWallet && transactions.find((t) => t.id === assigningSourceWallet) && (() => {
         const modalTxn = transactions.find((t) => t.id === assigningSourceWallet)!;
+        const transferDate = new Date(modalTxn.date).getTime();
+        // Only show wallets that had Buy or TransferIn activity before this transfer's date
+        const priorWallets = new Set<string>();
+        for (const t of allTransactions) {
+          if ((t.transactionType === TransactionType.Buy || t.transactionType === TransactionType.TransferIn) && new Date(t.date).getTime() <= transferDate) {
+            const w = t.wallet || t.exchange;
+            if (w) priorWallets.add(w);
+          }
+        }
+        const filteredWallets = availableWallets.filter((w) => priorWallets.has(w));
+        // Point-in-time balances: only lots from transactions before the transfer date
+        const priorBalances = new Map<string, number>();
+        for (const lot of calcResult.lots) {
+          if (lot.remainingBTC <= 0) continue;
+          if (new Date(lot.purchaseDate).getTime() > transferDate) continue;
+          const w = lot.wallet || lot.exchange;
+          if (w) priorBalances.set(w, (priorBalances.get(w) || 0) + lot.remainingBTC);
+        }
         return (
           <SourceWalletModal
             txn={modalTxn}
-            availableWallets={availableWallets}
-            walletBalances={walletBalances}
+            availableWallets={filteredWallets}
+            walletBalances={priorBalances}
             suggestion={suggestSourceWallet(modalTxn, allTransactions)}
             onSave={async (sourceWallet) => {
               await updateTransaction(assigningSourceWallet, { sourceWallet: sourceWallet || undefined });

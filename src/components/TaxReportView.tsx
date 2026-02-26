@@ -274,17 +274,22 @@ export function TaxReportView() {
             </div>
           </div>
 
-          {/* Capital Loss Carryforward Info */}
+          {/* Capital Loss / Carryforward Info */}
           {(() => {
             const cf = computeCarryforward(stGL, ltGL);
             if (cf.netGainLoss >= 0) return null;
+            const hasCarryforward = cf.carryforwardAmount < 0;
             return (
               <div className="card mb-6 border-l-4 border-l-orange-500">
-                <h3 className="font-semibold mb-2">Capital Loss Carryforward</h3>
+                <h3 className="font-semibold mb-2">{hasCarryforward ? "Capital Loss Carryforward" : "Capital Loss Deduction"}</h3>
                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  <p>Your net capital loss of <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span> exceeds the <span className="font-medium">{formatUSD(-3000)}</span> annual deduction limit.</p>
-                  {cf.carryforwardAmount < 0 && (
-                    <p>You may deduct <span className="font-medium">{formatUSD(cf.deductibleLoss)}</span> this year and carry forward <span className="font-medium text-orange-500">{formatUSD(cf.carryforwardAmount)}</span> to future tax years.</p>
+                  {hasCarryforward ? (
+                    <>
+                      <p>Your net capital loss of <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span> exceeds the <span className="font-medium">{formatUSD(-3000)}</span> annual deduction limit.</p>
+                      <p>You may deduct <span className="font-medium">{formatUSD(cf.deductibleLoss)}</span> this year and carry forward <span className="font-medium text-orange-500">{formatUSD(cf.carryforwardAmount)}</span> to future tax years.</p>
+                    </>
+                  ) : (
+                    <p>Your net capital loss of <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span> is fully deductible this year against ordinary income (up to the {formatUSD(-3000)} annual limit).</p>
                   )}
                   <p className="text-xs text-gray-500 mt-2">
                     If you have capital loss carryforward from prior years, consult IRS Form 1040 Schedule D instructions.

@@ -103,6 +103,7 @@ export function AddTransactionView() {
     if (!amount || amount <= 0) { setError("Enter a valid BTC amount to preview"); return; }
 
     if (isSpecificID) {
+      if (!wallet) { setError("Select a wallet before choosing lots — IRS rules require per-wallet lot identification"); return; }
       // Show lot picker for manual selection
       setUsingSavedSelections(false);
       setShowLotPicker(true);
@@ -281,7 +282,7 @@ export function AddTransactionView() {
           <div className="flex items-center gap-4">
             <span className="w-24 text-right text-gray-500">Wallet:</span>
             <select className="select w-48" value={wallet} onChange={(e) => { setWallet(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }}>
-              <option value="">All Wallets</option>
+              <option value="">{isSpecificID ? "— Select Wallet —" : "All Wallets"}</option>
               {state.availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
             </select>
             <span className="text-xs text-gray-400">Filter lots to a specific wallet/exchange</span>
