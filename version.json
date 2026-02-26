@@ -1,8 +1,8 @@
 {
-  "latest": "1.4.0",
+  "latest": "1.4.1",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-24",
-  "notes": "Review View guided tax prep, transfer-aware lot re-tagging, source wallet suggestions, Buy/TransferIn edit invalidation, 8 audit rounds. 409 automated tests passing.",
+  "releaseDate": "2026-02-26",
+  "notes": "Cross-exchange duplicate detection, smarter CSV column matching (keyword fallback), wallet in Form 8949 descriptions, Lot Assignments view. 416 automated tests passing.",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
     "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",

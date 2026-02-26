@@ -347,6 +347,69 @@ describe("detectColumns", () => {
     const mapping = detectColumns(headers);
     expect(mapping.amount).toBe("Asset Amount");
   });
+
+  it("detects dual-column with Received Amount / Sent Amount", () => {
+    const headers = ["Date", "Sent Amount", "Sent Currency", "Received Amount", "Received Currency", "Fee Amount", "Fee Currency", "Tag"];
+    const mapping = detectColumns(headers);
+    expect(mapping.date).toBe("Date");
+    expect(mapping.type).toBe("Tag");
+    expect(mapping.receivedQuantity).toBe("Received Amount");
+    expect(mapping.receivedCurrency).toBe("Received Currency");
+    expect(mapping.sentQuantity).toBe("Sent Amount");
+    expect(mapping.sentCurrency).toBe("Sent Currency");
+    expect(mapping.fee).toBe("Fee Amount");
+  });
+
+  it("detects new variations: created_at, vol, proceeds, tx_type", () => {
+    const headers = ["created_at", "tx_type", "vol", "fill price", "proceeds", "commission"];
+    const mapping = detectColumns(headers);
+    expect(mapping.date).toBe("created_at");
+    expect(mapping.type).toBe("tx_type");
+    expect(mapping.amount).toBe("vol");
+    expect(mapping.price).toBe("fill price");
+    expect(mapping.total).toBe("proceeds");
+    expect(mapping.fee).toBe("commission");
+  });
+
+  it("keyword fallback detects 'Transaction Date (UTC)' as date", () => {
+    const headers = ["Transaction Date (UTC)", "BTC Quantity", "USD Price", "Total USD"];
+    const mapping = detectColumns(headers);
+    expect(mapping.date).toBe("Transaction Date (UTC)");
+  });
+
+  it("keyword fallback detects 'BTC Amount' variants", () => {
+    const headers = ["Date", "Crypto Amount (BTC)", "USD Spot Price", "Total"];
+    const mapping = detectColumns(headers);
+    // "Crypto Amount (BTC)" doesn't exactly match any variation, but keyword fallback catches it
+    expect(mapping.amount).toBe("Crypto Amount (BTC)");
+  });
+
+  it("keyword fallback does not steal claimed headers", () => {
+    // "Fee Amount" should match fee (exact), keyword fallback should NOT also match it as amount
+    const headers = ["Date", "Quantity Transacted", "Price", "Fee Amount"];
+    const mapping = detectColumns(headers);
+    expect(mapping.fee).toBe("Fee Amount");
+    expect(mapping.amount).toBe("Quantity Transacted");
+  });
+
+  it("detects Kraken-style headers", () => {
+    const headers = ["time", "type", "vol", "cost", "fee"];
+    const mapping = detectColumns(headers);
+    expect(mapping.date).toBe("time");
+    expect(mapping.type).toBe("type");
+    expect(mapping.amount).toBe("vol");
+    expect(mapping.total).toBe("cost");
+    expect(mapping.fee).toBe("fee");
+  });
+
+  it("detects Bisq-style 'Amount in BTC'", () => {
+    const headers = ["Date/Time", "Offer Type", "Amount in BTC", "Price", "Trading Fee"];
+    const mapping = detectColumns(headers);
+    expect(mapping.date).toBe("Date/Time");
+    expect(mapping.amount).toBe("Amount in BTC");
+    expect(mapping.price).toBe("Price");
+    expect(mapping.fee).toBe("Trading Fee");
+  });
 });
 
 // ═══════════════════════════════════════════════════════

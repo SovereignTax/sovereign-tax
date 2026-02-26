@@ -21,6 +21,12 @@ function formatUSD(value: number): string {
   }).format(value);
 }
 
+/** Form 8949 description: "0.50000000 BTC (Coinbase)" — includes wallet for audit trail */
+function formatPropertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
+  const walletName = detail.wallet || detail.exchange;
+  return walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
+}
+
 /** Export Form 8949 compatible CSV — splits lot details by term, not sales */
 export function exportForm8949CSV(
   sales: SaleRecord[],
@@ -77,7 +83,7 @@ export function exportForm8949CSV(
       }
       const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
       lines.push(
-        `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
+        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );
       stProceeds += proceeds;
       stBasis += detail.totalCost;
@@ -112,7 +118,7 @@ export function exportForm8949CSV(
       }
       const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
       lines.push(
-        `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
+        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
       );
       ltProceeds += proceeds;
       ltBasis += detail.totalCost;
@@ -156,7 +162,7 @@ export function exportLegacyCSV(sales: SaleRecord[], walletMismatchCount?: numbe
         [
           formatDate(sale.saleDate),
           formatDate(detail.purchaseDate),
-          `${formatBTC(detail.amountBTC)} BTC`,
+          `${formatPropertyDescription(detail.amountBTC, detail)}`,
           formatCSVDecimal(proceeds),
           formatCSVDecimal(detail.totalCost),
           sale.fee ? formatCSVDecimal(sale.fee) : "0.00",
@@ -228,7 +234,7 @@ export function exportTurboTaxTXF(sales: SaleRecord[], year: number, walletMisma
       lines.push(`N${typeCode}`);
       lines.push(`C1`);
       lines.push(`L1`);
-      lines.push(`P${formatBTC(detail.amountBTC)} BTC`);
+      lines.push(`P${formatPropertyDescription(detail.amountBTC, detail)}`);
       lines.push(`D${formatDate(detail.purchaseDate)}`);
       lines.push(`D${formatDate(sale.saleDate)}`);
       lines.push(`$${formatCSVDecimal(detail.totalCost)}`);
@@ -252,7 +258,7 @@ export function exportTurboTaxCSV(sales: SaleRecord[], year: number, walletMisma
     for (const detail of sale.lotDetails) {
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       lines.push(
-        `${formatBTC(detail.amountBTC)} BTC,${formatDate(detail.purchaseDate)},${formatCSVDecimal(detail.totalCost)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)}`
+        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatCSVDecimal(detail.totalCost)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)}`
       );
     }
   }
@@ -380,7 +386,7 @@ export function exportForm8283CSV(
       const lotFMV = lot.amountBTC * donation.fmvPerBTC;
       lines.push(
         [
-          `${formatBTC(lot.amountBTC)} BTC`,
+          `${formatPropertyDescription(lot.amountBTC, { exchange: donation.exchange })}`,
           formatDate(lot.purchaseDate),
           formatDate(donation.date),
           formatCSVDecimal(lot.costBasis),

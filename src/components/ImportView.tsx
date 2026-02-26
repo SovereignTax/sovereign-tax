@@ -4,6 +4,8 @@ import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash 
 import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 import { saveTextFile } from "../lib/file-save";
+import { partitionLooseDuplicates } from "../lib/utils";
+import { Transaction } from "../lib/models";
 import { HelpPanel } from "./HelpPanel";
 
 type ImportStatus = { type: "success"; count: number; skipped: number; duplicates: number; nonBtcSkipped: number } | { type: "error"; message: string };
@@ -19,6 +21,11 @@ export function ImportView() {
   const [pendingContent, setPendingContent] = useState<string | null>(null);
   const [pendingFileName, setPendingFileName] = useState<string | null>(null);
   const [defaultType, setDefaultType] = useState<TransactionType>(TransactionType.Buy);
+  const [dupeWarning, setDupeWarning] = useState<{
+    total: number; matchCount: number;
+    allTxns: Transaction[]; nonMatching: Transaction[];
+    skippedRows: number;
+  } | null>(null);
 
   const processFile = useCallback(async (content: string, fileName: string) => {
     setPendingContent(content);
@@ -107,15 +114,40 @@ export function ImportView() {
       return;
     }
 
-    const dedup = await state.addTransactionsDeduped(result.transactions);
-    setImportStatus({ type: "success", count: dedup.added, skipped: result.skippedRows.length, duplicates: dedup.duplicates, nonBtcSkipped: 0 });
+    // Cross-exchange duplicate check: warn if incoming transactions match existing ones
+    // by date + type + amount, even if the wallet/exchange name is different.
+    const { matchCount, nonMatching } = partitionLooseDuplicates(state.allTransactions, result.transactions);
+    if (matchCount > 0) {
+      // Show inline warning — user picks Import All, Skip Matches, or Cancel
+      setDupeWarning({
+        total: result.transactions.length,
+        matchCount,
+        allTxns: result.transactions,
+        nonMatching,
+        skippedRows: result.skippedRows.length,
+      });
+      return;
+    }
+
+    // No duplicates — import directly
+    await doImport(result.transactions, result.skippedRows.length);
+  }, [pendingContent, mapping, exchangeName, defaultType, state, pendingFileName]);
+
+  /** Shared import finalization — called after duplicate resolution (or when no dupes found). */
+  const doImport = useCallback(async (txns: Transaction[], skippedRows: number) => {
+    const dedup = await state.addTransactionsDeduped(txns);
+    setImportStatus({ type: "success", count: dedup.added, skipped: skippedRows, duplicates: dedup.duplicates, nonBtcSkipped: 0 });
 
     // Record import
-    const hash = await computeHash(pendingContent);
-    await state.recordImport(hash, pendingFileName || "unknown.csv", dedup.added);
+    if (pendingContent) {
+      const hash = await computeHash(pendingContent);
+      await state.recordImport(hash, pendingFileName || "unknown.csv", dedup.added);
+    }
 
     // Save mapping
+    const exchange = exchangeName.trim();
     if (exchange) {
+      const finalMapping = { ...mapping };
       const mappings = await state.loadMappings();
       mappings[exchange] = finalMapping;
       await state.saveMappings(mappings);
@@ -124,7 +156,8 @@ export function ImportView() {
     setPendingContent(null);
     setPendingFileName(null);
     setShowMapping(false);
-  }, [pendingContent, mapping, exchangeName, defaultType, state, pendingFileName]);
+    setDupeWarning(null);
+  }, [state, pendingContent, pendingFileName, exchangeName, mapping]);
 
   const updateMapping = (key: keyof ColumnMapping, value: string | null) => {
     setMapping((m) => ({ ...m, [key]: value || undefined }));
@@ -232,21 +265,56 @@ export function ImportView() {
             tooltip="Buy or Sell (or Send/Receive for transfers)"
             value={mapping.type} field="type" headers={detectedHeaders} onChange={updateMapping}
           />
-          <MappingRow
-            label="Amount *"
-            tooltip="The BTC quantity — how much Bitcoin, not the dollar value"
-            value={mapping.amount} field="amount" headers={detectedHeaders} onChange={updateMapping}
-          />
-          <MappingRow
-            label="Price"
-            tooltip="The USD price of one Bitcoin at the time of the transaction"
-            value={mapping.price} field="price" headers={detectedHeaders} onChange={updateMapping}
-          />
-          <MappingRow
-            label="Total"
-            tooltip="The total USD value of the transaction (Amount × Price)"
-            value={mapping.total} field="total" headers={detectedHeaders} onChange={updateMapping}
-          />
+
+          {isDualColumn(mapping) ? (
+            <>
+              {/* Dual-column format: Sent/Received pairs instead of Amount/Price/Total */}
+              <div className="flex items-center gap-2 mt-2 mb-1 px-1">
+                <span className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Dual-column format detected</span>
+                <span className="text-xs text-gray-400">— BTC amount and USD value are derived from Sent/Received columns</span>
+              </div>
+              <MappingRow
+                label="Recv Qty *"
+                tooltip="The received quantity (BTC for buys)"
+                value={mapping.receivedQuantity} field="receivedQuantity" headers={detectedHeaders} onChange={updateMapping}
+              />
+              <MappingRow
+                label="Recv Currency"
+                tooltip="The received currency (e.g., BTC, USD)"
+                value={mapping.receivedCurrency} field="receivedCurrency" headers={detectedHeaders} onChange={updateMapping}
+              />
+              <MappingRow
+                label="Sent Qty *"
+                tooltip="The sent quantity (USD for buys)"
+                value={mapping.sentQuantity} field="sentQuantity" headers={detectedHeaders} onChange={updateMapping}
+              />
+              <MappingRow
+                label="Sent Currency"
+                tooltip="The sent currency (e.g., USD, BTC)"
+                value={mapping.sentCurrency} field="sentCurrency" headers={detectedHeaders} onChange={updateMapping}
+              />
+            </>
+          ) : (
+            <>
+              {/* Standard format: Amount, Price, Total */}
+              <MappingRow
+                label="Amount *"
+                tooltip="The BTC quantity — how much Bitcoin, not the dollar value"
+                value={mapping.amount} field="amount" headers={detectedHeaders} onChange={updateMapping}
+              />
+              <MappingRow
+                label="Price"
+                tooltip="The USD price of one Bitcoin at the time of the transaction"
+                value={mapping.price} field="price" headers={detectedHeaders} onChange={updateMapping}
+              />
+              <MappingRow
+                label="Total"
+                tooltip="The total USD value of the transaction (Amount × Price)"
+                value={mapping.total} field="total" headers={detectedHeaders} onChange={updateMapping}
+              />
+            </>
+          )}
+
           <MappingRow
             label="Fee"
             tooltip="Trading fees or commissions charged (optional — defaults to zero)"
@@ -325,6 +393,45 @@ export function ImportView() {
           {!exchangeName.trim() && (
             <p className="text-xs text-orange-500 mt-2">Enter an exchange name above to enable import.</p>
           )}
+        </div>
+      )}
+
+      {/* Cross-exchange duplicate warning */}
+      {dupeWarning && (
+        <div className="p-4 rounded-lg mb-6 bg-orange-50 dark:bg-orange-900/20 border border-orange-300 dark:border-orange-700">
+          <div className="flex items-start gap-2 mb-3">
+            <span className="text-orange-500 text-lg leading-none mt-0.5">⚠️</span>
+            <div>
+              <p className="font-semibold text-orange-600 dark:text-orange-400">
+                Possible duplicate import detected
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {dupeWarning.matchCount} of {dupeWarning.total} transactions match existing records by date, type,
+                and amount — but under a different exchange/wallet name. This usually means the same data was
+                already imported under a different name.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 ml-7">
+            <button
+              className="btn-primary text-sm px-4 py-2"
+              onClick={async () => { await doImport(dupeWarning.nonMatching, dupeWarning.skippedRows); }}
+            >
+              Skip Matches ({dupeWarning.nonMatching.length} new)
+            </button>
+            <button
+              className="btn-secondary text-sm px-4 py-2"
+              onClick={async () => { await doImport(dupeWarning.allTxns, dupeWarning.skippedRows); }}
+            >
+              Import All ({dupeWarning.total})
+            </button>
+            <button
+              className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 px-3 py-2"
+              onClick={() => { setDupeWarning(null); }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -419,16 +526,27 @@ function DataPreview({ content, headers, mapping }: {
   const headerIndex: Record<string, number> = {};
   parsedHeaders.forEach((h, i) => { headerIndex[h] = i; });
 
-  // Define which columns to show
-  const previewCols: { label: string; key: keyof ColumnMapping; isUSD: boolean }[] = [
-    { label: "Date", key: "date", isUSD: false },
-    { label: "Type", key: "type", isUSD: false },
-    { label: "Amount", key: "amount", isUSD: false },
-    { label: "Price", key: "price", isUSD: true },
-    { label: "Total", key: "total", isUSD: true },
-    { label: "Fee", key: "fee", isUSD: true },
-    { label: "Notes", key: "notes", isUSD: false },
-  ];
+  // Define which columns to show — switches between standard and dual-column layout
+  const isDual = isDualColumn(mapping);
+  const previewCols: { label: string; key: keyof ColumnMapping; isUSD: boolean }[] = isDual
+    ? [
+        { label: "Date", key: "date", isUSD: false },
+        { label: "Type", key: "type", isUSD: false },
+        { label: "Recv Qty", key: "receivedQuantity", isUSD: false },
+        { label: "Recv Cur", key: "receivedCurrency", isUSD: false },
+        { label: "Sent Qty", key: "sentQuantity", isUSD: false },
+        { label: "Sent Cur", key: "sentCurrency", isUSD: false },
+        { label: "Fee", key: "fee", isUSD: true },
+      ]
+    : [
+        { label: "Date", key: "date", isUSD: false },
+        { label: "Type", key: "type", isUSD: false },
+        { label: "Amount", key: "amount", isUSD: false },
+        { label: "Price", key: "price", isUSD: true },
+        { label: "Total", key: "total", isUSD: true },
+        { label: "Fee", key: "fee", isUSD: true },
+        { label: "Notes", key: "notes", isUSD: false },
+      ];
 
   const activeCols = previewCols.filter((c) => mapping[c.key]);
 

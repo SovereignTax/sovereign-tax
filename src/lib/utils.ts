@@ -76,3 +76,31 @@ export function transactionNaturalKey(t: { date: string; transactionType: string
   const walletKey = t.wallet ? `|${t.wallet.toLowerCase()}` : "";
   return `${dateStr}|${t.transactionType}|${amount}|${t.exchange.toLowerCase()}${walletKey}`;
 }
+
+/** Wallet-agnostic key for cross-exchange duplicate detection.
+ *  Matches on date + type + amount only — catches re-imports under a different exchange name. */
+export function transactionLooseKey(t: { date: string; transactionType: string; amountBTC: number }): string {
+  const d = new Date(t.date);
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const amount = t.amountBTC.toFixed(8);
+  return `${dateStr}|${t.transactionType}|${amount}`;
+}
+
+/** Partition incoming transactions into loose-key matches and non-matches.
+ *  Returns the count of potential cross-exchange duplicates and the filtered non-matching list. */
+export function partitionLooseDuplicates<T extends { date: string; transactionType: string; amountBTC: number }>(
+  existing: { date: string; transactionType: string; amountBTC: number }[],
+  incoming: T[]
+): { matchCount: number; nonMatching: T[] } {
+  const existingKeys = new Set(existing.map(transactionLooseKey));
+  const nonMatching: T[] = [];
+  let matchCount = 0;
+  for (const t of incoming) {
+    if (existingKeys.has(transactionLooseKey(t))) {
+      matchCount++;
+    } else {
+      nonMatching.push(t);
+    }
+  }
+  return { matchCount, nonMatching };
+}

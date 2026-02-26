@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { useAppState } from "../lib/app-state";
 import { reconcileTransfers, MatchConfidence, TransferPair, daysBetweenDates } from "../lib/reconciliation";
-import { formatBTC, formatDate } from "../lib/utils";
+import { calculate } from "../lib/cost-basis";
+import { formatBTC, formatUSD, formatDate } from "../lib/utils";
 import { Transaction } from "../lib/models";
+import { AccountingMethod } from "../lib/types";
 import { HelpPanel } from "./HelpPanel";
 
 export function ReconciliationView() {
-  const { allTransactions, setSelectedNav } = useAppState();
+  const { allTransactions, recordedSales, selectedYear, availableYears, setSelectedYear, setSelectedNav } = useAppState();
 
   const result = useMemo(() => reconcileTransfers(allTransactions), [allTransactions]);
 
@@ -18,6 +20,26 @@ export function ReconciliationView() {
   const [manualMatches, setManualMatches] = useState<TransferPair[]>([]);
   const [selectedOutId, setSelectedOutId] = useState<string | null>(null);
   const [selectedInId, setSelectedInId] = useState<string | null>(null);
+
+  // Lot assignments: compute from calculate() result, scoped to selectedYear
+  const calcResult = useMemo(
+    () => calculate(allTransactions, AccountingMethod.FIFO, recordedSales),
+    [allTransactions, recordedSales]
+  );
+  const txnById = useMemo(() => {
+    const map = new Map<string, Transaction>();
+    for (const t of allTransactions) map.set(t.id, t);
+    return map;
+  }, [allTransactions]);
+  const salesForYear = useMemo(
+    () => calcResult.sales.filter((s) => !s.isDonation && new Date(s.saleDate).getFullYear() === selectedYear),
+    [calcResult.sales, selectedYear]
+  );
+  const donationsForYear = useMemo(
+    () => calcResult.sales.filter((s) => s.isDonation && new Date(s.saleDate).getFullYear() === selectedYear),
+    [calcResult.sales, selectedYear]
+  );
+  const [expandedSaleIdx, setExpandedSaleIdx] = useState<number | null>(null);
 
   // Split auto-matched pairs by confidence
   const confidentPairs = result.matchedTransfers.filter((p) => p.confidence === MatchConfidence.Confident);
@@ -309,6 +331,112 @@ export function ReconciliationView() {
           )}
         </div>
       )}
+
+      {/* Lot Assignments — shows which lots were consumed by each sale */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Lot Assignments ({salesForYear.length + donationsForYear.length})</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Year:</span>
+            <select className="select text-sm py-1 px-2" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+              {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Click a row to see which purchase lots were used to calculate cost basis for each sale or donation.
+        </p>
+
+        {salesForYear.length === 0 && donationsForYear.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">No dispositions in {selectedYear}</p>
+        ) : (
+          <div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 text-xs font-semibold text-gray-500 pb-2 border-b border-gray-200 dark:border-gray-700 px-2">
+              <div>Sale / Donation</div>
+              <div className="text-right">BTC</div>
+              <div className="text-right">Proceeds</div>
+              <div className="text-right">Cost Basis</div>
+              <div className="text-right">Gain / Loss</div>
+              <div className="text-right w-16">Method</div>
+            </div>
+
+            {[...salesForYear, ...donationsForYear].map((sale, idx) => {
+              const txn = sale.sourceTransactionId ? txnById.get(sale.sourceTransactionId) : undefined;
+              const saleWallet = txn?.wallet || txn?.exchange || "";
+              const isExpanded = expandedSaleIdx === idx;
+              return (
+                <div key={sale.id || idx}>
+                  {/* Sale summary row */}
+                  <div
+                    className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 py-2.5 px-2 text-sm cursor-pointer rounded transition-colors ${isExpanded ? "bg-orange-50 dark:bg-orange-900/10" : "hover:bg-gray-50 dark:hover:bg-zinc-800/50"} border-b border-gray-100 dark:border-gray-800`}
+                    onClick={() => setExpandedSaleIdx(isExpanded ? null : idx)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`text-xs transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                      <span className={`badge text-[10px] ${sale.isDonation ? "badge-purple" : "badge-orange"}`}>
+                        {sale.isDonation ? "Donation" : "Sell"}
+                      </span>
+                      <span className="text-xs text-gray-500">{formatDate(sale.saleDate)}</span>
+                      {saleWallet && <span className="text-xs text-gray-400 truncate">{saleWallet}</span>}
+                      {sale.walletMismatch && <span className="text-yellow-500 text-xs" title="Wallet mismatch — lots came from a different wallet">⚠️</span>}
+                    </div>
+                    <div className="text-right tabular-nums">{formatBTC(sale.amountSold)}</div>
+                    <div className="text-right tabular-nums">{sale.isDonation ? "—" : formatUSD(sale.totalProceeds)}</div>
+                    <div className="text-right tabular-nums">{formatUSD(sale.costBasis)}</div>
+                    <div className={`text-right tabular-nums font-medium ${sale.isDonation ? "text-gray-400" : sale.gainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
+                      {sale.isDonation ? "—" : formatUSD(sale.gainLoss)}
+                    </div>
+                    <div className="text-right w-16">
+                      <span className={`badge text-[10px] ${sale.method === AccountingMethod.SpecificID ? "badge-blue" : "badge-gray"}`}>
+                        {sale.method === AccountingMethod.SpecificID ? "Specific ID" : "FIFO"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Expanded lot details */}
+                  {isExpanded && sale.lotDetails.length > 0 && (
+                    <div className="ml-6 mr-2 mb-2 border-l-2 border-orange-200 dark:border-orange-800 pl-3">
+                      <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 text-[10px] font-semibold text-gray-400 py-1">
+                        <div>Source Lot</div>
+                        <div className="text-right">BTC Used</div>
+                        <div className="text-right">Cost Basis</div>
+                        <div className="text-right">Days Held</div>
+                        <div className="text-right">Term</div>
+                      </div>
+                      {sale.lotDetails.map((lot, li) => (
+                        <div key={lot.id || li} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 py-1.5 text-xs border-b border-gray-50 dark:border-gray-800/50 ${lot.isLongTerm ? "bg-green-50/30 dark:bg-green-900/5" : "bg-orange-50/30 dark:bg-orange-900/5"}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-gray-400">↳</span>
+                            <span className="text-gray-500">{formatDate(lot.purchaseDate)}</span>
+                            <span className="text-gray-400 truncate">{lot.wallet || lot.exchange}</span>
+                            <span className="text-gray-300 tabular-nums">@{formatUSD(lot.costBasisPerBTC)}/BTC</span>
+                          </div>
+                          <div className="text-right tabular-nums">{formatBTC(lot.amountBTC)}</div>
+                          <div className="text-right tabular-nums">{formatUSD(lot.totalCost)}</div>
+                          <div className="text-right tabular-nums text-gray-500">{lot.daysHeld}d</div>
+                          <div className="text-right">
+                            <span className={`badge text-[10px] ${lot.isLongTerm ? "badge-green" : "badge-orange"}`}>
+                              {lot.isLongTerm ? "Long" : "Short"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex justify-end gap-4 pt-1.5 text-[10px] text-gray-400">
+                        <span>{sale.lotDetails.length} lot{sale.lotDetails.length !== 1 ? "s" : ""} consumed</span>
+                        <span>Total cost basis: {formatUSD(sale.costBasis)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {isExpanded && sale.lotDetails.length === 0 && (
+                    <div className="ml-6 mr-2 mb-2 py-2 text-xs text-gray-400 italic">No lot details recorded for this sale</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Suggestions */}
       {result.suggestedMissing.length > 0 && (

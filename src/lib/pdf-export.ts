@@ -11,6 +11,12 @@ function formatBTC(value: number): string {
   return value.toFixed(8);
 }
 
+/** Form 8949 description: "0.50000000 BTC (Coinbase)" — includes wallet for audit trail */
+function formatPropertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
+  const walletName = detail.wallet || detail.exchange;
+  return walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
+}
+
 function formatUSD(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -224,7 +230,7 @@ function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][]
       const feeShare = sale.fee ? sale.fee * (termBTC / totalBTC) : 0;
       const termDetailCount = sale.lotDetails.filter((d) => d.isLongTerm === longTermOnly).length;
       rows.push([
-        `${formatBTC(detail.amountBTC)} BTC`,
+        `${formatPropertyDescription(detail.amountBTC, detail)}`,
         formatDate(detail.purchaseDate),
         formatDate(sale.saleDate),
         formatUSD(proceeds),

@@ -15,38 +15,105 @@ export interface CSVImportResult {
 
 // Column name variations for auto-detection
 const columnVariations: Record<string, string[]> = {
-  date: ["date", "timestamp", "time", "datetime", "transaction date", "trade date", "created at"],
-  type: ["type", "transaction type", "side", "trade type", "action", "transaction_type", "tag"],
+  date: [
+    "date", "timestamp", "time", "datetime", "transaction date", "trade date",
+    "created at", "created_at", "confirmed at", "date and time", "date/time",
+    "order date", "execution date", "settlement date",
+  ],
+  type: [
+    "type", "transaction type", "side", "trade type", "action", "transaction_type",
+    "tag", "tx_type", "trade_type", "order type", "ordertype", "offer type",
+    "disposition type", "category",
+  ],
   amount: [
     "amount", "quantity", "size", "btc amount", "bitcoin", "btc", "volume",
     "asset amount", "net amount", "quantity transacted",
     "amount (btc)", "amount btc", "quantity (btc)",
+    "amount in btc", "btc quantity", "vol", "crypto amount", "coin amount",
+    "asset quantity", "bitcoin amount",
   ],
   price: [
     "price", "price per btc", "rate", "unit price", "btc price", "price usd",
     "spot price", "asset price", "price at transaction",
     "spot price at transaction", "usd spot price at transaction",
     "price (usd)", "price (btc)", "unit price (usd)",
+    "fill price", "executed price", "execution price", "market price",
+    "price per coin", "spot price currency",
   ],
   total: [
     "total", "total usd", "usd total", "value", "total value", "subtotal",
     "total (inclusive of fees and/or spread)", "usd amount",
     "usd total (inclusive of fees)", "usd subtotal",
-    "total (usd)",
+    "total (usd)", "proceeds", "net proceeds", "cost", "cost basis",
+    "usd value", "notional", "notional value", "executed value",
+    "amount usd", "amount (usd)", "total cost",
   ],
   fee: [
     "fee", "fees", "commission", "spread", "trading fee", "transaction fee",
     "fee amount", "fee (usd)", "fee usd", "total fee",
-    "fees and/or spread",
+    "fees and/or spread", "trading fee (usd)", "network fee", "mining fee",
+    "gas fee", "fee (btc)",
   ],
   wallet: ["wallet", "wallet name", "sub-account", "sub account"],
   exchange: ["exchange", "source", "platform", "venue", "account", "portfolio"],
-  notes: ["notes", "description", "memo", "comment", "specification"],
-  asset: ["asset", "asset type", "symbol", "size unit", "product"],
+  notes: [
+    "notes", "description", "memo", "comment", "specification",
+    "order id", "trade id", "transaction id", "tx id",
+  ],
+  asset: [
+    "asset", "asset type", "symbol", "size unit", "product",
+    "cryptocurrency", "coin type", "coin", "currency", "crypto",
+    "digital asset", "asset name",
+  ],
   receivedQuantity: ["received quantity", "received amount"],
   receivedCurrency: ["received currency"],
   sentQuantity: ["sent quantity", "sent amount"],
   sentCurrency: ["sent currency"],
+};
+
+// Keyword rules for fallback detection (Pass 5).
+// Each rule: field name → array of keyword patterns.
+// A pattern is { must: words the header must contain ALL of, not?: words it must NOT contain }.
+// Only used for fields still unmapped after exact-match passes.
+const keywordFallbacks: Record<string, { must: string[]; not?: string[] }[]> = {
+  date: [
+    { must: ["date"] },
+    { must: ["timestamp"] },
+  ],
+  type: [
+    { must: ["type"], not: ["asset", "coin", "currency", "fee"] },
+    { must: ["side"] },
+  ],
+  amount: [
+    { must: ["amount", "btc"] },
+    { must: ["amount", "bitcoin"] },
+    { must: ["amount", "crypto"] },
+    { must: ["quantity", "btc"] },
+    { must: ["quantity", "bitcoin"] },
+    { must: ["quantity", "crypto"] },
+    { must: ["btc", "amount"] },
+    { must: ["vol"] },
+  ],
+  price: [
+    { must: ["price"], not: ["total"] },
+    { must: ["rate"], not: ["fee"] },
+  ],
+  total: [
+    { must: ["total"], not: ["fee"] },
+    { must: ["proceeds"] },
+    { must: ["amount", "usd"] },
+    { must: ["value", "usd"] },
+    { must: ["cost"], not: ["fee"] },
+  ],
+  fee: [
+    { must: ["fee"] },
+    { must: ["commission"] },
+  ],
+  notes: [
+    { must: ["note"] },
+    { must: ["description"] },
+    { must: ["memo"] },
+  ],
 };
 
 // Date formats
@@ -276,6 +343,43 @@ export function detectColumns(headers: string[]): ColumnMapping {
         }
         break;
       }
+    }
+  }
+
+  // Pass 5: Keyword-based fallback for fields still unmapped after exact matching.
+  // Only considers headers not already claimed by another field.
+  const claimedHeaders = new Set(
+    Object.values(mapping).filter(Boolean).map((v) => (v as string).toLowerCase().trim())
+  );
+
+  for (const [field, patterns] of Object.entries(keywordFallbacks)) {
+    const mappedKey = field as keyof ColumnMapping;
+    if (mapping[mappedKey]) continue; // Already mapped by an earlier pass
+
+    for (const pattern of patterns) {
+      let matched = false;
+      for (let i = 0; i < headers.length; i++) {
+        const lower = headersLower[i];
+        if (claimedHeaders.has(lower)) continue; // Header already used
+
+        const hasAll = pattern.must.every((kw) => lower.includes(kw));
+        const hasNone = !pattern.not || pattern.not.every((kw) => !lower.includes(kw));
+        if (hasAll && hasNone) {
+          switch (field) {
+            case "date": mapping.date = headers[i]; break;
+            case "type": mapping.type = headers[i]; break;
+            case "amount": mapping.amount = headers[i]; break;
+            case "price": mapping.price = headers[i]; break;
+            case "total": mapping.total = headers[i]; break;
+            case "fee": mapping.fee = headers[i]; break;
+            case "notes": mapping.notes = headers[i]; break;
+          }
+          claimedHeaders.add(lower);
+          matched = true;
+          break;
+        }
+      }
+      if (matched) break;
     }
   }
 
