@@ -117,6 +117,8 @@ interface AppStateContextType {
   setSelectedWallet: (wallet: string | null) => void;
   livePriceEnabled: boolean;
   setLivePriceEnabled: (enabled: boolean) => void;
+  priorCarryforward: number;
+  setPriorCarryforward: (amount: number) => void;
 
   // Session-only: saved lot selections from Simulation
   savedLotSelections: SavedLotSelections | null;
@@ -191,6 +193,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [privacyBlur, setPrivacyBlur] = useState(prefs.privacyBlur ?? false);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(prefs.selectedWallet ?? null);
   const [livePriceEnabled, setLivePriceEnabled] = useState(prefs.livePriceEnabled ?? true);
+  const [priorCarryforward, setPriorCarryforward] = useState(prefs.priorCarryforward ?? 0);
   const [savedLotSelections, setSavedLotSelections] = useState<SavedLotSelections | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
 
@@ -210,8 +213,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       privacyBlur,
       selectedWallet,
       livePriceEnabled,
+      priorCarryforward,
     });
-  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled]);
+  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforward]);
 
   // Apply appearance mode — default to dark when System is selected
   useEffect(() => {
@@ -734,6 +738,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (p.privacyBlur !== undefined) setPrivacyBlur(p.privacyBlur ?? false);
       if (p.selectedWallet !== undefined) setSelectedWallet(p.selectedWallet ?? null);
       if (p.livePriceEnabled !== undefined) setLivePriceEnabled(p.livePriceEnabled ?? true);
+      if (p.priorCarryforward !== undefined) setPriorCarryforward(p.priorCarryforward ?? 0);
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -759,6 +764,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setSelectedWallet,
     livePriceEnabled,
     setLivePriceEnabled,
+    priorCarryforward,
+    setPriorCarryforward,
     savedLotSelections,
     setSavedLotSelections,
     isUnlocked,

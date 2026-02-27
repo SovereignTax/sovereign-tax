@@ -118,6 +118,33 @@ export function SettingsView() {
         </div>
       </div>
 
+      {/* Tax Settings */}
+      <div className="card mb-4">
+        <h3 className="font-semibold mb-3">📊 Tax Settings</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-gray-500">Prior-Year Capital Loss Carryforward</span>
+            <p className="text-xs text-gray-400">Loss amount carried forward from prior tax years (IRS Schedule D)</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-gray-500 text-sm">$</span>
+            <input
+              type="number"
+              className="input w-28 text-sm text-right tabular-nums"
+              value={state.priorCarryforward === 0 ? "" : Math.abs(state.priorCarryforward)}
+              onChange={(e) => {
+                const val = e.target.value;
+                state.setPriorCarryforward(val === "" ? 0 : -Math.abs(Number(val)));
+              }}
+              placeholder="0"
+              min="0"
+              step="1"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">Enter the total capital loss carryforward from your prior-year Schedule D. This is factored into the Tax Report's carryforward calculation.</p>
+      </div>
+
       {/* Data */}
       <div className="card mb-4">
         <h3 className="font-semibold mb-3">💾 Data</h3>

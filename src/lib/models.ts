@@ -99,6 +99,7 @@ export interface Preferences {
   privacyBlur?: boolean;
   selectedWallet?: string | null; // null = all wallets
   livePriceEnabled?: boolean; // true = fetch from CoinGecko, false = fully offline
+  priorCarryforward?: number; // Prior-year capital loss carryforward (negative number, USD)
 }
 
 export function createTransaction(params: Omit<Transaction, "id">): Transaction {
