@@ -74,7 +74,7 @@ h1 .accent {
 /* Download Cards */
 .download-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 16px;
   margin-bottom: 40px;
 }
@@ -436,6 +436,13 @@ h1 .accent {
         <span class="dl-btn">&#8595; Download .exe</span>
       </a>
 
+      <a href="downloads/SovereignTax-Linux.rpm" class="download-card">
+        <span class="platform-icon">&#128039;</span>
+        <span class="platform-name">Linux</span>
+        <span class="platform-detail">RPM (Fedora, RHEL, CentOS)</span>
+        <span class="dl-btn">&#8595; Download .rpm</span>
+      </a>
+
       <!-- Linux AppImage available but too large for Cloudflare Pages (79MB > 25MB limit)
       <a href="downloads/SovereignTax-Linux.AppImage" class="download-card">
         <span class="platform-icon">&#128039;</span>
@@ -463,7 +470,7 @@ h1 .accent {
 
       <div class="step-item">
         <span class="step-num">2</span>
-        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer.</span>
+        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer. On Linux, install the RPM package.</span>
       </div>
 
       <div class="step-item">
@@ -482,6 +489,13 @@ h1 .accent {
       <h4>&#63743; macOS Users</h4>
       <p>
         This app is signed and notarized by Apple. Double-click the DMG, drag Sovereign Tax to your Applications folder, and launch it. No extra steps required.
+      </p>
+    </div>
+
+    <div class="platform-note">
+      <h4>&#128039; Linux Users</h4>
+      <p>
+        Download the RPM package for Fedora, Red Hat, CentOS, and compatible distributions. Install with <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">sudo rpm -i SovereignTax-Linux.rpm</code> or use your system's package manager to open and install the file.
       </p>
     </div>
 

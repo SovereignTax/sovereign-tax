@@ -2,7 +2,7 @@
 # Sovereign Tax — Linux Build & Package
 # Usage: ./build-linux.sh
 # NOTE: Must be run on Linux (Ubuntu 22.04+ recommended). Cannot run on macOS.
-# Prerequisites: Node.js, Rust, libwebkit2gtk-4.1-dev, libappindicator3-dev, librsvg2-dev, patchelf
+# Prerequisites: Node.js, Rust, libwebkit2gtk-4.1-dev, libappindicator3-dev, librsvg2-dev, patchelf, rpm
 
 set -e
 
@@ -28,8 +28,8 @@ npx tauri build
 echo "  ✓ Build complete"
 echo ""
 
-# Step 3: Copy AppImage
-echo "[3/3] Packaging AppImage..."
+# Step 3: Package binaries
+echo "[3/3] Packaging AppImage, DEB, and RPM..."
 APPIMAGE_FILE=$(find "$BUNDLE_DIR" -name "*.AppImage" | head -n 1)
 
 if [ -z "$APPIMAGE_FILE" ]; then
@@ -38,27 +38,39 @@ if [ -z "$APPIMAGE_FILE" ]; then
   exit 1
 fi
 
-# Copy to output
+# Create versioned backup
+VERSION=$(date +%Y-%m-%d_%H%M)
+mkdir -p "$BUILDS_DIR/$VERSION"
+
+# Copy AppImage to output and backup
 if [ -d "$OUTPUT_DIR" ]; then
   cp "$APPIMAGE_FILE" "$OUTPUT_DIR/$APPIMAGE_NAME"
   echo "  → $OUTPUT_DIR/$APPIMAGE_NAME"
 fi
-
-# Create versioned backup
-VERSION=$(date +%Y-%m-%d_%H%M)
-mkdir -p "$BUILDS_DIR/$VERSION"
 cp "$APPIMAGE_FILE" "$BUILDS_DIR/$VERSION/$APPIMAGE_NAME"
 echo "  → $BUILDS_DIR/$VERSION/$APPIMAGE_NAME"
 
-# Also copy .deb if it was built
+# Copy DEB if built (backup only)
 DEB_FILE=$(find "src-tauri/target/release/bundle/deb" -name "*.deb" 2>/dev/null | head -n 1)
 if [ -n "$DEB_FILE" ]; then
   cp "$DEB_FILE" "$BUILDS_DIR/$VERSION/"
   echo "  → $BUILDS_DIR/$VERSION/$(basename "$DEB_FILE")"
 fi
 
+# Copy RPM if built (both output and backup)
+RPM_FILE=$(find "src-tauri/target/release/bundle/rpm" -name "*.rpm" 2>/dev/null | head -n 1)
+if [ -n "$RPM_FILE" ]; then
+  RPM_NAME="SovereignTax-Linux.rpm"
+  if [ -d "$OUTPUT_DIR" ]; then
+    cp "$RPM_FILE" "$OUTPUT_DIR/$RPM_NAME"
+    echo "  → $OUTPUT_DIR/$RPM_NAME"
+  fi
+  cp "$RPM_FILE" "$BUILDS_DIR/$VERSION/"
+  echo "  → $BUILDS_DIR/$VERSION/$(basename "$RPM_FILE")"
+fi
+
 echo ""
 echo "================================================"
-echo "  ✓ Done! AppImage ready for deployment."
+echo "  ✓ Done! Packages ready for deployment."
 echo "  Deploy cloudflare-package to go live."
 echo "================================================"
