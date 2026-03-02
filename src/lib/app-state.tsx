@@ -165,6 +165,10 @@ interface AppStateContextType {
   createBackup: (password: string) => Promise<boolean>;
   restoreBackup: (file: File, password?: string) => Promise<void>;
 
+  // Save error (shown as banner when filesystem/encryption save fails)
+  saveError: string | null;
+  clearSaveError: () => void;
+
   // Audit
   appendAuditLog: (action: AuditAction, details: string) => Promise<void>;
 }
@@ -196,6 +200,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [priorCarryforward, setPriorCarryforward] = useState(prefs.priorCarryforward ?? 0);
   const [savedLotSelections, setSavedLotSelections] = useState<SavedLotSelections | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [priceState, setPriceState] = useState<PriceState>({
     currentPrice: null,
@@ -249,12 +254,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const auditLogRef = useRef<AuditEntry[]>([]);
   useEffect(() => { auditLogRef.current = auditLog; }, [auditLog]);
 
-  // Audit log helper — appends and persists (awaits encryption)
+  // Audit log helper — appends and persists (awaits encryption).
+  // Rotates at 5000 entries to prevent unbounded growth.
+  const AUDIT_LOG_MAX = 5000;
   const appendAuditLog = useCallback(async (action: AuditAction, details: string) => {
     const entry = createAuditEntry(action, details);
-    const next = [...auditLogRef.current, entry];
+    let next = [...auditLogRef.current, entry];
+    if (next.length > AUDIT_LOG_MAX) {
+      next = next.slice(next.length - AUDIT_LOG_MAX);
+    }
     setAuditLog(next);
-    await persistence.saveAuditLog(next);
+    await guardedSave(() => persistence.saveAuditLog(next));
   }, []);
 
   /**
@@ -270,11 +280,34 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Derive AES-256-GCM key from PIN
-    const key = await deriveEncryptionKey(pin, encSalt);
+    let key = await deriveEncryptionKey(pin, encSalt);
     persistence.setEncryptionKey(key);
+
+    // Try loading data — if decrypt fails, check for previous salt (changePIN crash recovery)
+    try {
+      await persistence.loadTransactionsAsync();
+    } catch (e) {
+      if (e instanceof persistence.DecryptionError) {
+        const prevSalt = persistence.loadPrevEncryptionSalt();
+        if (prevSalt) {
+          // Crash during changePIN — roll back to previous encryption salt
+          persistence.saveEncryptionSalt(prevSalt);
+          persistence.clearPrevEncryptionSalt();
+          key = await deriveEncryptionKey(pin, prevSalt);
+          persistence.setEncryptionKey(key);
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
 
     // Migrate any plaintext data to encrypted format
     await persistence.migrateToEncrypted();
+
+    // Migrate encrypted data from localStorage → filesystem (Tauri only, one-time)
+    await persistence.migrateToFilesystem();
 
     // Load decrypted data
     const txns = await persistence.loadTransactionsAsync();
@@ -292,7 +325,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const entry = createAuditEntry(AuditAction.AppUnlocked, "App unlocked");
     const updatedAudit = [...audit, entry];
     setAuditLog(updatedAudit);
-    await persistence.saveAuditLog(updatedAudit);
+    await guardedSave(() => persistence.saveAuditLog(updatedAudit));
   }, []);
 
   /**
@@ -308,29 +341,38 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const history = await persistence.loadImportHistoryAsync();
     const audit = await persistence.loadAuditLogAsync();
 
-    // 2. Save new PIN hash/salt (for authentication)
+    // 2. Save old encryption salt as backup (crash-safety: allows rollback if re-encrypt fails mid-way)
+    const oldEncSalt = persistence.loadEncryptionSalt();
+    if (oldEncSalt) {
+      persistence.savePrevEncryptionSalt(oldEncSalt);
+    }
+
+    // 3. Save new PIN hash/salt (for authentication)
     const pinSalt = generateSalt();
     const pinHash = await hashPINWithPBKDF2(newPin, pinSalt);
     persistence.savePINSalt(pinSalt);
     persistence.savePINHash(pinHash);
 
-    // 3. Generate new encryption salt and derive new encryption key
+    // 4. Generate new encryption salt and derive new encryption key
     const newEncSalt = generateSalt();
     persistence.saveEncryptionSalt(newEncSalt);
     const newKey = await deriveEncryptionKey(newPin, newEncSalt);
     persistence.setEncryptionKey(newKey);
 
-    // 4. Re-encrypt ALL data with the new key
+    // 5. Re-encrypt ALL data with the new key
     await persistence.saveTransactionsAsync(txns);
     await persistence.saveRecordedSalesAsync(sales);
     await persistence.saveMappingsAsync(mappings);
     await persistence.saveImportHistoryAsync(history);
 
-    // 5. Log PIN change and save audit with new key
+    // 6. Log PIN change and save audit with new key
     const entry = createAuditEntry(AuditAction.PINChanged, "PIN changed — data re-encrypted");
     const updatedAudit = [...audit, entry];
     await persistence.saveAuditLogAsync(updatedAudit);
     setAuditLog(updatedAudit);
+
+    // 7. Clear backup salt — re-encryption succeeded
+    persistence.clearPrevEncryptionSalt();
   }, []);
 
   const fetchPrice = useCallback(async () => {
@@ -385,12 +427,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { transactionsRef.current = transactions; }, [transactions]);
   useEffect(() => { recordedSalesRef.current = recordedSales; }, [recordedSales]);
 
+  /** Wrap async save calls to catch errors and surface them via saveError banner.
+   *  State is already updated in memory — the banner warns that persistence may have failed. */
+  const guardedSave = async (fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save data";
+      console.error("Save error:", e);
+      setSaveError(msg);
+    }
+  };
+
+  const clearSaveError = useCallback(() => setSaveError(null), []);
+
   // Actions — all save operations now await encryption before returning
   const addTransactions = useCallback(async (txns: Transaction[]) => {
     const next = [...transactionsRef.current, ...txns];
     setTransactions(next);
     transactionsRef.current = next;
-    await persistence.saveTransactions(next);
+    await guardedSave(() => persistence.saveTransactions(next));
     await appendAuditLog(AuditAction.TransactionImport, `Imported ${txns.length} transactions`);
   }, [appendAuditLog]);
 
@@ -405,7 +461,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const next = [...prev, ...unique];
         setTransactions(next);
         transactionsRef.current = next;
-        await persistence.saveTransactions(next);
+        await guardedSave(() => persistence.saveTransactions(next));
       }
       if (added > 0) {
         await appendAuditLog(AuditAction.TransactionImport, `Imported ${added} transactions (${duplicates} duplicates skipped)`);
@@ -419,7 +475,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = [...transactionsRef.current, txn];
     setTransactions(next);
     transactionsRef.current = next;
-    await persistence.saveTransactions(next);
+    await guardedSave(() => persistence.saveTransactions(next));
     await appendAuditLog(AuditAction.TransactionAdd, `Added ${txn.transactionType} of ${txn.amountBTC.toFixed(8)} BTC`);
   }, [appendAuditLog]);
 
@@ -429,7 +485,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = prev.filter((t) => t.id !== id);
     setTransactions(next);
     transactionsRef.current = next;
-    await persistence.saveTransactions(next);
+    await guardedSave(() => persistence.saveTransactions(next));
 
     // Cascade: remove any linked Specific ID SaleRecord to prevent orphaned entries.
     // Uses shared resolver for consistent matching (same logic as engine + UI).
@@ -440,7 +496,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const nextSales = prevSales.filter((s) => s.id !== linkedRecord.id);
       setRecordedSales(nextSales);
       recordedSalesRef.current = nextSales;
-      await persistence.saveRecordedSales(nextSales);
+      await guardedSave(() => persistence.saveRecordedSales(nextSales));
     }
 
     // Cascade: when a Buy (or TransferIn) is deleted, any Specific ID elections
@@ -455,7 +511,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const nextSales2 = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
         setRecordedSales(nextSales2);
         recordedSalesRef.current = nextSales2;
-        await persistence.saveRecordedSales(nextSales2);
+        await guardedSave(() => persistence.saveRecordedSales(nextSales2));
         await appendAuditLog(AuditAction.SaleRecorded,
           `Auto-removed ${staleSaleIds.length} Specific ID election(s) referencing deleted ${deleted.transactionType} lot. ` +
           `Affected sales will use FIFO until lots are re-assigned via Edit Lots.`
@@ -478,7 +534,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
     setTransactions(next);
     transactionsRef.current = next;
-    await persistence.saveTransactions(next);
+    await guardedSave(() => persistence.saveTransactions(next));
 
     // Invalidate linked Specific ID election only when material fields change.
     if (original && (original.transactionType === TransactionType.Sell || original.transactionType === TransactionType.Donation)) {
@@ -491,7 +547,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           const nextSales = recordedSalesRef.current.filter((s) => s.id !== linkedRecord.id);
           setRecordedSales(nextSales);
           recordedSalesRef.current = nextSales;
-          await persistence.saveRecordedSales(nextSales);
+          await guardedSave(() => persistence.saveRecordedSales(nextSales));
           await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed Specific ID election for edited transaction (${original.amountBTC.toFixed(8)} BTC)`);
         }
       }
@@ -506,7 +562,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const nextSales = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
         setRecordedSales(nextSales);
         recordedSalesRef.current = nextSales;
-        await persistence.saveRecordedSales(nextSales);
+        await guardedSave(() => persistence.saveRecordedSales(nextSales));
         await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${staleIds.length} downstream Specific ID election(s) after TransferIn edit`);
       }
     }
@@ -528,7 +584,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           const nextSales2 = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
           setRecordedSales(nextSales2);
           recordedSalesRef.current = nextSales2;
-          await persistence.saveRecordedSales(nextSales2);
+          await guardedSave(() => persistence.saveRecordedSales(nextSales2));
           await appendAuditLog(AuditAction.SaleRecorded,
             `Auto-removed ${staleSaleIds.length} Specific ID election(s) after Buy edit (lot eligibility changed). ` +
             `Affected sales will use FIFO until lots are re-assigned via Edit Lots.`
@@ -551,7 +607,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
     setTransactions(next);
     transactionsRef.current = next;
-    await persistence.saveTransactions(next);
+    await guardedSave(() => persistence.saveTransactions(next));
   }, []);
 
   const recordSaleAction = useCallback(async (sale: SaleRecord) => {
@@ -562,7 +618,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       : [...prev, sale];
     setRecordedSales(next);
     recordedSalesRef.current = next;
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     await appendAuditLog(AuditAction.SaleRecorded, `Recorded sale of ${sale.amountSold.toFixed(8)} BTC — G/L: $${sale.gainLoss.toFixed(2)}`);
   }, [appendAuditLog]);
 
@@ -573,7 +629,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = prev.filter((s) => s.sourceTransactionId !== sourceTransactionId);
     setRecordedSales(next);
     recordedSalesRef.current = next; // Sync ref immediately to prevent stale reads
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     if (toDelete) {
       await appendAuditLog(AuditAction.SaleRecorded, `Removed Specific ID lot election for sale of ${toDelete.amountSold.toFixed(8)} BTC on ${new Date(toDelete.saleDate).toLocaleDateString()}`);
     }
@@ -586,7 +642,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = [...prev.filter((s) => s.sourceTransactionId !== sourceTransactionId), newRecord];
     setRecordedSales(next);
     recordedSalesRef.current = next; // Sync ref immediately
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     await appendAuditLog(AuditAction.SaleRecorded, `Updated Specific ID lot election for sale of ${newRecord.amountSold.toFixed(8)} BTC — G/L: $${newRecord.gainLoss.toFixed(2)}`);
   }, [appendAuditLog]);
 
@@ -597,7 +653,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = prev.filter((s) => s.id !== saleRecordId);
     setRecordedSales(next);
     recordedSalesRef.current = next;
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     if (toDelete) {
       await appendAuditLog(AuditAction.SaleRecorded, `Reverted Specific ID lot election for sale of ${toDelete.amountSold.toFixed(8)} BTC on ${new Date(toDelete.saleDate).toLocaleDateString()}`);
     }
@@ -610,7 +666,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = [...prev.filter((s) => s.id !== saleRecordId), newRecord];
     setRecordedSales(next);
     recordedSalesRef.current = next;
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     await appendAuditLog(AuditAction.SaleRecorded, `Updated Specific ID lot election for sale of ${newRecord.amountSold.toFixed(8)} BTC — G/L: $${newRecord.gainLoss.toFixed(2)}`);
   }, [appendAuditLog]);
 
@@ -627,7 +683,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
     setRecordedSales(current);
     recordedSalesRef.current = current;
-    await persistence.saveRecordedSales(current);
+    await guardedSave(() => persistence.saveRecordedSales(current));
     await appendAuditLog(AuditAction.SaleRecorded, `Batch saved ${sales.length} Specific ID lot election${sales.length === 1 ? "" : "s"}`);
   }, [appendAuditLog]);
 
@@ -638,11 +694,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = prev.filter((s) => !idSet.has(s.id));
     setRecordedSales(next);
     recordedSalesRef.current = next;
-    await persistence.saveRecordedSales(next);
+    await guardedSave(() => persistence.saveRecordedSales(next));
     await appendAuditLog(AuditAction.SaleRecorded, `Batch removed ${ids.length} Specific ID lot election${ids.length === 1 ? "" : "s"}`);
   }, [appendAuditLog]);
 
   const clearAllData = useCallback(async () => {
+    // Log BEFORE clearing so the audit entry includes the current encryption key
+    await appendAuditLog(AuditAction.DataCleared, "All transaction data cleared");
     setTransactions([]);
     transactionsRef.current = [];
     setRecordedSales([]);
@@ -650,8 +708,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setImportHistory({});
     importHistoryRef.current = {};
     setSavedLotSelections(null);
-    persistence.clearAllData();
-    await appendAuditLog(AuditAction.DataCleared, "All transaction data cleared");
+    await guardedSave(() => persistence.clearAllData());
   }, [appendAuditLog]);
 
   const computeFileHash = useCallback(async (content: string) => {
@@ -678,13 +735,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const next = { ...importHistoryRef.current, [hash]: record };
       setImportHistory(next);
       importHistoryRef.current = next;
-      await persistence.saveImportHistory(next);
+      await guardedSave(() => persistence.saveImportHistory(next));
     },
     []
   );
 
   const saveMappingsAction = useCallback(async (mappings: Record<string, ColumnMapping>) => {
-    await persistence.saveMappings(mappings);
+    await guardedSave(() => persistence.saveMappings(mappings));
   }, []);
 
   const loadMappingsAction = useCallback(async () => {
@@ -715,7 +772,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const result = await parseBackupBundle(text, password);
 
     // Restore all data
-    await persistence.restoreAllData(result.data);
+    await guardedSave(() => persistence.restoreAllData(result.data));
 
     // Reload state — sync refs immediately so appendAuditLog reads from restored data
     setTransactions(result.data.transactions);
@@ -799,6 +856,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     loadMappings: loadMappingsAction,
     createBackup: createBackupAction,
     restoreBackup: restoreBackupAction,
+    saveError,
+    clearSaveError,
     appendAuditLog,
   };
 

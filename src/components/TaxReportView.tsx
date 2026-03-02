@@ -18,7 +18,7 @@ export function TaxReportView() {
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
   // Count unassigned TransferIn transactions (no sourceWallet)
-  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(allTransactions).length, [allTransactions]);
+  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(allTransactions, selectedYear).length, [allTransactions, selectedYear]);
 
   // Count wallet mismatches for the selected year
   const walletMismatchCount = useMemo(() => getWalletMismatchSales(result.sales, selectedYear).length, [result.sales, selectedYear]);

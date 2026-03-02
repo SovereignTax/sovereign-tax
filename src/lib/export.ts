@@ -3,6 +3,7 @@ import { AccountingMethod, AccountingMethodDisplayNames, IncomeTypeDisplayNames,
 
 function formatDate(isoDate: string): string {
   const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return "UNKNOWN";
   return d.toISOString().split("T")[0]; // yyyy-MM-dd
 }
 
@@ -21,10 +22,12 @@ function formatUSD(value: number): string {
   }).format(value);
 }
 
-/** Form 8949 description: "0.50000000 BTC (Coinbase)" — includes wallet for audit trail */
+/** Form 8949 description: "0.50000000 BTC (Coinbase)" — includes wallet for audit trail.
+ *  CSV-safe: wraps in quotes and escapes internal quotes so commas/quotes in exchange names don't break CSV parsing. */
 function formatPropertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
   const walletName = detail.wallet || detail.exchange;
-  return walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
+  const desc = walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
+  return `"${desc.replace(/"/g, '""')}"`;
 }
 
 /** Export Form 8949 compatible CSV — splits lot details by term, not sales */
@@ -284,7 +287,7 @@ export interface DonationSummaryItem {
   holdingPeriod: string; // "Short-term" or "Long-term" or "Mixed"
   exchange: string;
   notes: string;
-  lotDetails: { purchaseDate: string; amountBTC: number; costBasis: number; isLongTerm: boolean }[];
+  lotDetails: { purchaseDate: string; amountBTC: number; costBasis: number; isLongTerm: boolean; wallet?: string; exchange: string }[];
 }
 
 /**
@@ -352,6 +355,8 @@ export function buildDonationSummary(
         amountBTC: d.amountBTC,
         costBasis: d.totalCost,
         isLongTerm: d.isLongTerm,
+        wallet: d.wallet,
+        exchange: d.exchange,
       })),
     };
   });
@@ -386,7 +391,7 @@ export function exportForm8283CSV(
       const lotFMV = lot.amountBTC * donation.fmvPerBTC;
       lines.push(
         [
-          `${formatPropertyDescription(lot.amountBTC, { exchange: donation.exchange })}`,
+          `${formatPropertyDescription(lot.amountBTC, lot)}`,
           formatDate(lot.purchaseDate),
           formatDate(donation.date),
           formatCSVDecimal(lot.costBasis),

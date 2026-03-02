@@ -235,7 +235,7 @@ export function parseDecimal(str: string): number | null {
     .replace(/,/g, "")
     .replace(/\s*(BTC|XBT|USD|USDT|USDC|SAT|SATS)\s*$/i, "")
     .replace(/\s/g, "");
-  if (!cleaned) return 0;
+  if (!cleaned) return null;
   const num = Number(cleaned);
   return isNaN(num) ? null : num;
 }
@@ -373,6 +373,9 @@ export function detectColumns(headers: string[]): ColumnMapping {
             case "total": mapping.total = headers[i]; break;
             case "fee": mapping.fee = headers[i]; break;
             case "notes": mapping.notes = headers[i]; break;
+            case "exchange": mapping.exchange = headers[i]; break;
+            case "wallet": mapping.wallet = headers[i]; break;
+            case "asset": mapping.asset = headers[i]; break;
           }
           claimedHeaders.add(lower);
           matched = true;

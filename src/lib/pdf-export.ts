@@ -4,7 +4,9 @@ import { SaleRecord } from "./models";
 import { AccountingMethod, AccountingMethodDisplayNames } from "./types";
 
 function formatDate(isoDate: string): string {
-  return new Date(isoDate).toISOString().split("T")[0];
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return "UNKNOWN";
+  return d.toISOString().split("T")[0];
 }
 
 function formatBTC(value: number): string {
@@ -217,25 +219,29 @@ export function exportForm8949PDF(
 function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][] {
   const rows: string[][] = [];
   for (const sale of sales) {
-    for (const detail of sale.lotDetails) {
-      if (longTermOnly && !detail.isLongTerm) continue;
-      if (!longTermOnly && detail.isLongTerm) continue;
+    const termDetails = sale.lotDetails.filter((d) => longTermOnly ? d.isLongTerm : !d.isLongTerm);
+    if (termDetails.length === 0) continue;
+    // Apportion fee proportionally when sale has mixed-term lots
+    const termBTC = termDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const totalBTC = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const feeShare = sale.fee ? sale.fee * (termBTC / totalBTC) : 0;
+    let feeRemaining = feeShare;
+    for (let di = 0; di < termDetails.length; di++) {
+      const detail = termDetails[di];
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
-      // Apportion fee proportionally when sale has mixed-term lots
-      const termBTC = sale.lotDetails
-        .filter((d) => d.isLongTerm === longTermOnly)
-        .reduce((a, d) => a + d.amountBTC, 0);
-      const totalBTC = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
-      const feeShare = sale.fee ? sale.fee * (termBTC / totalBTC) : 0;
-      const termDetailCount = sale.lotDetails.filter((d) => d.isLongTerm === longTermOnly).length;
+      let lotFee = 0;
+      if (feeShare > 0) {
+        lotFee = di < termDetails.length - 1 ? Math.round((feeShare / termDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        feeRemaining -= lotFee;
+      }
       rows.push([
         `${formatPropertyDescription(detail.amountBTC, detail)}`,
         formatDate(detail.purchaseDate),
         formatDate(sale.saleDate),
         formatUSD(proceeds),
         formatUSD(detail.totalCost),
-        feeShare > 0 ? formatUSD(feeShare / termDetailCount) : "",
+        lotFee > 0 ? formatUSD(lotFee) : "",
         formatUSD(gainLoss),
       ]);
     }

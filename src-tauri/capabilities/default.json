@@ -24,7 +24,24 @@
         { "path": "$APPDATA/**" }
       ]
     },
-    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        { "path": "$APPDATA/**" }
+      ]
+    },
     {
       "identifier": "fs:allow-exists",
       "allow": [

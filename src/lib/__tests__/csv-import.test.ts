@@ -230,8 +230,8 @@ describe("parseDecimal", () => {
     expect(parseDecimal("-42.5")).toBe(-42.5);
   });
 
-  it("returns 0 for empty string", () => {
-    expect(parseDecimal("")).toBe(0);
+  it("returns null for empty string", () => {
+    expect(parseDecimal("")).toBeNull();
   });
 
   it("returns null for non-numeric", () => {

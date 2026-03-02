@@ -112,8 +112,8 @@ describe("exportForm8949CSV", () => {
     const csv = exportForm8949CSV([sale], 2024, AccountingMethod.FIFO);
     // Both sections should have entries
     const lines = csv.split("\n");
-    const shortTermLines = lines.filter((l) => l.startsWith("0.30000000 BTC"));
-    const longTermLines = lines.filter((l) => l.startsWith("0.20000000 BTC"));
+    const shortTermLines = lines.filter((l) => l.includes("0.30000000 BTC"));
+    const longTermLines = lines.filter((l) => l.includes("0.20000000 BTC"));
     expect(shortTermLines.length).toBeGreaterThanOrEqual(1);
     expect(longTermLines.length).toBeGreaterThanOrEqual(1);
   });
@@ -122,7 +122,7 @@ describe("exportForm8949CSV", () => {
     const sales = [makeSaleRecord(), makeDonationRecord()];
     const csv = exportForm8949CSV(sales, 2024, AccountingMethod.FIFO);
     // Only the regular sale should appear (0.5 BTC), not the donation (0.3 BTC)
-    const dataLines = csv.split("\n").filter((l) => l.match(/^\d+\.\d+ BTC/));
+    const dataLines = csv.split("\n").filter((l) => l.match(/^"?\d+\.\d+ BTC/));
     expect(dataLines).toHaveLength(1);
     expect(dataLines[0]).toContain("0.50000000 BTC");
   });
@@ -316,6 +316,7 @@ describe("exportForm8283CSV", () => {
             amountBTC: 0.3,
             costBasis: 12000,
             isLongTerm: false,
+            exchange: "Coinbase",
           },
         ],
       },

@@ -21,6 +21,23 @@ import { ReconciliationView } from "./components/ReconciliationView";
 import { ReviewView } from "./components/ReviewView";
 import { hasPIN, hasTOSAccepted } from "./lib/persistence";
 
+function SaveErrorBanner() {
+  const { saveError, clearSaveError } = useAppState();
+  if (!saveError) return null;
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-500/90 text-white text-sm shrink-0">
+      <span className="shrink-0">💾</span>
+      <span className="flex-1 truncate">Your data is safe in memory. We recommend creating a backup via Settings to keep a copy on disk.</span>
+      <button
+        onClick={clearSaveError}
+        className="shrink-0 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-xs font-medium transition-colors"
+      >
+        Got it
+      </button>
+    </div>
+  );
+}
+
 function AppContent() {
   const { isUnlocked, selectedNav } = useAppState();
   const [tosAccepted, setTosAccepted] = useState(() => hasTOSAccepted());
@@ -60,6 +77,7 @@ function AppContent() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
+      <SaveErrorBanner />
       {/* Help bar */}
       <div className="flex items-center justify-end px-4 py-1.5 border-b border-gray-200 dark:border-white/[0.06] bg-gray-50 dark:bg-white/[0.02] shrink-0">
         <a

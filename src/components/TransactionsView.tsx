@@ -61,7 +61,7 @@ export function TransactionsView() {
   const unassignedCount = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, state.selectedYear).length, [transactions, state.selectedYear, recordedByTxnId]);
 
   // Count unassigned TransferIn transactions (no sourceWallet set)
-  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(transactions).length, [transactions]);
+  const unassignedTransferCount = useMemo(() => getUnassignedTransfers(transactions, state.selectedYear).length, [transactions, state.selectedYear]);
 
   const filtered = useMemo(() => {
     let result = [...transactions];
@@ -188,14 +188,15 @@ export function TransactionsView() {
   }, [transactions, recordedByTxnId, state.selectedYear, state.deleteSaleRecordsByIds]);
 
   // Count Transfer In transactions with source wallet assigned (for clear assignments button)
-  const assignedTransferCount = useMemo(() => getAssignedTransferCount(transactions), [transactions]);
+  const assignedTransferCount = useMemo(() => getAssignedTransferCount(transactions, state.selectedYear), [transactions, state.selectedYear]);
 
   const handleClearAssignments = useCallback(async () => {
     setClearingAssignments(true);
     setErrorMessage(null);
     try {
+      const yearStr = String(state.selectedYear);
       const transferIns = transactions.filter(
-        (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet
+        (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet && t.date.startsWith(yearStr)
       );
       for (const t of transferIns) {
         await state.updateTransaction(t.id, { sourceWallet: undefined });
@@ -207,7 +208,7 @@ export function TransactionsView() {
     } finally {
       setClearingAssignments(false);
     }
-  }, [transactions, state.updateTransaction]);
+  }, [transactions, state.updateTransaction, state.selectedYear]);
 
   if (transactions.length === 0) {
     return (

@@ -219,13 +219,13 @@ export function calculate(
             if (remaining <= 0.00000001) break;
             const take = Math.min(lots[idx].remainingBTC, remaining);
 
-            if (Math.abs(take - lots[idx].remainingBTC) < 1e-10) {
+            if (Math.abs(take - lots[idx].remainingBTC) < 1e-8) {
               // Re-tag entire lot in place (avoids splitting)
               lots[idx].wallet = destWallet;
             } else {
               // Split: reduce original lot, create new re-tagged lot with the taken portion
               lots[idx].remainingBTC -= take;
-              if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-10) {
+              if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-8) {
                 lots[idx].remainingBTC = 0;
               }
               const retagged = createLot({
@@ -635,7 +635,7 @@ function processSale(
 
       lots[lotIdx].remainingBTC -= sellFromLot;
       // Epsilon snap: prevent IEEE 754 float drift from creating phantom lots
-      if (lots[lotIdx].remainingBTC > 0 && lots[lotIdx].remainingBTC < 1e-10) {
+      if (lots[lotIdx].remainingBTC > 0 && lots[lotIdx].remainingBTC < 1e-8) {
         lots[lotIdx].remainingBTC = 0;
       }
       remainingToSell -= sellFromLot;
@@ -674,7 +674,7 @@ function processSale(
 
       lots[idx].remainingBTC -= sellFromLot;
       // Epsilon snap: prevent IEEE 754 float drift from creating phantom lots
-      if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-10) {
+      if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-8) {
         lots[idx].remainingBTC = 0;
       }
       remainingToSell -= sellFromLot;
