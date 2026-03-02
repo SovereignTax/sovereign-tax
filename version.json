@@ -4,8 +4,8 @@
   "releaseDate": "2026-03-02",
   "notes": "Audit fixes: year-scoped transfer warnings, CSV-safe Form 8949 descriptions, robust date parsing, epsilon snap standardization, keyword fallback completeness. 455 automated tests passing.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
-    "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",
-    "linux": "https://sovereigntax.io/downloads/SovereignTax-Linux.deb"
+    "macos": "https://sovereigntax.io/downloads/1ce6cf58-a7cf-4532-be6e-729c8140d42d.dmg",
+    "windows": "https://sovereigntax.io/downloads/1a3dbb4e-7ea0-41e3-b471-99b745679e67.exe",
+    "linux": "https://sovereigntax.io/downloads/54665497-6e69-491e-ad5d-a605cbb0dbc2.deb"
   }
 }
