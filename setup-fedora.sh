@@ -76,7 +76,16 @@ CARGO_VERSION=$(cargo --version)
 echo "    $RUST_VERSION"
 echo "    $CARGO_VERSION"
 echo ""
+echo "install linux deploy"
+# Download and install linuxdeploy
+wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+chmod +x linuxdeploy-x86_64.AppImage
+sudo mv linuxdeploy-x86_64.AppImage /usr/local/bin/linuxdeploy
 
+# Also install linuxdeploy-plugin-appimage (often needed)
+wget https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+chmod +x linuxdeploy-plugin-appimage-x86_64.AppImage
+sudo mv linuxdeploy-plugin-appimage-x86_64.AppImage /usr/local/bin/linuxdeploy-plugin-appimage
 echo "================================================"
 echo "  ✓ All dependencies installed!"
 echo "================================================"
