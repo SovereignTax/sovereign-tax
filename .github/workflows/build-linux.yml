@@ -30,7 +30,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
 
       - name: Install frontend dependencies
         run: npm ci
@@ -50,6 +50,13 @@ jobs:
         with:
           name: sovereign-tax-linux-deb
           path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: warn
+
+      - name: Upload .rpm package
+        uses: actions/upload-artifact@v4
+        with:
+          name: sovereign-tax-linux-rpm
+          path: src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: warn
 
       - name: Upload standalone binary
