@@ -99,7 +99,11 @@ export interface Preferences {
   privacyBlur?: boolean;
   selectedWallet?: string | null; // null = all wallets
   livePriceEnabled?: boolean; // true = fetch from CoinGecko, false = fully offline
-  priorCarryforward?: number; // Prior-year capital loss carryforward (negative number, USD)
+  priorCarryforward?: number; // LEGACY — single combined carryforward (migrated to ST on first load)
+  priorCarryforwardST?: number; // Prior-year short-term capital loss carryforward (negative, USD)
+  priorCarryforwardLT?: number; // Prior-year long-term capital loss carryforward (negative, USD)
+  txnSortField?: string; // Transaction sort column (default: "date")
+  txnSortAsc?: boolean; // Transaction sort direction (default: true = ascending)
 }
 
 export function createTransaction(params: Omit<Transaction, "id">): Transaction {

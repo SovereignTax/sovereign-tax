@@ -276,21 +276,34 @@ export function TaxReportView() {
 
           {/* Capital Loss / Carryforward Info */}
           {(() => {
-            const cf = computeCarryforward(stGL, ltGL, state.priorCarryforward);
-            if (cf.netGainLoss >= 0 && state.priorCarryforward === 0) return null;
+            const cf = computeCarryforward(stGL, ltGL, state.priorCarryforwardST, state.priorCarryforwardLT);
+            const hasPriorCarryforward = state.priorCarryforwardST < 0 || state.priorCarryforwardLT < 0;
+            if (cf.netGainLoss >= 0 && !hasPriorCarryforward) return null;
             const hasCarryforward = cf.carryforwardAmount < 0;
             return (
               <div className="card mb-6 border-l-4 border-l-orange-500">
                 <h3 className="font-semibold mb-2">{hasCarryforward ? "Capital Loss Carryforward" : cf.netGainLoss < 0 ? "Capital Loss Deduction" : "Prior Carryforward Applied"}</h3>
                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  {state.priorCarryforward < 0 && (
-                    <p>Prior-year carryforward: <span className="font-medium text-orange-500">{formatUSD(state.priorCarryforward)}</span></p>
+                  {hasPriorCarryforward && (
+                    <>
+                      {state.priorCarryforwardST < 0 && (
+                        <p>Prior-year ST carryforward: <span className="font-medium text-orange-500">{formatUSD(state.priorCarryforwardST)}</span></p>
+                      )}
+                      {state.priorCarryforwardLT < 0 && (
+                        <p>Prior-year LT carryforward: <span className="font-medium text-orange-500">{formatUSD(state.priorCarryforwardLT)}</span></p>
+                      )}
+                    </>
                   )}
                   {cf.netGainLoss < 0 ? (
                     hasCarryforward ? (
                       <>
                         <p>Net capital loss (including prior carryforward): <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span></p>
                         <p>You may deduct <span className="font-medium">{formatUSD(cf.deductibleLoss)}</span> this year and carry forward <span className="font-medium text-orange-500">{formatUSD(cf.carryforwardAmount)}</span> to future tax years.</p>
+                        {(cf.carryforwardST < 0 || cf.carryforwardLT < 0) && (
+                          <p className="text-xs text-gray-500">
+                            Next year: ST carryforward {formatUSD(cf.carryforwardST)}, LT carryforward {formatUSD(cf.carryforwardLT)}
+                          </p>
+                        )}
                       </>
                     ) : (
                       <p>Your net capital loss of <span className="font-medium text-red-500">{formatUSD(cf.netGainLoss)}</span> is fully deductible this year against ordinary income (up to the {formatUSD(-3000)} annual limit).</p>

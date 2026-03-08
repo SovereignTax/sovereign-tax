@@ -8,7 +8,7 @@ import * as persistence from "./persistence";
 import { computeHash } from "./csv-import";
 import { deriveEncryptionKey, generateSalt, hashPINWithPBKDF2 } from "./crypto";
 import { AuditEntry, AuditAction, createAuditEntry } from "./audit";
-import { createBackupBundle, parseBackupBundle, downloadBackup } from "./backup";
+import { createBackupBundle, parseBackupBundle, saveBackupToAppData } from "./backup";
 
 interface PriceState {
   currentPrice: number | null;
@@ -117,8 +117,14 @@ interface AppStateContextType {
   setSelectedWallet: (wallet: string | null) => void;
   livePriceEnabled: boolean;
   setLivePriceEnabled: (enabled: boolean) => void;
-  priorCarryforward: number;
-  setPriorCarryforward: (amount: number) => void;
+  priorCarryforwardST: number;
+  setPriorCarryforwardST: (amount: number) => void;
+  priorCarryforwardLT: number;
+  setPriorCarryforwardLT: (amount: number) => void;
+  txnSortField: string;
+  setTxnSortField: (field: string) => void;
+  txnSortAsc: boolean;
+  setTxnSortAsc: (asc: boolean) => void;
 
   // Session-only: saved lot selections from Simulation
   savedLotSelections: SavedLotSelections | null;
@@ -162,7 +168,7 @@ interface AppStateContextType {
   loadMappings: () => Promise<Record<string, ColumnMapping>>;
 
   // Backup
-  createBackup: (password: string) => Promise<boolean>;
+  createBackup: (password: string) => Promise<string>;
   restoreBackup: (file: File, password?: string) => Promise<void>;
 
   // Save error (shown as banner when filesystem/encryption save fails)
@@ -197,7 +203,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [privacyBlur, setPrivacyBlur] = useState(prefs.privacyBlur ?? false);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(prefs.selectedWallet ?? null);
   const [livePriceEnabled, setLivePriceEnabled] = useState(prefs.livePriceEnabled ?? true);
-  const [priorCarryforward, setPriorCarryforward] = useState(prefs.priorCarryforward ?? 0);
+  // Migration: old single priorCarryforward → put into ST (IRS deducts ST first)
+  const [priorCarryforwardST, setPriorCarryforwardST] = useState(
+    prefs.priorCarryforwardST ?? prefs.priorCarryforward ?? 0
+  );
+  const [priorCarryforwardLT, setPriorCarryforwardLT] = useState(prefs.priorCarryforwardLT ?? 0);
+  const [txnSortField, setTxnSortField] = useState(prefs.txnSortField ?? "date");
+  const [txnSortAsc, setTxnSortAsc] = useState(prefs.txnSortAsc ?? true);
   const [savedLotSelections, setSavedLotSelections] = useState<SavedLotSelections | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -218,9 +230,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       privacyBlur,
       selectedWallet,
       livePriceEnabled,
-      priorCarryforward,
+      priorCarryforwardST,
+      priorCarryforwardLT,
+      txnSortField,
+      txnSortAsc,
     });
-  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforward]);
+  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc]);
 
   // Apply appearance mode — default to dark when System is selected
   useEffect(() => {
@@ -749,7 +764,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Backup & Restore
-  const createBackupAction = useCallback(async (password: string): Promise<boolean> => {
+  const createBackupAction = useCallback(async (password: string): Promise<string> => {
     const data = await persistence.loadAllDataForBackup();
     const bundle = await createBackupBundle(
       data.transactions,
@@ -760,19 +775,27 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       data.preferences,
       password
     );
-    const saved = await downloadBackup(bundle);
-    if (saved) {
-      await appendAuditLog(AuditAction.BackupCreated, `Encrypted backup created with ${data.transactions.length} transactions`);
-    }
-    return saved;
+    // Save to app data directory
+    const filename = await saveBackupToAppData(bundle);
+    await appendAuditLog(AuditAction.BackupCreated, `Encrypted backup saved with ${data.transactions.length} transactions`);
+    return filename;
   }, [appendAuditLog]);
 
   const restoreBackupAction = useCallback(async (file: File, password?: string) => {
     const text = await file.text();
     const result = await parseBackupBundle(text, password);
 
-    // Restore all data
-    await guardedSave(() => persistence.restoreAllData(result.data));
+    // Persist all data to disk FIRST — if this fails, don't update in-memory state.
+    // This prevents the scenario where the user sees restored data in the UI
+    // but it wasn't actually saved, leading to data loss on next app launch.
+    try {
+      await persistence.restoreAllData(result.data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save restored data";
+      console.error("Restore save error:", e);
+      setSaveError(msg);
+      throw new Error(`Backup restore failed: ${msg}. Some data may have been partially updated — create a fresh backup before retrying.`);
+    }
 
     // Reload state — sync refs immediately so appendAuditLog reads from restored data
     setTransactions(result.data.transactions);
@@ -795,7 +818,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (p.privacyBlur !== undefined) setPrivacyBlur(p.privacyBlur ?? false);
       if (p.selectedWallet !== undefined) setSelectedWallet(p.selectedWallet ?? null);
       if (p.livePriceEnabled !== undefined) setLivePriceEnabled(p.livePriceEnabled ?? true);
-      if (p.priorCarryforward !== undefined) setPriorCarryforward(p.priorCarryforward ?? 0);
+      // Restore carryforward: prefer new ST/LT fields, fall back to legacy single field → ST
+      if (p.priorCarryforwardST !== undefined || p.priorCarryforwardLT !== undefined) {
+        setPriorCarryforwardST(p.priorCarryforwardST ?? 0);
+        setPriorCarryforwardLT(p.priorCarryforwardLT ?? 0);
+      } else if (p.priorCarryforward !== undefined) {
+        setPriorCarryforwardST(p.priorCarryforward ?? 0);
+        setPriorCarryforwardLT(0);
+      }
+      if (p.txnSortField !== undefined) setTxnSortField(p.txnSortField);
+      if (p.txnSortAsc !== undefined) setTxnSortAsc(p.txnSortAsc);
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -821,8 +853,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setSelectedWallet,
     livePriceEnabled,
     setLivePriceEnabled,
-    priorCarryforward,
-    setPriorCarryforward,
+    priorCarryforwardST,
+    setPriorCarryforwardST,
+    priorCarryforwardLT,
+    setPriorCarryforwardLT,
+    txnSortField,
+    setTxnSortField,
+    txnSortAsc,
+    setTxnSortAsc,
     savedLotSelections,
     setSavedLotSelections,
     isUnlocked,

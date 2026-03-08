@@ -1,10 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAppState } from "../lib/app-state";
 import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
-import { isEncryptedBackup } from "../lib/backup";
+import { isEncryptedBackup, listSavedBackups, readSavedBackup, deleteSavedBackup, downloadBackup, SavedBackupInfo } from "../lib/backup";
 
 const APP_VERSION = __APP_VERSION__;
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
@@ -44,6 +44,21 @@ export function SettingsView() {
   const [showRestorePasswordModal, setShowRestorePasswordModal] = useState(false);
   const [restorePassword, setRestorePassword] = useState("");
   const [restorePasswordError, setRestorePasswordError] = useState<string | null>(null);
+
+  // Saved backups state
+  const [savedBackups, setSavedBackups] = useState<SavedBackupInfo[]>([]);
+  const [showSavedBackups, setShowSavedBackups] = useState(false);
+  const [deletingBackup, setDeletingBackup] = useState<string | null>(null);
+  const [restoringBackupFilename, setRestoringBackupFilename] = useState<string | null>(null);
+  const [savedRestorePassword, setSavedRestorePassword] = useState("");
+  const [savedRestoreError, setSavedRestoreError] = useState<string | null>(null);
+
+  // Load saved backups when section is expanded
+  useEffect(() => {
+    if (showSavedBackups) {
+      listSavedBackups().then(setSavedBackups).catch(() => setSavedBackups([]));
+    }
+  }, [showSavedBackups]);
 
   if (showChangePIN) {
     return <SetupPIN isInitialSetup={false} onDone={() => setShowChangePIN(false)} />;
@@ -121,28 +136,49 @@ export function SettingsView() {
       {/* Tax Settings */}
       <div className="card mb-4">
         <h3 className="font-semibold mb-3">📊 Tax Settings</h3>
-        <div className="flex items-center justify-between">
+        <div className="space-y-3">
           <div>
             <span className="text-gray-500">Prior-Year Capital Loss Carryforward</span>
-            <p className="text-xs text-gray-400">Loss amount carried forward from prior tax years (IRS Schedule D)</p>
+            <p className="text-xs text-gray-400">Loss amounts carried forward from prior-year Schedule D (IRS Capital Loss Carryover Worksheet)</p>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-gray-500 text-sm">$</span>
-            <input
-              type="number"
-              className="input w-28 text-sm text-right tabular-nums"
-              value={state.priorCarryforward === 0 ? "" : Math.abs(state.priorCarryforward)}
-              onChange={(e) => {
-                const val = e.target.value;
-                state.setPriorCarryforward(val === "" ? 0 : -Math.abs(Number(val)));
-              }}
-              placeholder="0"
-              min="0"
-              step="1"
-            />
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Short-term</span>
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500 text-sm">$</span>
+              <input
+                type="number"
+                className="input w-28 text-sm text-right tabular-nums"
+                value={state.priorCarryforwardST === 0 ? "" : Math.abs(state.priorCarryforwardST)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  state.setPriorCarryforwardST(val === "" ? 0 : -Math.abs(Number(val)));
+                }}
+                placeholder="0"
+                min="0"
+                step="1"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">Long-term</span>
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500 text-sm">$</span>
+              <input
+                type="number"
+                className="input w-28 text-sm text-right tabular-nums"
+                value={state.priorCarryforwardLT === 0 ? "" : Math.abs(state.priorCarryforwardLT)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  state.setPriorCarryforwardLT(val === "" ? 0 : -Math.abs(Number(val)));
+                }}
+                placeholder="0"
+                min="0"
+                step="1"
+              />
+            </div>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Enter the total capital loss carryforward from your prior-year Schedule D. This is factored into the Tax Report's carryforward calculation.</p>
+        <p className="text-xs text-gray-500 mt-2">Enter the short-term and long-term capital loss carryforward from your prior-year Schedule D Capital Loss Carryover Worksheet. These are applied to their respective categories in the Tax Report.</p>
       </div>
 
       {/* Data */}
@@ -198,7 +234,7 @@ export function SettingsView() {
             className="btn-secondary text-sm"
             onClick={() => fileInputRef.current?.click()}
           >
-            📂 Restore Backup
+            📂 Restore from File
           </button>
           <input
             ref={fileInputRef}
@@ -262,9 +298,11 @@ export function SettingsView() {
                   if (e.key === "Enter" && backupPassword && backupPassword.length >= 4 && backupPassword === backupPasswordConfirm) {
                     try {
                       setShowBackupPasswordModal(false);
-                      setBackupStatus("Encrypting and creating backup...");
-                      const saved = await state.createBackup(backupPassword);
-                      setBackupStatus(saved ? "Encrypted backup downloaded successfully!" : "Backup cancelled.");
+                      setBackupStatus("Encrypting and saving backup...");
+                      await state.createBackup(backupPassword);
+                      setBackupStatus("Backup saved!");
+                      setShowSavedBackups(true);
+                      listSavedBackups().then(setSavedBackups).catch(() => {});
                       setBackupPassword("");
                       setBackupPasswordConfirm("");
                       setTimeout(() => setBackupStatus(null), 3000);
@@ -291,9 +329,11 @@ export function SettingsView() {
                   }
                   try {
                     setShowBackupPasswordModal(false);
-                    setBackupStatus("Encrypting and creating backup...");
-                    const saved = await state.createBackup(backupPassword);
-                    setBackupStatus(saved ? "Encrypted backup downloaded successfully!" : "Backup cancelled.");
+                    setBackupStatus("Encrypting and saving backup...");
+                    await state.createBackup(backupPassword);
+                    setBackupStatus("Backup saved!");
+                    setShowSavedBackups(true);
+                    listSavedBackups().then(setSavedBackups).catch(() => {});
                     setBackupPassword("");
                     setBackupPasswordConfirm("");
                     setTimeout(() => setBackupStatus(null), 3000);
@@ -425,6 +465,162 @@ export function SettingsView() {
         <p className="text-xs text-gray-400 mt-2">
           Backups are encrypted with AES-256-GCM using a password you choose. Files use the .sovereigntax extension.
         </p>
+
+        {/* Saved Backups section */}
+        <div className="border-t mt-4 pt-3">
+          <button
+            className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
+            onClick={() => setShowSavedBackups(!showSavedBackups)}
+          >
+            <span className={`transition-transform ${showSavedBackups ? "rotate-90" : ""}`}>▶</span>
+            Saved Backups {savedBackups.length > 0 && showSavedBackups ? `(${savedBackups.length})` : ""}
+          </button>
+
+          {showSavedBackups && (
+            <div className="mt-3">
+              {savedBackups.length === 0 ? (
+                <p className="text-xs text-gray-400">No saved backups yet. Backups are automatically saved here when you create one.</p>
+              ) : (
+                <div className="space-y-2">
+                  {savedBackups.map((b) => (
+                    <div key={b.filename} className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 rounded-lg px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {b.created !== "Unknown"
+                            ? new Date(b.created).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                            : b.filename}
+                        </p>
+                        <p className="text-xs text-gray-400">{b.sizeKB} KB</p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                        {/* Restore from saved backup */}
+                        {restoringBackupFilename === b.filename ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="password"
+                              placeholder="Backup password"
+                              className="input w-36 text-xs"
+                              value={savedRestorePassword}
+                              autoFocus
+                              onChange={(e) => { setSavedRestorePassword(e.target.value); setSavedRestoreError(null); }}
+                              onKeyDown={async (e) => {
+                                if (e.key === "Enter" && savedRestorePassword) {
+                                  try {
+                                    const content = await readSavedBackup(b.filename);
+                                    const file = new File([content], b.filename, { type: "application/json" });
+                                    setRestoringBackupFilename(null);
+                                    setRestoreStatus("Restoring...");
+                                    await state.restoreBackup(file, savedRestorePassword);
+                                    setRestoreStatus("Backup restored successfully!");
+                                    setSavedRestorePassword("");
+                                    setTimeout(() => setRestoreStatus(null), 3000);
+                                  } catch (err: any) {
+                                    setSavedRestoreError(err.message);
+                                  }
+                                }
+                                if (e.key === "Escape") {
+                                  setRestoringBackupFilename(null);
+                                  setSavedRestorePassword("");
+                                  setSavedRestoreError(null);
+                                }
+                              }}
+                            />
+                            <button
+                              className="btn-primary text-xs px-2 py-1"
+                              disabled={!savedRestorePassword}
+                              onClick={async () => {
+                                try {
+                                  const content = await readSavedBackup(b.filename);
+                                  const file = new File([content], b.filename, { type: "application/json" });
+                                  setRestoringBackupFilename(null);
+                                  setRestoreStatus("Restoring...");
+                                  await state.restoreBackup(file, savedRestorePassword);
+                                  setRestoreStatus("Backup restored successfully!");
+                                  setSavedRestorePassword("");
+                                  setTimeout(() => setRestoreStatus(null), 3000);
+                                } catch (err: any) {
+                                  setSavedRestoreError(err.message);
+                                }
+                              }}
+                            >
+                              Go
+                            </button>
+                            <button
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                              onClick={() => { setRestoringBackupFilename(null); setSavedRestorePassword(""); setSavedRestoreError(null); }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn-secondary text-xs px-2 py-1"
+                            onClick={() => {
+                              setRestoringBackupFilename(b.filename);
+                              setSavedRestorePassword("");
+                              setSavedRestoreError(null);
+                            }}
+                          >
+                            Restore
+                          </button>
+                        )}
+
+                        {/* Export saved backup to file */}
+                        <button
+                          className="btn-secondary text-xs px-2 py-1"
+                          onClick={async () => {
+                            try {
+                              const content = await readSavedBackup(b.filename);
+                              const parsed = JSON.parse(content);
+                              await downloadBackup(parsed);
+                            } catch (err: any) {
+                              setRestoreStatus(`Export error: ${err.message}`);
+                              setTimeout(() => setRestoreStatus(null), 3000);
+                            }
+                          }}
+                        >
+                          Export
+                        </button>
+
+                        {/* Delete saved backup */}
+                        {deletingBackup === b.filename ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              className="btn-danger text-xs px-2 py-1"
+                              onClick={async () => {
+                                await deleteSavedBackup(b.filename);
+                                setSavedBackups((prev) => prev.filter((x) => x.filename !== b.filename));
+                                setDeletingBackup(null);
+                              }}
+                            >
+                              Delete
+                            </button>
+                            <button
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                              onClick={() => setDeletingBackup(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="text-xs text-red-400 hover:text-red-600"
+                            onClick={() => setDeletingBackup(b.filename)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {savedRestoreError && (
+                    <p className="text-xs text-red-500">{savedRestoreError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* About */}

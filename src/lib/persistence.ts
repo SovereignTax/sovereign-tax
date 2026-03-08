@@ -535,11 +535,15 @@ export async function restoreAllData(data: {
   auditLog: AuditEntry[];
   preferences: Preferences;
 }): Promise<void> {
-  await saveTransactionsAsync(data.transactions);
-  await saveRecordedSalesAsync(data.recordedSales);
-  await saveMappingsAsync(data.mappings);
-  await saveImportHistoryAsync(data.importHistory);
-  await saveAuditLogAsync(data.auditLog);
+  // All encrypted saves run in parallel — reduces the crash window
+  // and ensures preferences only save after ALL encrypted data succeeds.
+  await Promise.all([
+    saveTransactionsAsync(data.transactions),
+    saveRecordedSalesAsync(data.recordedSales),
+    saveMappingsAsync(data.mappings),
+    saveImportHistoryAsync(data.importHistory),
+    saveAuditLogAsync(data.auditLog),
+  ]);
   savePreferences(data.preferences);
 }
 

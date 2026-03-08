@@ -13,8 +13,10 @@ import { HelpPanel } from "./HelpPanel";
 export function TransactionsView() {
   const state = useAppState();
   const { transactions, setSelectedNav, updateTransaction, deleteTransaction } = state;
-  const [sortField, setSortField] = useState<keyof Transaction>("date");
-  const [sortAsc, setSortAsc] = useState(true);
+  const sortField = state.txnSortField as keyof Transaction;
+  const sortAsc = state.txnSortAsc;
+  const setSortField = (f: keyof Transaction) => state.setTxnSortField(f);
+  const setSortAsc = (a: boolean) => state.setTxnSortAsc(a);
   const [filterType, setFilterType] = useState<TransactionType | "">("");
   const [searchText, setSearchText] = useState("");
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);

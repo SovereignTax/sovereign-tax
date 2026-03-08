@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAppState } from "../lib/app-state";
 import { savePINHash, savePINSalt } from "../lib/persistence";
 import { generateSalt, hashPINWithPBKDF2 } from "../lib/crypto";
@@ -77,6 +77,24 @@ export function SetupPIN({ isInitialSetup, onDone }: { isInitialSetup: boolean; 
       setIsHashing(false);
     }
   };
+
+  // Keyboard support — type digits, Backspace to delete, Enter to continue/confirm
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isHashing) return;
+      if (e.key >= "0" && e.key <= "9") {
+        handleDigit(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleDelete();
+      } else if (e.key === "Enter" && currentPin.length >= 4) {
+        if (isConfirming) handleSetPIN();
+        else handleContinue();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [currentPin, isConfirming, isHashing]);
 
   return (
     <div className="relative flex flex-col items-center justify-center h-screen bg-gray-50 dark:bg-zinc-900">

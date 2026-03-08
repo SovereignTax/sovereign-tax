@@ -2,6 +2,7 @@ import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences } fro
 import { AuditEntry } from "./audit";
 import { deriveEncryptionKey, encryptData, decryptData, generateSalt } from "./crypto";
 import { saveTextFile } from "./file-save";
+import { readTextFile, writeTextFile, readDir, exists, mkdir, remove, BaseDirectory } from "@tauri-apps/plugin-fs";
 
 /**
  * Encrypted backup format (v2):
@@ -210,4 +211,83 @@ export async function downloadBackup(bundle: EncryptedBackupBundle): Promise<boo
     defaultPath: `sovereign-tax-backup-${dateStr}.sovereigntax`,
     filters: [{ name: "Sovereign Tax Backup", extensions: ["sovereigntax"] }],
   });
+}
+
+// ---------------------------------------------------------------------------
+// In-App Backup Management — saves backups to $APPDATA/backups/
+// ---------------------------------------------------------------------------
+
+const BACKUPS_DIR = "backups";
+const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Ensure $APPDATA/backups/ directory exists */
+async function ensureBackupsDir(): Promise<void> {
+  const dirExists = await exists(BACKUPS_DIR, { baseDir: BaseDirectory.AppData });
+  if (!dirExists) {
+    await mkdir(BACKUPS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+  }
+}
+
+/** Backup file metadata for the UI */
+export interface SavedBackupInfo {
+  filename: string;
+  created: string; // ISO timestamp from the backup envelope
+  sizeKB: number;
+}
+
+/** Save a backup bundle to $APPDATA/backups/. Also saves to user-chosen location if exportToo is true. */
+export async function saveBackupToAppData(bundle: EncryptedBackupBundle): Promise<string> {
+  if (!isTauri()) throw new Error("In-app backups require the desktop app");
+  await ensureBackupsDir();
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `sovereign-tax-backup-${ts}.sovereigntax`;
+  const json = JSON.stringify(bundle);
+  await writeTextFile(`${BACKUPS_DIR}/${filename}`, json, { baseDir: BaseDirectory.AppData });
+  return filename;
+}
+
+/** List all saved backups from $APPDATA/backups/, newest first. */
+export async function listSavedBackups(): Promise<SavedBackupInfo[]> {
+  if (!isTauri()) return [];
+  const dirExists = await exists(BACKUPS_DIR, { baseDir: BaseDirectory.AppData });
+  if (!dirExists) return [];
+
+  const entries = await readDir(BACKUPS_DIR, { baseDir: BaseDirectory.AppData });
+  const backups: SavedBackupInfo[] = [];
+
+  for (const entry of entries) {
+    if (!entry.name?.endsWith(".sovereigntax")) continue;
+    try {
+      const content = await readTextFile(`${BACKUPS_DIR}/${entry.name}`, { baseDir: BaseDirectory.AppData });
+      const parsed = JSON.parse(content);
+      backups.push({
+        filename: entry.name,
+        created: parsed.created || "Unknown",
+        sizeKB: Math.round(content.length / 1024),
+      });
+    } catch {
+      // Skip unreadable files
+      backups.push({
+        filename: entry.name,
+        created: "Unknown",
+        sizeKB: 0,
+      });
+    }
+  }
+
+  // Sort newest first
+  backups.sort((a, b) => b.created.localeCompare(a.created));
+  return backups;
+}
+
+/** Read a saved backup file from $APPDATA/backups/ */
+export async function readSavedBackup(filename: string): Promise<string> {
+  if (!isTauri()) throw new Error("In-app backups require the desktop app");
+  return readTextFile(`${BACKUPS_DIR}/${filename}`, { baseDir: BaseDirectory.AppData });
+}
+
+/** Delete a saved backup file from $APPDATA/backups/ */
+export async function deleteSavedBackup(filename: string): Promise<void> {
+  if (!isTauri()) throw new Error("In-app backups require the desktop app");
+  await remove(`${BACKUPS_DIR}/${filename}`, { baseDir: BaseDirectory.AppData });
 }

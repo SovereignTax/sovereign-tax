@@ -55,6 +55,12 @@
       ]
     },
     {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        { "path": "$APPDATA/**" }
+      ]
+    },
+    {
       "identifier": "http:default",
       "allow": [
         { "url": "https://api.coingecko.com/**" },

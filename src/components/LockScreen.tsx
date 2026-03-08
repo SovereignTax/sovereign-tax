@@ -88,7 +88,15 @@ export function LockScreen() {
       if (inputHash === storedHash) {
         // Success — clear attempts, derive encryption key, and load data
         clearPINAttempts();
-        await unlockWithPIN(pin);
+        try {
+          await unlockWithPIN(pin);
+        } catch (unlockErr) {
+          console.error("Unlock failed:", unlockErr);
+          setErrorMsg("Failed to load data. Please try again or contact support.");
+          setShowError(true);
+          setPin("");
+          return;
+        }
       } else {
         // Failed — increment attempts and apply lockout
         const attempts = loadPINAttempts() + 1;
@@ -113,6 +121,22 @@ export function LockScreen() {
       setIsVerifying(false);
     }
   }, [pin, isLockedOut, isVerifying, unlockWithPIN]);
+
+  // Keyboard support — type digits, Backspace to delete, Enter to unlock
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        handleDigit(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleDelete();
+      } else if (e.key === "Enter" && pin.length >= 4 && !isLockedOut && !isVerifying) {
+        handleUnlock();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pin, isLockedOut, isVerifying, handleUnlock]);
 
   return (
     <div className="relative flex flex-col items-center justify-center h-screen bg-gray-50 dark:bg-zinc-900">
