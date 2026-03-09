@@ -363,8 +363,9 @@ export function calculateUpTo(
 /**
  * Auto-select lots to minimize estimated tax burden.
  * Scores each lot by (salePrice - costBasisPerBTC) * taxRate, picks lowest scores first
- * (losses first, then smallest gains). When salePrice is unavailable (donations),
- * falls back to long-term first + highest basis.
+ * (losses first, then smallest gains). When salePrice is unavailable, falls back to
+ * long-term first + highest basis (sales) or long-term first + lowest basis (donations).
+ * Donations prefer lowest basis to eliminate the most embedded capital gains.
  *
  * Returns LotSelection[] ready to pass to simulateSale().
  */
@@ -372,7 +373,8 @@ export function optimizeLotSelections(
   lots: Lot[],
   targetAmount: number,
   salePrice?: number,
-  saleDate?: string
+  saleDate?: string,
+  isDonation?: boolean
 ): LotSelection[] {
   const refDate = saleDate || new Date().toISOString();
   const ST_RATE = 0.37;
@@ -386,7 +388,9 @@ export function optimizeLotSelections(
       const rate = longTerm ? LT_RATE : ST_RATE;
       const taxScore = salePrice
         ? (salePrice - costBasisPerBTC) * rate
-        : (longTerm ? -1e9 : 0) - costBasisPerBTC; // fallback: long-term first, then highest basis
+        : isDonation
+          ? (longTerm ? -1e9 : 0) + costBasisPerBTC // donations: long-term first, lowest basis
+          : (longTerm ? -1e9 : 0) - costBasisPerBTC; // sales fallback: long-term first, highest basis
       return { lot, taxScore };
     })
     .sort((a, b) => a.taxScore - b.taxScore);
@@ -460,7 +464,7 @@ export function batchOptimizeSpecificId(
 
     const isDonation = txn.transactionType === TransactionType.Donation;
     const salePrice = isDonation ? undefined : txn.pricePerBTC;
-    const selections = optimizeLotSelections(pool, txn.amountBTC, salePrice, txn.date);
+    const selections = optimizeLotSelections(pool, txn.amountBTC, salePrice, txn.date, isDonation);
 
     // Reject if no lots available or if selections don't fully cover the disposition
     const totalSelected = selections.reduce((sum, s) => sum + s.amountBTC, 0);

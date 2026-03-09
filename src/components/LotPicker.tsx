@@ -13,6 +13,7 @@ interface LotPickerProps {
   targetAmount: number;
   saleDate?: string; // ISO date string — used for accurate holding period display (defaults to today)
   salePrice?: number; // USD per BTC — used by Optimize to compute estimated tax per lot
+  isDonation?: boolean; // When true, Optimize prefers lowest cost basis lots (eliminate most embedded gains)
   initialSelections?: LotSelection[]; // Pre-fill from saved simulation selections
   onConfirm: (selections: LotSelection[]) => void;
   onCancel: () => void;
@@ -21,7 +22,7 @@ interface LotPickerProps {
 type SortField = "date" | "wallet" | "available" | "cost" | "daysHeld" | "term";
 type SortDir = "asc" | "desc";
 
-export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSelections, onConfirm, onCancel }: LotPickerProps) {
+export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation, initialSelections, onConfirm, onCancel }: LotPickerProps) {
   const availableLots = lots.filter((l) => l.remainingBTC > 0);
 
   // Build initial selection map from saved selections (if provided and lot IDs still exist)
@@ -101,10 +102,11 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, initialSele
    * Auto-select lots to reduce tax burden.
    * Scores each lot by estimated tax per BTC using assumed rates (37% ST, 15% LT).
    * Losses get negative scores (tax savings), so they're picked first.
-   * When no sale price is available (e.g. donations), falls back to long-term first + highest cost basis.
+   * When no sale price is available, falls back to long-term first + highest basis (sales)
+   * or long-term first + lowest basis (donations) to eliminate the most embedded gains.
    */
   const optimizeSelections = () => {
-    const result = optimizeLotSelections(availableLots, targetAmount, salePrice, saleDate);
+    const result = optimizeLotSelections(availableLots, targetAmount, salePrice, saleDate, isDonation);
     const newSelections: Record<string, number> = {};
     const newTexts: Record<string, string> = {};
     for (const s of result) {

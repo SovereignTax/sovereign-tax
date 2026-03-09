@@ -950,6 +950,61 @@ describe("optimizeLotSelections — partial fill behavior", () => {
 });
 
 // ═══════════════════════════════════════════════════════
+// Donation optimization: lowest cost basis first
+// ═══════════════════════════════════════════════════════
+
+describe("optimizeLotSelections — donation mode (isDonation=true)", () => {
+  it("picks lowest cost basis lot first for donations", () => {
+    const bLow = buy("2024-01-01", 1.0, 10000);   // low basis
+    const bHigh = buy("2024-02-01", 1.0, 50000);   // high basis
+    const result = calculate([bLow, bHigh], AccountingMethod.FIFO, []);
+
+    // Donate 1.0 BTC — should pick the low-basis lot to eliminate more embedded gain
+    const selections = optimizeLotSelections(result.lots, 1.0, undefined, "2025-06-01", true);
+
+    expect(selections).toHaveLength(1);
+    expect(selections[0].lotId).toBe(bLow.id);
+    expect(selections[0].amountBTC).toBeCloseTo(1.0, 8);
+  });
+
+  it("prefers long-term lots over short-term for donations", () => {
+    const bLongTerm = buy("2023-01-01", 1.0, 30000);  // long-term, higher basis
+    const bShortTerm = buy("2025-03-01", 1.0, 10000);  // short-term, lower basis
+    const result = calculate([bLongTerm, bShortTerm], AccountingMethod.FIFO, []);
+
+    // Donate 1.0 BTC — long-term should win (FMV deduction) even though short-term has lower basis
+    const selections = optimizeLotSelections(result.lots, 1.0, undefined, "2025-06-01", true);
+
+    expect(selections).toHaveLength(1);
+    expect(selections[0].lotId).toBe(bLongTerm.id);
+  });
+
+  it("within long-term lots, picks lowest basis first for donations", () => {
+    const bLow = buy("2023-01-01", 1.0, 10000);   // long-term, low basis
+    const bHigh = buy("2023-06-01", 1.0, 50000);   // long-term, high basis
+    const result = calculate([bLow, bHigh], AccountingMethod.FIFO, []);
+
+    // Donate 1.0 BTC — both long-term, should pick lowest basis
+    const selections = optimizeLotSelections(result.lots, 1.0, undefined, "2025-06-01", true);
+
+    expect(selections).toHaveLength(1);
+    expect(selections[0].lotId).toBe(bLow.id);
+  });
+
+  it("sale optimization (isDonation=false) still picks highest basis", () => {
+    const bLow = buy("2024-01-01", 1.0, 10000);
+    const bHigh = buy("2024-02-01", 1.0, 50000);
+    const result = calculate([bLow, bHigh], AccountingMethod.FIFO, []);
+
+    // Sale fallback (no salePrice) — should pick highest basis
+    const selections = optimizeLotSelections(result.lots, 1.0, undefined, "2025-06-01", false);
+
+    expect(selections).toHaveLength(1);
+    expect(selections[0].lotId).toBe(bHigh.id);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
 // Engine Guard: stale lotId in extractLotSelections → FIFO fallback
 // ═══════════════════════════════════════════════════════
 

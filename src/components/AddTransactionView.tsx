@@ -34,6 +34,7 @@ export function AddTransactionView() {
   const [dispositionPreview, setDispositionPreview] = useState<SaleRecord | null>(null);
   const [showLotPicker, setShowLotPicker] = useState(false);
   const [lotSelections, setLotSelections] = useState<LotSelection[] | null>(null);
+  const [showAllWallets, setShowAllWallets] = useState(false);
 
   // Current lots for disposition preview (Sell or Donation)
   const isDisposition = type === TransactionType.Sell || type === TransactionType.Donation;
@@ -125,7 +126,7 @@ export function AddTransactionView() {
     setShowLotPicker(false);
     setLotSelections(selections);
     const amount = Number(amountStr);
-    const walletFilter = wallet || undefined;
+    const walletFilter = showAllWallets ? undefined : (wallet || undefined);
     const dateISO = new Date(date + "T12:00:00").toISOString();
     const isDonation = type === TransactionType.Donation;
     const price = isDonation ? 0 : (useLive ? state.priceState.currentPrice! : Number(priceStr));
@@ -281,7 +282,7 @@ export function AddTransactionView() {
         {isDisposition && state.availableWallets.length > 1 && (
           <div className="flex items-center gap-4">
             <span className="w-24 text-right text-gray-500">Wallet:</span>
-            <select className="select w-48" value={wallet} onChange={(e) => { setWallet(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }}>
+            <select className="select w-48" value={wallet} onChange={(e) => { setWallet(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); setShowAllWallets(false); }}>
               <option value="">{isSpecificID ? "— Select Wallet —" : "All Wallets"}</option>
               {state.availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
             </select>
@@ -405,13 +406,29 @@ export function AddTransactionView() {
       {/* Lot Picker for Specific ID (Sell + Donation) */}
       {showLotPicker && isSpecificID && (
         <div className="mt-4">
+          {wallet && (
+            <div className="mb-3">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={showAllWallets} onChange={(e) => { setShowAllWallets(e.target.checked); setLotSelections(null); }} />
+                Show lots from all wallets
+              </label>
+              {showAllWallets && (
+                <div className={`text-xs p-2 rounded-lg mt-2 ${date && new Date(date).getFullYear() >= 2025 ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400" : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"}`}>
+                  {date && new Date(date).getFullYear() >= 2025
+                    ? "⚠️ Per-wallet cost basis is required for 2025+ per Treasury Reg. §1.1012-1(j). Selecting lots from a different wallet may not be IRS-compliant."
+                    : "Per-wallet cost basis rules took effect January 1, 2025. For earlier tax years, cross-wallet lot selection may be acceptable under the universal method."}
+                </div>
+              )}
+            </div>
+          )}
           <LotPicker
-            lots={wallet
+            lots={wallet && !showAllWallets
               ? currentLots.filter((l) => (l.wallet || l.exchange || "").toLowerCase() === wallet.toLowerCase())
               : currentLots}
             targetAmount={Number(amountStr)}
             saleDate={date ? new Date(date + "T12:00:00").toISOString() : undefined}
             salePrice={type === TransactionType.Sell ? (useLive ? state.priceState.currentPrice || undefined : Number(priceStr) || undefined) : undefined}
+            isDonation={type === TransactionType.Donation}
             initialSelections={usingSavedSelections && saved ? saved.lotSelections : undefined}
             onConfirm={handleDispositionLotConfirm}
             onCancel={handleDispositionLotCancel}

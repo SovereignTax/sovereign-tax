@@ -853,6 +853,7 @@ function EditLotsModal({
   const [preview, setPreview] = useState<SaleRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAllWallets, setShowAllWallets] = useState(false);
 
   // Calculate lot state as it existed just before this transaction.
   // Exclude the target txn's own SaleRecord (by id) to prevent legacy key contamination.
@@ -907,14 +908,14 @@ function EditLotsModal({
     }).filter((l): l is NonNullable<typeof l> => l !== null);
 
     const walletNorm = (walletName || "").trim().toLowerCase();
-    if (!walletNorm) return { lots: adjusted, isMismatch: false };
+    if (!walletNorm || showAllWallets) return { lots: adjusted, isMismatch: false };
     const walletFiltered = adjusted.filter(
       (l) => (l.wallet || l.exchange || "").toLowerCase() === walletNorm
     );
     // Fall back to all available lots if no wallet match (same behavior as processSale)
     const isMismatch = walletFiltered.length === 0 && adjusted.length > 0;
     return { lots: walletFiltered.length > 0 ? walletFiltered : adjusted, isMismatch };
-  }, [lotsAtPoint, walletName, recordedSales, existingRecord, allTransactions, txn.id]);
+  }, [lotsAtPoint, walletName, showAllWallets, recordedSales, existingRecord, allTransactions, txn.id]);
   const walletLots = walletLotsResult.lots;
   const isWalletMismatch = walletLotsResult.isMismatch;
 
@@ -939,7 +940,7 @@ function EditLotsModal({
       lotsAtPoint, // use full lot pool — simulateSale deep-copies
       AccountingMethod.SpecificID,
       selections,
-      walletName || undefined,
+      showAllWallets ? undefined : (walletName || undefined),
       txn.date
     );
     if (sim) {
@@ -1031,15 +1032,33 @@ function EditLotsModal({
         )}
 
         {showLotPicker && (
-          <LotPicker
-            lots={walletLots}
-            targetAmount={txn.amountBTC}
-            saleDate={txn.date}
-            salePrice={isDonation ? undefined : txn.pricePerBTC}
-            initialSelections={initialSelections}
-            onConfirm={handleLotPickerConfirm}
-            onCancel={onClose}
-          />
+          <>
+            {walletName && !isWalletMismatch && (
+              <div className="mb-3">
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" checked={showAllWallets} onChange={(e) => setShowAllWallets(e.target.checked)} />
+                  Show lots from all wallets
+                </label>
+                {showAllWallets && (
+                  <div className={`text-xs p-2 rounded-lg mt-2 ${new Date(txn.date).getFullYear() >= 2025 ? "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400" : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"}`}>
+                    {new Date(txn.date).getFullYear() >= 2025
+                      ? "⚠️ Per-wallet cost basis is required for 2025+ per Treasury Reg. §1.1012-1(j). Selecting lots from a different wallet may not be IRS-compliant."
+                      : "Per-wallet cost basis rules took effect January 1, 2025. For earlier tax years, cross-wallet lot selection may be acceptable under the universal method."}
+                  </div>
+                )}
+              </div>
+            )}
+            <LotPicker
+              lots={walletLots}
+              targetAmount={txn.amountBTC}
+              saleDate={txn.date}
+              salePrice={isDonation ? undefined : txn.pricePerBTC}
+              isDonation={isDonation}
+              initialSelections={initialSelections}
+              onConfirm={handleLotPickerConfirm}
+              onCancel={onClose}
+            />
+          </>
         )}
 
         {preview && !showLotPicker && (
