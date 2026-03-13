@@ -1,11 +1,12 @@
 {
-  "latest": "1.4.2",
+  "latest": "1.4.3",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-08",
-  "notes": "Keyboard PIN entry, persistent sort preference, split ST/LT carryforward per IRS Schedule D, in-app backup management, structured backup status. 528 automated tests passing.",
+  "releaseDate": "2026-03-13",
+  "notes": "Fix cross-wallet Specific ID elections silently lost when reopening Edit Lots modal. 541 automated tests passing.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/90a0e2cb-41d4-43a1-ac6a-ba5f8e61f903.dmg",
-    "windows": "https://sovereigntax.io/downloads/67f64d13-fd19-435d-aec0-e2f957659fed.exe",
-    "linux": "https://sovereigntax.io/downloads/86b7aa8f-23b3-438d-aa74-3ae2b7bffa46.deb"
+    "macos": "https://sovereigntax.io/downloads/95d70a0e-77cd-4e11-a057-7bbdd871138c.dmg",
+    "windows": "https://sovereigntax.io/downloads/9417b54c-9df9-48e6-972a-70937236d366.exe",
+    "linux": "https://sovereigntax.io/downloads/8cba229e-59e3-4912-976b-436278963397.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/2ea699d6-9d0a-44ff-877b-2c904ad095c0.rpm"
   }
 }
