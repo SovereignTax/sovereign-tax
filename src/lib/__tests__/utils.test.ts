@@ -8,6 +8,7 @@ import {
   timeAgo,
   findSimilarTransactions,
   transactionNaturalKey,
+  hasCrossWalletLots,
 } from "../utils";
 
 // ═══════════════════════════════════════════════════════
@@ -212,5 +213,65 @@ describe("transactionNaturalKey", () => {
     };
     const key = transactionNaturalKey(tx);
     expect(key).toContain("0.10000000");
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// hasCrossWalletLots — cross-wallet Specific ID detection
+// ═══════════════════════════════════════════════════════
+
+describe("hasCrossWalletLots", () => {
+  it("returns false when all lots match sale wallet", () => {
+    const lots = [
+      { wallet: "Coinbase", exchange: "Coinbase" },
+      { wallet: "Coinbase", exchange: "Coinbase" },
+    ];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(false);
+  });
+
+  it("returns true when a lot is from a different wallet", () => {
+    const lots = [
+      { wallet: "Coinbase", exchange: "Coinbase" },
+      { wallet: "Ledger", exchange: "Ledger" },
+    ];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(true);
+  });
+
+  it("is case-insensitive", () => {
+    const lots = [{ wallet: "coinbase", exchange: "coinbase" }];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(false);
+  });
+
+  it("trims whitespace", () => {
+    const lots = [{ wallet: " Coinbase ", exchange: "Coinbase" }];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(false);
+  });
+
+  it("falls back to exchange when wallet is missing", () => {
+    const lots = [{ exchange: "Kraken" }];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(true);
+  });
+
+  it("returns false for empty lot details", () => {
+    expect(hasCrossWalletLots([], "Coinbase")).toBe(false);
+  });
+
+  it("returns false when sale wallet is empty", () => {
+    const lots = [{ wallet: "Ledger", exchange: "Ledger" }];
+    expect(hasCrossWalletLots(lots, "")).toBe(false);
+  });
+
+  it("ignores lots with no wallet or exchange", () => {
+    const lots = [{ exchange: "" }];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(false);
+  });
+
+  it("detects cross-wallet even when some lots match", () => {
+    const lots = [
+      { wallet: "Coinbase", exchange: "Coinbase" },
+      { wallet: "Coinbase", exchange: "Coinbase" },
+      { wallet: "ColdCard", exchange: "" },
+    ];
+    expect(hasCrossWalletLots(lots, "Coinbase")).toBe(true);
   });
 });

@@ -86,6 +86,21 @@ export function transactionLooseKey(t: { date: string; transactionType: string; 
   return `${dateStr}|${t.transactionType}|${amount}`;
 }
 
+/** Detect whether a SaleRecord's lot selections include lots from a different wallet
+ *  than the sale's wallet. Used to initialize the "Show lots from all wallets" toggle
+ *  so cross-wallet Specific ID elections are visible when reopening the editor. */
+export function hasCrossWalletLots(
+  lotDetails: { wallet?: string; exchange?: string }[],
+  saleWallet: string
+): boolean {
+  const norm = saleWallet.trim().toLowerCase();
+  if (!norm) return false;
+  return lotDetails.some((d) => {
+    const lotWallet = (d.wallet || d.exchange || "").trim().toLowerCase();
+    return lotWallet !== "" && lotWallet !== norm;
+  });
+}
+
 /** Partition incoming transactions into loose-key matches and non-matches.
  *  Returns the count of potential cross-exchange duplicates and the filtered non-matching list. */
 export function partitionLooseDuplicates<T extends { date: string; transactionType: string; amountBTC: number }>(

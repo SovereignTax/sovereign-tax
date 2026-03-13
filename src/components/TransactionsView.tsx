@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useAppState } from "../lib/app-state";
-import { formatUSD, formatBTC, formatDateTime, formatDate } from "../lib/utils";
+import { formatUSD, formatBTC, formatDateTime, formatDate, hasCrossWalletLots } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames, AccountingMethod } from "../lib/types";
 import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
@@ -853,7 +853,11 @@ function EditLotsModal({
   const [preview, setPreview] = useState<SaleRecord | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAllWallets, setShowAllWallets] = useState(false);
+  const [showAllWallets, setShowAllWallets] = useState(() =>
+    existingRecord?.lotDetails?.length
+      ? hasCrossWalletLots(existingRecord.lotDetails, txn.wallet || txn.exchange || "")
+      : false
+  );
 
   // Calculate lot state as it existed just before this transaction.
   // Exclude the target txn's own SaleRecord (by id) to prevent legacy key contamination.
