@@ -434,14 +434,14 @@ describe("IRS TD 9989 — Per-wallet cost basis enforcement", () => {
     expect(result.warnings.some((w) => w.includes("Fell back to global"))).toBe(true);
   });
 
-  it("Specific ID rejects cross-wallet lot selections", () => {
+  it("Specific ID honors cross-wallet lot selections with walletMismatch warning", () => {
     const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
     const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Kraken" });
     const s1 = sell("2024-08-01", 0.5, 60000, { wallet: "Coinbase" });
     const txns = [b1, b2, s1];
 
-    // Try to pick Kraken lot for a Coinbase sale — should be rejected
-    // per TD 9989 (per-wallet cost basis enforcement)
+    // User explicitly elected Kraken lot for a Coinbase sale via "Show all wallets" toggle.
+    // Engine must honor the election — the user was warned at selection time.
     const recorded = [{
       id: "rec-1",
       saleDate: s1.date,
@@ -451,7 +451,7 @@ describe("IRS TD 9989 — Per-wallet cost basis enforcement", () => {
       costBasis: 25000,
       gainLoss: 5000,
       lotDetails: [{
-        id: "d1", lotId: b2.id, // Kraken lot — wrong wallet!
+        id: "d1", lotId: b2.id, // Kraken lot — cross-wallet, user chose intentionally
         purchaseDate: b2.date, amountBTC: 0.5,
         costBasisPerBTC: 50000, totalCost: 25000, daysHeld: 181, exchange: "Kraken", isLongTerm: false,
       }],
@@ -463,14 +463,13 @@ describe("IRS TD 9989 — Per-wallet cost basis enforcement", () => {
     }];
 
     const result = calculate(txns, AccountingMethod.FIFO, recorded);
-    // The Kraken lot is rejected (not in Coinbase's available set).
-    // The Specific ID branch produces a zero-fill sale since no valid selections remain.
-    // This is correct behavior: the engine won't silently substitute different lots
-    // for a recorded Specific ID election — that would violate the user's explicit choice.
-    // The sale still appears with amountSold = 0, meaning the election was invalid.
     expect(result.sales).toHaveLength(1);
-    // The Kraken lot's cost basis was NOT applied
-    expect(result.sales[0].lotDetails.every(d => d.wallet !== "Kraken")).toBe(true);
+    // The Kraken lot IS applied — engine honors the explicit election
+    expect(result.sales[0].costBasis).toBeCloseTo(25000, 0); // 0.5 * 50000
+    expect(result.sales[0].amountSold).toBeCloseTo(0.5, 8);
+    expect(result.sales[0].lotDetails[0].wallet).toBe("Kraken");
+    // Tagged for UI warning — user should see wallet mismatch indicator
+    expect(result.sales[0].walletMismatch).toBe(true);
   });
 });
 

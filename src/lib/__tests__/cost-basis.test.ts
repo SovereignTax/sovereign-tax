@@ -1132,3 +1132,174 @@ describe("extractLotSelections engine guard (stale lotId fallback)", () => {
     expect(warning).toContain("no longer exist or were modified");
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Cross-wallet Specific ID — engine must honor elections
+// ═══════════════════════════════════════════════════════
+
+describe("cross-wallet Specific ID elections", () => {
+  it("calculate() honors cross-wallet lot selections via recorded SaleRecord", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 40000, { wallet: "Ledger" });
+    const s1 = sell("2024-06-01", 0.5, 60000, { wallet: "Coinbase" });
+
+    // User explicitly elected the Ledger lot for a Coinbase sale (cross-wallet)
+    const record: SaleRecord = {
+      id: "rec-cross-1",
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 20000,
+      gainLoss: 10000,
+      holdingPeriodDays: 150,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+      lotDetails: [{
+        id: "ld-1",
+        lotId: b2.id, // Ledger lot — different wallet than sale
+        purchaseDate: b2.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 40000,
+        totalCost: 20000,
+        daysHeld: 150,
+        exchange: "Ledger",
+        wallet: "Ledger",
+        isLongTerm: false,
+      }],
+    };
+
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // Must use the Ledger lot ($40k basis), NOT fall back to Coinbase FIFO ($30k basis)
+    expect(result.sales[0].costBasis).toBeCloseTo(20000, 0); // 0.5 * 40000
+    expect(result.sales[0].gainLoss).toBeCloseTo(10000, 0); // 30000 - 20000
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.sales[0].walletMismatch).toBe(true); // tagged for warning
+    expect(result.sales[0].lotDetails[0].wallet).toBe("Ledger");
+  });
+
+  it("simulateSale() honors cross-wallet lots when wallet is undefined", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+
+    const lots = calculate([b1, b2], AccountingMethod.FIFO).lots;
+    const selections: LotSelection[] = [{ lotId: b2.id, amountBTC: 0.5 }];
+
+    // wallet=undefined simulates showAllWallets=true
+    const sim = simulateSale(0.5, 60000, lots, AccountingMethod.SpecificID, selections, undefined, "2024-06-01");
+
+    expect(sim).not.toBeNull();
+    expect(sim!.amountSold).toBeCloseTo(0.5, 8);
+    expect(sim!.costBasis).toBeCloseTo(25000, 0); // 0.5 * 50000
+  });
+
+  it("simulateSale() honors cross-wallet lots when wallet IS specified", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+
+    const lots = calculate([b1, b2], AccountingMethod.FIFO).lots;
+    const selections: LotSelection[] = [{ lotId: b2.id, amountBTC: 0.5 }];
+
+    // wallet="Coinbase" — sale is from Coinbase but user elected Ledger lot
+    const sim = simulateSale(0.5, 60000, lots, AccountingMethod.SpecificID, selections, "Coinbase", "2024-06-01");
+
+    expect(sim).not.toBeNull();
+    expect(sim!.amountSold).toBeCloseTo(0.5, 8);
+    expect(sim!.costBasis).toBeCloseTo(25000, 0); // must use Ledger lot, not Coinbase
+    expect(sim!.walletMismatch).toBe(true);
+  });
+
+  it("FIFO auto-selection still wallet-filters correctly", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+    const s1 = sell("2024-06-01", 0.5, 60000, { wallet: "Coinbase" });
+
+    // No recorded sales — FIFO should pick from Coinbase only
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 0); // 0.5 * 30000 (Coinbase lot)
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("cross-wallet election with mixed wallets in lotDetails", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+    const s1 = sell("2024-06-01", 0.8, 60000, { wallet: "Coinbase" });
+
+    // User elected lots from BOTH wallets
+    const record: SaleRecord = {
+      id: "rec-mixed-1",
+      saleDate: s1.date,
+      amountSold: 0.8,
+      salePricePerBTC: 60000,
+      totalProceeds: 48000,
+      costBasis: 29000,
+      gainLoss: 19000,
+      holdingPeriodDays: 150,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+      lotDetails: [
+        {
+          id: "ld-m1", lotId: b1.id, purchaseDate: b1.date, amountBTC: 0.5,
+          costBasisPerBTC: 30000, totalCost: 15000, daysHeld: 150,
+          exchange: "Coinbase", wallet: "Coinbase", isLongTerm: false,
+        },
+        {
+          id: "ld-m2", lotId: b2.id, purchaseDate: b2.date, amountBTC: 0.3,
+          costBasisPerBTC: 50000, totalCost: 15000, daysHeld: 120,
+          exchange: "Ledger", wallet: "Ledger", isLongTerm: false,
+        },
+      ],
+    };
+
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // Cost = 0.5 * 30000 + 0.3 * 50000 = 15000 + 15000 = 30000
+    expect(result.sales[0].costBasis).toBeCloseTo(30000, 0);
+    expect(result.sales[0].amountSold).toBeCloseTo(0.8, 8);
+    expect(result.sales[0].lotDetails).toHaveLength(2);
+    expect(result.sales[0].walletMismatch).toBe(true);
+  });
+
+  it("cross-wallet donation election is honored", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+    const d1 = donation("2024-06-01", 0.5, 60000, { wallet: "Coinbase" });
+
+    const record: SaleRecord = {
+      id: "rec-don-1",
+      saleDate: d1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 0,
+      totalProceeds: 0,
+      costBasis: 25000,
+      gainLoss: 0,
+      holdingPeriodDays: 150,
+      isLongTerm: false,
+      isMixedTerm: false,
+      isDonation: true,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: d1.id,
+      lotDetails: [{
+        id: "ld-d1", lotId: b2.id, purchaseDate: b2.date, amountBTC: 0.5,
+        costBasisPerBTC: 50000, totalCost: 25000, daysHeld: 150,
+        exchange: "Ledger", wallet: "Ledger", isLongTerm: false,
+      }],
+    };
+
+    const result = calculate([b1, b2, d1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(25000, 0); // Ledger lot honored
+    expect(result.sales[0].isDonation).toBe(true);
+    expect(result.sales[0].walletMismatch).toBe(true);
+  });
+});

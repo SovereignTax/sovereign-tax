@@ -607,13 +607,19 @@ function processSale(
   let remainingToSell = amountToSell;
   const holdingDays: number[] = [];
 
-  // Specific Identification: use manual lot selections (restricted to wallet-filtered lots)
+  // Specific Identification: honor explicit lot selections from the FULL lot pool.
+  // The user chose these lots intentionally — never silently drop cross-wallet elections.
+  // Tag walletMismatch for warning purposes only.
   if (method === AccountingMethod.SpecificID && lotSelections && lotSelections.length > 0) {
-    const availableSet = new Set(availableIndices);
     for (const sel of lotSelections) {
       if (remainingToSell <= 0) break;
       const lotIdx = lots.findIndex((l) => l.id === sel.lotId);
-      if (lotIdx === -1 || !availableSet.has(lotIdx) || lots[lotIdx].remainingBTC <= 0) continue;
+      if (lotIdx === -1 || lots[lotIdx].remainingBTC <= 0) continue;
+
+      // Detect cross-wallet lot usage for warning/tagging (but don't reject)
+      if (saleWalletNorm && normalizeWallet(lots[lotIdx].wallet || lots[lotIdx].exchange) !== saleWalletNorm) {
+        walletMismatch = true;
+      }
 
       const sellFromLot = Math.min(sel.amountBTC, lots[lotIdx].remainingBTC, remainingToSell);
       // Use fee-inclusive cost basis: totalCost includes exchange fee (cost basis = amount*price + fee)
