@@ -23,14 +23,14 @@ const columnVariations: Record<string, string[]> = {
   type: [
     "type", "transaction type", "side", "trade type", "action", "transaction_type",
     "tag", "tx_type", "trade_type", "order type", "ordertype", "offer type",
-    "disposition type", "category",
+    "disposition type", "category", "event",
   ],
   amount: [
     "amount", "quantity", "size", "btc amount", "bitcoin", "btc", "volume",
     "asset amount", "net amount", "quantity transacted",
     "amount (btc)", "amount btc", "quantity (btc)",
     "amount in btc", "btc quantity", "vol", "crypto amount", "coin amount",
-    "asset quantity", "bitcoin amount",
+    "asset quantity", "bitcoin amount", "unit count",
   ],
   price: [
     "price", "price per btc", "rate", "unit price", "btc price", "price usd",
@@ -488,7 +488,7 @@ export function parseCSVContent(
     // Status filtering
     if (statusCol && row[statusCol]) {
       const statusLower = row[statusCol].toLowerCase().trim();
-      if (statusLower && statusLower !== "completed" && statusLower !== "complete" && statusLower !== "success") {
+      if (statusLower && statusLower !== "completed" && statusLower !== "complete" && statusLower !== "success" && statusLower !== "settled") {
         skippedRows.push({ row: rowNum, reason: `Status: ${row[statusCol]}` });
         continue;
       }

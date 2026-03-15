@@ -828,3 +828,113 @@ describe("parseCSVContent — dual-column format", () => {
     expect(result.transactions[0].transactionType).toBe(TransactionType.TransferOut);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Swan Bitcoin CSV format
+// ═══════════════════════════════════════════════════════
+
+describe("Swan Bitcoin CSV", () => {
+  const swanHeaders = "Event,Date,Timezone,Status,Transaction ID,Total USD,Transaction USD,Fee USD,Unit Count,Asset Type,BTC Price,Address Label,USD Cost Basis,Acquisition Date";
+
+  it("auto-detects Swan column names including Event and Unit Count", () => {
+    const headers = swanHeaders.split(",");
+    const mapping = detectColumns(headers);
+    expect(mapping.type).toBe("Event");
+    expect(mapping.amount).toBe("Unit Count");
+    expect(mapping.price).toBe("BTC Price");
+    expect(mapping.total).toBe("Total USD");
+    expect(mapping.fee).toBe("Fee USD");
+    expect(mapping.notes).toBe("Transaction ID");
+    expect(mapping.asset).toBe("Asset Type");
+  });
+
+  it("accepts 'settled' status (Swan Bitcoin)", () => {
+    const csv = [
+      swanHeaders,
+      "purchase,2023-06-24 04:35:11+00,UTC,settled,7d82700a-1234,40.00,40.00,,0.00129600,BTC,30864.20,,,",
+    ].join("\n");
+    const mapping: ColumnMapping = {
+      date: "Date",
+      type: "Event",
+      amount: "Unit Count",
+      price: "BTC Price",
+      total: "Total USD",
+      fee: "Fee USD",
+      notes: "Transaction ID",
+      asset: "Asset Type",
+    };
+    const result = parseCSVContent(csv, "Swan", mapping);
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].transactionType).toBe(TransactionType.Buy);
+    expect(result.transactions[0].amountBTC).toBeCloseTo(0.001296, 6);
+  });
+
+  it("skips USD deposit rows (non-BTC asset)", () => {
+    const csv = [
+      swanHeaders,
+      "deposit,2023-06-01 05:12:39+00,UTC,settled,,815.00,,,,USD,,,,",
+    ].join("\n");
+    const mapping: ColumnMapping = {
+      date: "Date",
+      type: "Event",
+      amount: "Unit Count",
+      price: "BTC Price",
+      total: "Total USD",
+      fee: "Fee USD",
+      notes: "Transaction ID",
+      asset: "Asset Type",
+    };
+    const result = parseCSVContent(csv, "Swan", mapping);
+    expect(result.transactions).toHaveLength(0);
+    expect(result.skippedRows.length).toBeGreaterThan(0);
+    expect(result.skippedRows[0].reason).toContain("Non-BTC asset");
+  });
+
+  it("parses BTC deposit as TransferIn", () => {
+    const csv = [
+      swanHeaders,
+      "deposit,2023-06-01 06:38:27+00,UTC,settled,,,,,0.00901677,BTC,,Custodial Transferred from Prime Trust,,,",
+    ].join("\n");
+    const mapping: ColumnMapping = {
+      date: "Date",
+      type: "Event",
+      amount: "Unit Count",
+      price: "BTC Price",
+      total: "Total USD",
+      fee: "Fee USD",
+      notes: "Transaction ID",
+      asset: "Asset Type",
+    };
+    const result = parseCSVContent(csv, "Swan", mapping);
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].transactionType).toBe(TransactionType.TransferIn);
+    expect(result.transactions[0].amountBTC).toBeCloseTo(0.00901677, 8);
+  });
+
+  it("parses full Swan export with mixed rows", () => {
+    const csv = [
+      swanHeaders,
+      "deposit,2023-06-01 05:12:39+00,UTC,settled,,815.00,,,,USD,,,,",
+      "deposit,2023-06-01 06:38:27+00,UTC,settled,,,,,0.00901677,BTC,,Custodial Transferred,,,",
+      "purchase,2023-06-08 19:33:29+00,UTC,settled,05bb6d47-7ba0,815.00,815.00,,0.03062470,BTC,26612.51,,,",
+      "purchase,2023-06-24 04:35:11+00,UTC,settled,7d82700a-7002,40.00,40.00,,0.00129600,BTC,30864.20,,,",
+    ].join("\n");
+    const mapping: ColumnMapping = {
+      date: "Date",
+      type: "Event",
+      amount: "Unit Count",
+      price: "BTC Price",
+      total: "Total USD",
+      fee: "Fee USD",
+      notes: "Transaction ID",
+      asset: "Asset Type",
+    };
+    const result = parseCSVContent(csv, "Swan", mapping);
+    // USD deposit skipped, BTC deposit + 2 purchases = 3 transactions
+    expect(result.transactions).toHaveLength(3);
+    expect(result.skippedRows).toHaveLength(1); // USD deposit
+    expect(result.transactions[0].transactionType).toBe(TransactionType.TransferIn);
+    expect(result.transactions[1].transactionType).toBe(TransactionType.Buy);
+    expect(result.transactions[2].transactionType).toBe(TransactionType.Buy);
+  });
+});
