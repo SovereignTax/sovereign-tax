@@ -6,7 +6,7 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 ## Repository
 - **Source code:** `sovereign-tax/` (cloned from github.com/sovereigntax/sovereign-tax)
 - **Website/deployment:** `cloudflare-package/` (static site on Cloudflare Pages at sovereigntax.io)
-- **Builds archive:** `builds/` (versioned .dmg and .exe installers)
+- **Builds archive:** `builds/` (versioned .dmg, .exe, and .rpm installers)
 - **Pre-launch backup:** `cloudflare-package-PRELAUNCH-BACKUP/`
 
 **IMPORTANT:** `sovereign-tax-pro` (jhimm2300/sovereign-tax-pro) is a SEPARATE multi-crypto project. Do NOT modify those files.
@@ -66,7 +66,7 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 ### Tauri Config (`src-tauri/`)
 - `tauri.conf.json` — App config: identifier `com.sovereigntax.app`, min 900x600, CSP locked down
 - `Cargo.toml` — Rust deps: tauri 2.10, plugins for fs/dialog/store/opener
-- Builds to macOS universal binary (.dmg) and Windows (.exe)
+- Builds to macOS universal binary (.dmg), Windows installer (.exe), and Linux RPM (.rpm)
 
 ## Key Data Flow
 1. **First launch:** TOS → PIN setup → derives encryption key via PBKDF2 → stores encrypted salt
@@ -83,7 +83,7 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 - `download.html` — Invoice-gated download page (BTCPay verification)
 - `support.html` — Troubleshooting and CSV import guide
 - `privacy-policy.html` / `terms-of-service.html` — Legal pages
-- `downloads/` — Current .dmg and .exe installers
+- `downloads/` — Current .dmg, .exe, and .rpm installers
 - `screenshots_original/` — 19 app screenshots for the website
 - `version.json` — Version metadata for update checks
 
@@ -103,12 +103,13 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 ### Sacred Paths (never rename/move)
 - `cloudflare-package/downloads/SovereignTax-macOS.dmg`
 - `cloudflare-package/downloads/SovereignTax-Windows.exe`
+- `cloudflare-package/downloads/SovereignTax-Linux.rpm`
 - `sovereign-tax/version.json` (GitHub raw — update check source)
 - `cloudflare-package/download.html` (invoice gate logic)
 - `cloudflare-package/index.html` (Gumroad + BTCPay purchase buttons)
 
 ### Binary Policy
-- `.dmg` and `.exe` files are deployed to Cloudflare but NEVER committed to git
+- `.dmg`, `.exe`, and `.rpm` files are deployed to Cloudflare but NEVER committed to git
 - Use GitHub Releases for versioned binary archival
 - `builds/` directory is local-only backup
 
