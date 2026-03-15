@@ -3,10 +3,12 @@ import {
   Transaction,
   Lot,
   LotDetail,
+  LotSelection,
   SaleRecord,
   CalculationResult,
   createLot,
 } from "./models";
+export type { LotSelection };
 
 /** Calculate days between two ISO date strings */
 export function daysBetween(d1: string, d2: string): number {
@@ -36,11 +38,7 @@ function formatDateShort(isoDate: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-/** Lot selection for Specific Identification method */
-export interface LotSelection {
-  lotId: string;
-  amountBTC: number;
-}
+// LotSelection is now defined in models.ts and re-exported above
 
 /**
  * Shared resolver: maps each disposition transaction to its recorded Specific ID SaleRecord.
@@ -198,27 +196,15 @@ export function calculate(
 
       case TransactionType.TransferIn: {
         // Non-taxable self-transfer (IRS FAQ 81). If the user assigned a sourceWallet,
-        // FIFO-consume lots from that wallet and re-tag them to the TransferIn's wallet.
+        // re-tag lots from that wallet to the TransferIn's wallet.
         // Cost basis and holding period carry over — no taxable event.
         if (trans.sourceWallet) {
           const destWallet = trans.wallet || trans.exchange;
           const sourceNorm = trans.sourceWallet.trim().toLowerCase();
           let remaining = trans.amountBTC;
 
-          // FIFO order: oldest lots from the source wallet first
-          const sourceIndices = lots
-            .map((lot, idx) => ({ lot, idx }))
-            .filter(({ lot }) =>
-              lot.remainingBTC > 0 &&
-              (lot.wallet || lot.exchange || "").trim().toLowerCase() === sourceNorm
-            )
-            .sort((a, b) => new Date(a.lot.purchaseDate).getTime() - new Date(b.lot.purchaseDate).getTime())
-            .map(({ idx }) => idx);
-
-          for (const idx of sourceIndices) {
-            if (remaining <= 0.00000001) break;
-            const take = Math.min(lots[idx].remainingBTC, remaining);
-
+          // Helper: re-tag a lot (or split it) — shared by Specific ID and FIFO paths
+          const retagLot = (idx: number, take: number) => {
             if (Math.abs(take - lots[idx].remainingBTC) < 1e-8) {
               // Re-tag entire lot in place (avoids splitting)
               lots[idx].wallet = destWallet;
@@ -242,9 +228,44 @@ export function calculate(
               lots.push(retagged);
             }
             remaining -= take;
+          };
+
+          // --- Specific ID path: honor user's explicit lot selections ---
+          if (trans.transferLotSelections && trans.transferLotSelections.length > 0) {
+            for (const sel of trans.transferLotSelections) {
+              if (remaining <= 1e-8) break;
+              const lotIdx = lots.findIndex(
+                (l) => l.id === sel.lotId && l.remainingBTC > 0 &&
+                       (l.wallet || l.exchange || "").trim().toLowerCase() === sourceNorm
+              );
+              if (lotIdx === -1) {
+                warnings.push(
+                  `TransferIn on ${formatDateShort(trans.date)}: Selected lot "${sel.lotId.slice(0, 8)}…" not found in "${trans.sourceWallet}" — skipped.`
+                );
+                continue;
+              }
+              retagLot(lotIdx, Math.min(sel.amountBTC, lots[lotIdx].remainingBTC, remaining));
+            }
           }
 
-          if (remaining > 0.00000001) {
+          // --- FIFO fills any remaining amount ---
+          if (remaining > 1e-8) {
+            const sourceIndices = lots
+              .map((lot, idx) => ({ lot, idx }))
+              .filter(({ lot }) =>
+                lot.remainingBTC > 0 &&
+                (lot.wallet || lot.exchange || "").trim().toLowerCase() === sourceNorm
+              )
+              .sort((a, b) => new Date(a.lot.purchaseDate).getTime() - new Date(b.lot.purchaseDate).getTime())
+              .map(({ idx }) => idx);
+
+            for (const idx of sourceIndices) {
+              if (remaining <= 1e-8) break;
+              retagLot(idx, Math.min(lots[idx].remainingBTC, remaining));
+            }
+          }
+
+          if (remaining > 1e-8) {
             warnings.push(
               `TransferIn on ${formatDateShort(trans.date)}: Could not find ${remaining.toFixed(8)} BTC in "${trans.sourceWallet}" to re-tag. Some lots may remain at the source wallet.`
             );

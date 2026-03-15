@@ -11,6 +11,7 @@ export interface Transaction {
   exchange: string;
   wallet?: string; // Wallet/account for per-wallet cost basis tracking
   sourceWallet?: string; // For TransferIn: which wallet/exchange the lots came from (user-assigned)
+  transferLotSelections?: LotSelection[]; // For TransferIn: user-chosen lots to re-tag (Specific ID for transfers)
   incomeType?: IncomeType; // For mining, rewards — classified as ordinary income
   notes: string;
 }
@@ -25,6 +26,12 @@ export interface Lot {
   remainingBTC: number;
   exchange: string;
   wallet?: string; // Wallet/account for per-wallet cost basis tracking
+}
+
+/** Lot selection for Specific Identification method */
+export interface LotSelection {
+  lotId: string;
+  amountBTC: number;
 }
 
 export interface LotDetail {

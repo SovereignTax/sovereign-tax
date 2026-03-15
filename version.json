@@ -1,8 +1,8 @@
 {
-  "latest": "1.4.3",
+  "latest": "1.4.4",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-13",
-  "notes": "Fix cross-wallet Specific ID elections silently lost when reopening Edit Lots modal. 541 automated tests passing.",
+  "releaseDate": "2026-03-15",
+  "notes": "Specific ID lot selection for transfers — choose exactly which lots move between wallets. Full multi-hop provenance tracking. 558 automated tests passing.",
   "downloads": {
     "macos": "https://sovereigntax.io/downloads/95d70a0e-77cd-4e11-a057-7bbdd871138c.dmg",
     "windows": "https://sovereigntax.io/downloads/9417b54c-9df9-48e6-972a-70937236d366.exe",

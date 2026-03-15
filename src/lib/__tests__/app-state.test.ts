@@ -699,6 +699,55 @@ describe("findStaleDownstreamRecords", () => {
     );
     expect(staleIds).toContain(record.id);
   });
+
+  it("does NOT catch multi-hop descendant sales (wallet-scoped only — Pass 2 in updateTransaction covers this)", () => {
+    // Coinbase → Ledger (t1) → Kraken (t2) → sell at Kraken
+    // Editing t1: affected wallets = {Coinbase, Ledger} — Kraken is NOT included
+    // findStaleDownstreamRecords misses the Kraken sale. The lot-ID-scoped Pass 2
+    // in updateTransaction catches it via lotDetails.includes("-xfer-" + t1.id[:8]).
+    const t1 = makeTransferIn({ wallet: "Ledger", sourceWallet: "Coinbase" });
+    const sellAtKraken = createTransaction({
+      date: new Date("2025-06-01T12:00:00").toISOString(),
+      transactionType: TransactionType.Sell,
+      amountBTC: 0.5,
+      pricePerBTC: 70000,
+      totalUSD: 35000,
+      exchange: "Kraken",
+      wallet: "Kraken",
+      notes: "",
+    });
+    // Sale record with a descendant lot ID: buyId-xfer-t1[:8]-xfer-t2[:8]
+    const descendantLotId = "someBuyId-xfer-" + t1.id.slice(0, 8) + "-xfer-" + crypto.randomUUID().slice(0, 8);
+    const record = makeSaleRecord(sellAtKraken, {
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: descendantLotId,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        purchaseDate: "2024-01-01T12:00:00.000Z",
+        daysHeld: 500,
+        exchange: "Kraken",
+        isLongTerm: true,
+      }],
+    });
+
+    // findStaleDownstreamRecords only checks Coinbase + Ledger wallets — misses Kraken
+    const walletScopedIds = findStaleDownstreamRecords(
+      t1,
+      { sourceWallet: "Binance" },
+      [t1, sellAtKraken],
+      [record]
+    );
+    expect(walletScopedIds).toHaveLength(0); // Kraken not in affected wallets
+
+    // The lot-ID-scoped sweep (Pass 2 in updateTransaction) would catch this:
+    const xferSuffix = "-xfer-" + t1.id.slice(0, 8);
+    const lotScopedIds = [record]
+      .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && d.lotId.includes(xferSuffix)))
+      .map((s) => s.id);
+    expect(lotScopedIds).toContain(record.id);
+  });
 });
 
 // ═══════════════════════════════════════════════════════
@@ -750,11 +799,16 @@ describe("Buy delete cascades to Specific ID elections", () => {
     };
   }
 
-  // Simulates the filtering logic from deleteTransaction's Buy cascade block
+  // Simulates the filtering logic from deleteTransaction's Buy/TransferIn cascade block
   function simulateDeleteCascade(deletedId: string, deletedType: string, allSales: SaleRecord[]): SaleRecord[] {
     if (deletedType !== TransactionType.Buy && deletedType !== TransactionType.TransferIn) return allSales;
+    const xferSuffix = "-xfer-" + deletedId.slice(0, 8);
+    const isStaleRef = (lotId: string) =>
+      deletedType === TransactionType.Buy
+        ? lotId === deletedId || lotId.startsWith(deletedId + "-xfer-")
+        : lotId.includes(xferSuffix);
     const staleSaleIds = allSales
-      .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === deletedId))
+      .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && isStaleRef(d.lotId)))
       .map((s) => s.id);
     if (staleSaleIds.length === 0) return allSales;
     const staleSet = new Set(staleSaleIds);
@@ -800,7 +854,7 @@ describe("Buy delete cascades to Specific ID elections", () => {
     expect(remaining).toHaveLength(1);
   });
 
-  it("cascades for TransferIn deletions", () => {
+  it("cascades for TransferIn deletions (direct split lot)", () => {
     const ti = createTransaction({
       date: new Date("2024-01-15T12:00:00").toISOString(),
       transactionType: TransactionType.TransferIn,
@@ -811,8 +865,48 @@ describe("Buy delete cascades to Specific ID elections", () => {
       wallet: "Ledger",
       notes: "",
     });
-    const record = makeSaleRecordWithLot(ti.id);
+    // Split lots created by a transfer have IDs like: buyId-xfer-transferId[:8]
+    const splitLotId = "someBuyId-xfer-" + ti.id.slice(0, 8);
+    const record = makeSaleRecordWithLot(splitLotId);
     const remaining = simulateDeleteCascade(ti.id, TransactionType.TransferIn, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("Buy deletion cascades to elections referencing split lots (buyId-xfer-...)", () => {
+    const b1 = makeBuy();
+    const splitLotId = b1.id + "-xfer-" + crypto.randomUUID().slice(0, 8);
+    const record = makeSaleRecordWithLot(splitLotId);
+    const remaining = simulateDeleteCascade(b1.id, TransactionType.Buy, [record]);
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("TransferIn deletion cascades to elections referencing descendant split lots (multi-hop)", () => {
+    // Simulate: Buy → Transfer t1 (creates buyId-xfer-t1[:8]) → Transfer t2 (creates buyId-xfer-t1[:8]-xfer-t2[:8])
+    // Deleting t1 should invalidate a sale that references the descendant lot
+    const t1 = createTransaction({
+      date: new Date("2024-02-01T12:00:00").toISOString(),
+      transactionType: TransactionType.TransferIn,
+      amountBTC: 0.5,
+      pricePerBTC: 0,
+      totalUSD: 0,
+      exchange: "Ledger",
+      wallet: "Ledger",
+      notes: "",
+    });
+    const t2 = createTransaction({
+      date: new Date("2024-03-01T12:00:00").toISOString(),
+      transactionType: TransactionType.TransferIn,
+      amountBTC: 0.5,
+      pricePerBTC: 0,
+      totalUSD: 0,
+      exchange: "Kraken",
+      wallet: "Kraken",
+      notes: "",
+    });
+    // Descendant lot ID: buyId-xfer-t1[:8]-xfer-t2[:8]
+    const descendantLotId = "someBuyId-xfer-" + t1.id.slice(0, 8) + "-xfer-" + t2.id.slice(0, 8);
+    const record = makeSaleRecordWithLot(descendantLotId);
+    const remaining = simulateDeleteCascade(t1.id, TransactionType.TransferIn, [record]);
     expect(remaining).toHaveLength(0);
   });
 });

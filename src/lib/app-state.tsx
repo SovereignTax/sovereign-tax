@@ -518,8 +518,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     // referencing it as a lot source become stale. Remove them proactively so the
     // user isn't silently served wrong cost-basis numbers.
     if (deleted && (deleted.transactionType === TransactionType.Buy || deleted.transactionType === TransactionType.TransferIn)) {
+      // For Buy: lot ID === buyId, split lots start with buyId + "-xfer-"
+      // For TransferIn: split lots contain "-xfer-" + transferId.slice(0,8) anywhere (catches descendants)
+      const xferSuffix = "-xfer-" + id.slice(0, 8);
+      const isStaleRef = (lotId: string) =>
+        deleted.transactionType === TransactionType.Buy
+          ? lotId === id || lotId.startsWith(id + "-xfer-")
+          : lotId.includes(xferSuffix);
       const staleSaleIds = recordedSalesRef.current
-        .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === id))
+        .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && isStaleRef(d.lotId)))
         .map((s) => s.id);
       if (staleSaleIds.length > 0) {
         const staleSet = new Set(staleSaleIds);
@@ -534,6 +541,31 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Cascade: when a Buy or TransferIn is deleted, any downstream TransferIn whose
+    // transferLotSelections reference derived lots should have its selections cleared.
+    // Buy: lots have id === buyId or startsWith(buyId + "-xfer-")
+    // TransferIn: split lots contain "-xfer-" + transferId.slice(0,8) as a segment
+    if (deleted && (deleted.transactionType === TransactionType.Buy || deleted.transactionType === TransactionType.TransferIn)) {
+      const xferSuffix = "-xfer-" + id.slice(0, 8);
+      const isAffected = (lotId: string) =>
+        deleted.transactionType === TransactionType.Buy
+          ? lotId === id || lotId.startsWith(id + "-xfer-")
+          : lotId.includes(xferSuffix);
+      const xferToUpdate = transactionsRef.current.filter(
+        (t) => t.transactionType === TransactionType.TransferIn && t.id !== id &&
+               t.transferLotSelections?.some((sel) => isAffected(sel.lotId))
+      );
+      if (xferToUpdate.length > 0) {
+        const xferIds = new Set(xferToUpdate.map((t) => t.id));
+        const clearedTxns = transactionsRef.current.map((t) =>
+          xferIds.has(t.id) ? { ...t, transferLotSelections: undefined } : t
+        );
+        setTransactions(clearedTxns);
+        transactionsRef.current = clearedTxns;
+        await guardedSave(() => persistence.saveTransactions(clearedTxns));
+      }
+    }
+
     if (deleted) {
       await appendAuditLog(AuditAction.TransactionDelete, `Deleted ${deleted.transactionType} of ${deleted.amountBTC.toFixed(8)} BTC from ${deleted.exchange}`);
     }
@@ -542,6 +574,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const updateTransaction = useCallback(async (id: string, updates: Partial<Omit<Transaction, "id">>) => {
     // Capture pre-edit transaction BEFORE mutating the ref — needed for invalidation checks below.
     const original = transactionsRef.current.find((t) => t.id === id);
+
+    // Clear transfer lot selections when material fields change on a TransferIn.
+    // sourceWallet change makes lot selections from the old wallet invalid.
+    // amountBTC/date change means the lot coverage needs to be re-evaluated.
+    if (original?.transactionType === TransactionType.TransferIn && original.transferLotSelections?.length) {
+      const norm = (s: string | undefined) => (s || "").trim().toLowerCase();
+      const shouldClear = (
+        ("sourceWallet" in updates && norm(updates.sourceWallet) !== norm(original.sourceWallet)) ||
+        (updates.amountBTC !== undefined && Math.round(updates.amountBTC * 1e8) !== Math.round(original.amountBTC * 1e8)) ||
+        (updates.date !== undefined && updates.date !== original.date) ||
+        (updates.transactionType !== undefined && updates.transactionType !== TransactionType.TransferIn)
+      );
+      if (shouldClear) {
+        (updates as any).transferLotSelections = undefined;
+      }
+    }
 
     const next = transactionsRef.current.map((t) => {
       if (t.id !== id) return t;
@@ -568,17 +616,27 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // TransferIn sourceWallet changes invalidate downstream Specific ID elections,
-    // but ONLY for sells/donations in the affected wallets (old source, new source, destination).
-    if (original && original.transactionType === TransactionType.TransferIn) {
+    // TransferIn sourceWallet changes invalidate downstream Specific ID elections.
+    // Two passes: (1) wallet-scoped for immediate wallets, (2) lot-ID-scoped for multi-hop descendants.
+    if (original && original.transactionType === TransactionType.TransferIn && isMaterialChange(original, updates)) {
+      // Pass 1: wallet-scoped — sells/donations in old source, new source, destination wallets
       const staleIds = findStaleDownstreamRecords(original, updates, transactionsRef.current, recordedSalesRef.current);
-      if (staleIds.length > 0) {
-        const staleSet = new Set(staleIds);
+
+      // Pass 2: lot-ID-scoped — any Specific ID election referencing lots derived from this transfer
+      // Catches multi-hop descendants (e.g., buyId-xfer-t1[:8]-xfer-t2[:8]) that Pass 1 misses
+      const xferSuffix = "-xfer-" + id.slice(0, 8);
+      const lotStaleSaleIds = recordedSalesRef.current
+        .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && d.lotId.includes(xferSuffix)))
+        .map((s) => s.id);
+
+      const allStaleIds = [...new Set([...staleIds, ...lotStaleSaleIds])];
+      if (allStaleIds.length > 0) {
+        const staleSet = new Set(allStaleIds);
         const nextSales = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
         setRecordedSales(nextSales);
         recordedSalesRef.current = nextSales;
         await guardedSave(() => persistence.saveRecordedSales(nextSales));
-        await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${staleIds.length} downstream Specific ID election(s) after TransferIn edit`);
+        await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${allStaleIds.length} downstream Specific ID election(s) after TransferIn edit`);
       }
     }
 
@@ -592,7 +650,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const typeChanged = updates.transactionType !== undefined && updates.transactionType !== TransactionType.Buy;
       if (btcDecreased || walletChanged || typeChanged) {
         const staleSaleIds = recordedSalesRef.current
-          .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId === id))
+          .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && (d.lotId === id || d.lotId.startsWith(id + "-xfer-"))))
           .map((s) => s.id);
         if (staleSaleIds.length > 0) {
           const staleSet = new Set(staleSaleIds);
@@ -604,6 +662,47 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             `Auto-removed ${staleSaleIds.length} Specific ID election(s) after Buy edit (lot eligibility changed). ` +
             `Affected sales will use FIFO until lots are re-assigned via Edit Lots.`
           );
+        }
+
+        // Also clear transferLotSelections on TransferIn transactions that reference this Buy lot
+        const xferToUpdate = transactionsRef.current.filter(
+          (t) => t.transactionType === TransactionType.TransferIn &&
+                 t.transferLotSelections?.some((sel) => sel.lotId === id || sel.lotId.startsWith(id + "-xfer-"))
+        );
+        if (xferToUpdate.length > 0) {
+          const xferIds = new Set(xferToUpdate.map((t) => t.id));
+          const clearedTxns = transactionsRef.current.map((t) =>
+            xferIds.has(t.id) ? { ...t, transferLotSelections: undefined } : t
+          );
+          setTransactions(clearedTxns);
+          transactionsRef.current = clearedTxns;
+          await guardedSave(() => persistence.saveTransactions(clearedTxns));
+        }
+      }
+    }
+
+    // TransferIn material edits invalidate downstream transfers that reference split lots
+    // created by this transfer. Split lot IDs contain "-xfer-" + transferId.slice(0,8).
+    if (original && original.transactionType === TransactionType.TransferIn) {
+      const norm = (s: string | undefined) => (s || "").trim().toLowerCase();
+      const srcChanged = "sourceWallet" in updates && norm(updates.sourceWallet) !== norm(original.sourceWallet);
+      const amtChanged = updates.amountBTC !== undefined && Math.round(updates.amountBTC * 1e8) !== Math.round(original.amountBTC * 1e8);
+      const dateChanged = updates.date !== undefined && updates.date !== original.date;
+      const typeChanged = updates.transactionType !== undefined && updates.transactionType !== TransactionType.TransferIn;
+      if (srcChanged || amtChanged || dateChanged || typeChanged) {
+        const xferSuffix = "-xfer-" + id.slice(0, 8);
+        const xferToUpdate = transactionsRef.current.filter(
+          (t) => t.transactionType === TransactionType.TransferIn && t.id !== id &&
+                 t.transferLotSelections?.some((sel) => sel.lotId.includes(xferSuffix))
+        );
+        if (xferToUpdate.length > 0) {
+          const xferIds = new Set(xferToUpdate.map((t) => t.id));
+          const clearedTxns = transactionsRef.current.map((t) =>
+            xferIds.has(t.id) ? { ...t, transferLotSelections: undefined } : t
+          );
+          setTransactions(clearedTxns);
+          transactionsRef.current = clearedTxns;
+          await guardedSave(() => persistence.saveTransactions(clearedTxns));
         }
       }
     }

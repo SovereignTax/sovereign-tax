@@ -1,12 +1,8 @@
 import { useState, useMemo } from "react";
-import { Lot } from "../lib/models";
+import { Lot, LotSelection } from "../lib/models";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { daysBetween, isMoreThanOneYear, optimizeLotSelections } from "../lib/cost-basis";
-
-export interface LotSelection {
-  lotId: string;
-  amountBTC: number;
-}
+export type { LotSelection };
 
 interface LotPickerProps {
   lots: Lot[];
@@ -15,6 +11,8 @@ interface LotPickerProps {
   salePrice?: number; // USD per BTC — used by Optimize to compute estimated tax per lot
   isDonation?: boolean; // When true, Optimize prefers lowest cost basis lots (eliminate most embedded gains)
   initialSelections?: LotSelection[]; // Pre-fill from saved simulation selections
+  amountLabel?: string; // Column header for amount input (defaults to "Amount to Sell")
+  allowPartial?: boolean; // When true, allow confirming with less than targetAmount (FIFO fills remainder)
   onConfirm: (selections: LotSelection[]) => void;
   onCancel: () => void;
 }
@@ -22,7 +20,7 @@ interface LotPickerProps {
 type SortField = "date" | "wallet" | "available" | "cost" | "daysHeld" | "term";
 type SortDir = "asc" | "desc";
 
-export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation, initialSelections, onConfirm, onCancel }: LotPickerProps) {
+export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation, initialSelections, amountLabel, allowPartial, onConfirm, onCancel }: LotPickerProps) {
   const availableLots = lots.filter((l) => l.remainingBTC > 0);
 
   // Build initial selection map from saved selections (if provided and lot IDs still exist)
@@ -56,7 +54,9 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
 
   const totalSelected = Object.values(selections).reduce((a, b) => a + b, 0);
   const remaining = targetAmount - totalSelected;
-  const isValid = Math.abs(remaining) < 0.00000001 && totalSelected > 0;
+  const isValid = allowPartial
+    ? totalSelected > 0 && totalSelected <= targetAmount + 1e-8
+    : Math.abs(remaining) < 0.00000001 && totalSelected > 0;
 
   const toggleLot = (lotId: string, maxAmount: number) => {
     setSelections((prev) => {
@@ -200,7 +200,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
         <div className="text-right cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none" onClick={() => handleSort("cost")}>Cost/BTC{sortIndicator("cost")}</div>
         <div className="text-right cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none" onClick={() => handleSort("daysHeld")}>Days Held{sortIndicator("daysHeld")}</div>
         <div className="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none" onClick={() => handleSort("term")}>Term{sortIndicator("term")}</div>
-        <div className="text-right">Amount to Sell</div>
+        <div className="text-right">{amountLabel || "Amount to Sell"}</div>
       </div>
 
       {sortedLots.map(({ lot, daysHeld, isLongTerm }) => {

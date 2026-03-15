@@ -397,6 +397,9 @@ export function TransactionsView() {
                     title={t.sourceWallet ? `Source: ${t.sourceWallet} — click to change` : "Assign source wallet for lot re-tagging"}
                   >
                     {t.sourceWallet ? `← ${t.sourceWallet}` : "Assign"}
+                    {t.sourceWallet && (
+                      <span className="ml-1 text-[10px] text-gray-400">{t.transferLotSelections?.length ? "Specific ID" : "FIFO"}</span>
+                    )}
                   </button>
                 )}
                 {(t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.Donation) && (
@@ -593,12 +596,17 @@ export function TransactionsView() {
             availableWallets={filteredWallets}
             walletBalances={priorBalances}
             suggestion={suggestSourceWallet(modalTxn, state.allTransactions)}
-            onSave={async (sourceWallet) => {
-              await updateTransaction(assigningSourceWallet, { sourceWallet: sourceWallet || undefined });
+            allTransactions={state.allTransactions}
+            recordedSales={state.recordedSales}
+            onSave={async (sourceWallet, transferLotSelections) => {
+              await updateTransaction(assigningSourceWallet, {
+                sourceWallet: sourceWallet || undefined,
+                transferLotSelections: transferLotSelections?.length ? transferLotSelections : undefined,
+              });
               setAssigningSourceWallet(null);
             }}
             onClear={async () => {
-              await updateTransaction(assigningSourceWallet, { sourceWallet: undefined });
+              await updateTransaction(assigningSourceWallet, { sourceWallet: undefined, transferLotSelections: undefined });
               setAssigningSourceWallet(null);
             }}
             onClose={() => setAssigningSourceWallet(null)}
@@ -1136,6 +1144,8 @@ function SourceWalletModal({
   availableWallets,
   walletBalances,
   suggestion,
+  allTransactions,
+  recordedSales,
   onSave,
   onClear,
   onClose,
@@ -1144,13 +1154,19 @@ function SourceWalletModal({
   availableWallets: string[];
   walletBalances: Map<string, number>;
   suggestion?: { wallet: string; reason: string; confidence: "confident" | "flagged" } | null;
-  onSave: (sourceWallet: string) => Promise<void>;
+  allTransactions: Transaction[];
+  recordedSales: SaleRecord[];
+  onSave: (sourceWallet: string, transferLotSelections?: LotSelection[]) => Promise<void>;
   onClear: () => Promise<void>;
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState(txn.sourceWallet || "");
   const [customWallet, setCustomWallet] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showLotPicker, setShowLotPicker] = useState(!!(txn.transferLotSelections?.length));
+  const [lotSelections, setLotSelections] = useState<LotSelection[] | null>(
+    txn.transferLotSelections?.length ? txn.transferLotSelections : null
+  );
   const destWallet = txn.wallet || txn.exchange;
 
   // Show all wallets — don't filter out the destination. The source CAN be the
@@ -1163,9 +1179,23 @@ function SourceWalletModal({
   // The effective value to save: custom input takes priority when "custom" is selected
   const effectiveValue = selected === "__custom__" ? customWallet.trim() : selected;
 
+  // Compute lots in the selected source wallet for the optional lot picker
+  const lotsForPicker = useMemo(() => {
+    if (!showLotPicker || !effectiveValue) return [];
+    const result = calculateUpTo(allTransactions, AccountingMethod.FIFO, txn.id, recordedSales);
+    const walletNorm = effectiveValue.trim().toLowerCase();
+    return result.lots.filter(
+      (l) => l.remainingBTC > 0 && (l.wallet || l.exchange || "").trim().toLowerCase() === walletNorm
+    );
+  }, [showLotPicker, effectiveValue, allTransactions, txn.id, recordedSales]);
+
+  // Track how much is covered by selections vs FIFO remainder
+  const selectedTotal = lotSelections?.reduce((sum, s) => sum + s.amountBTC, 0) ?? 0;
+  const fifoRemainder = Math.max(0, txn.amountBTC - selectedTotal);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className={`bg-white dark:bg-zinc-900 rounded-xl p-6 ${showLotPicker && lotsForPicker.length > 0 ? "max-w-3xl" : "max-w-md"} w-full shadow-2xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold mb-2">Assign Source Wallet</h3>
         <p className="text-sm text-gray-500 mb-1">
           Transfer In of {formatBTC(txn.amountBTC)} BTC to <span className="font-medium">{destWallet}</span> on {formatDateTime(txn.date)}
@@ -1187,7 +1217,7 @@ function SourceWalletModal({
               <button
                 key={w}
                 className={`w-full flex flex-col px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${isSelected ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : isSuggested ? "bg-green-50 dark:bg-green-900/10 border-l-2 border-l-green-500" : "border-l-2 border-l-transparent"}`}
-                onClick={() => setSelected(isSelected ? "" : w)}
+                onClick={() => { setSelected(isSelected ? "" : w); setLotSelections(null); }}
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="flex items-center gap-2">
@@ -1210,7 +1240,7 @@ function SourceWalletModal({
           })}
           <button
             className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${selected === "__custom__" ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : "border-l-2 border-l-transparent"}`}
-            onClick={() => setSelected(selected === "__custom__" ? "" : "__custom__")}
+            onClick={() => { setSelected(selected === "__custom__" ? "" : "__custom__"); setLotSelections(null); }}
           >
             <span className={selected === "__custom__" ? "font-medium text-orange-600 dark:text-orange-400" : "text-gray-500"}>Other (type a name)...</span>
           </button>
@@ -1222,9 +1252,58 @@ function SourceWalletModal({
             className="input w-full mb-2"
             placeholder="e.g., Coinbase, Cold Storage, Trezor"
             value={customWallet}
-            onChange={(e) => setCustomWallet(e.target.value)}
+            onChange={(e) => { setCustomWallet(e.target.value); setLotSelections(null); }}
             autoFocus
           />
+        )}
+
+        {/* Optional: Choose specific lots to transfer */}
+        {effectiveValue && (
+          <div className="mt-3 border-t border-gray-200 dark:border-zinc-700 pt-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showLotPicker}
+                onChange={(e) => {
+                  setShowLotPicker(e.target.checked);
+                  if (!e.target.checked) setLotSelections(null);
+                }}
+                className="rounded"
+              />
+              <span>Choose specific lots to transfer</span>
+            </label>
+            <p className="text-[11px] text-gray-400 mt-1 ml-6">
+              {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)." : "Default: oldest lots first (FIFO)"}
+            </p>
+
+            {showLotPicker && lotsForPicker.length > 0 && (
+              <div className="mt-3">
+                <LotPicker
+                  key={effectiveValue}
+                  lots={lotsForPicker}
+                  targetAmount={txn.amountBTC}
+                  saleDate={txn.date}
+                  amountLabel="Amount to Transfer"
+                  allowPartial
+                  initialSelections={lotSelections || txn.transferLotSelections}
+                  onConfirm={(sels) => setLotSelections(sels)}
+                  onCancel={() => { setShowLotPicker(false); setLotSelections(null); }}
+                />
+              </div>
+            )}
+
+            {showLotPicker && lotsForPicker.length === 0 && effectiveValue && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 ml-6">
+                No lots found in "{effectiveValue}" at the time of this transfer.
+              </p>
+            )}
+
+            {showLotPicker && lotSelections && fifoRemainder > 1e-8 && (
+              <p className="text-xs text-blue-500 mt-2 ml-6">
+                Remaining {fifoRemainder.toFixed(8)} BTC will transfer via FIFO (oldest first).
+              </p>
+            )}
+          </div>
         )}
 
         <div className="flex gap-3 justify-end mt-3">
@@ -1242,7 +1321,12 @@ function SourceWalletModal({
           <button
             className="btn-primary text-sm"
             disabled={!effectiveValue || saving}
-            onClick={async () => { setSaving(true); try { await onSave(effectiveValue); } finally { setSaving(false); } }}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave(effectiveValue, showLotPicker && lotSelections?.length ? lotSelections : undefined);
+              } finally { setSaving(false); }
+            }}
           >
             {saving ? "Saving..." : "Save"}
           </button>

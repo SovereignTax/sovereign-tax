@@ -613,6 +613,140 @@ describe("TransferIn lot re-tagging", () => {
 });
 
 // ═══════════════════════════════════════════════════════
+// TRANSFER-IN WITH SPECIFIC LOT SELECTIONS
+// ═══════════════════════════════════════════════════════
+
+describe("TransferIn with specific lot selections", () => {
+  it("re-tags user-selected lots instead of FIFO oldest", () => {
+    const b1 = buy("2024-01-01", 0.5, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 0.5, 50000, { wallet: "Coinbase" });
+    const xfer = {
+      ...transferIn("2024-03-01", 0.5, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b2.id, amountBTC: 0.5 }], // Pick the NEWER lot
+    };
+    const result = calculate([b1, b2, xfer], AccountingMethod.FIFO);
+    // The Feb lot ($50k) should be at River, Jan lot ($30k) stays at Coinbase
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    expect(riverLots).toHaveLength(1);
+    expect(riverLots[0].pricePerBTC).toBeCloseTo(50000, 2);
+    const coinbaseLots = result.lots.filter((l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "coinbase");
+    expect(coinbaseLots).toHaveLength(1);
+    expect(coinbaseLots[0].pricePerBTC).toBeCloseTo(30000, 2);
+  });
+
+  it("partial transfer with selections splits correctly", () => {
+    const b1 = buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" });
+    const xfer = {
+      ...transferIn("2024-03-01", 0.3, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b1.id, amountBTC: 0.3 }],
+    };
+    const result = calculate([b1, xfer], AccountingMethod.FIFO);
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    const coinbaseLots = result.lots.filter((l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "coinbase");
+    expect(riverLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.3, 8);
+    expect(coinbaseLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.7, 8);
+    // Cost basis proportional
+    expect(riverLots[0].totalCost).toBeCloseTo(0.3 * 40000, 2);
+  });
+
+  it("FIFO fallback when no selections (backward compat)", () => {
+    const b1 = buy("2024-01-01", 0.5, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 0.5, 50000, { wallet: "Coinbase" });
+    const xfer = transferIn("2024-03-01", 0.5, { wallet: "River", sourceWallet: "Coinbase" });
+    // No transferLotSelections — should use FIFO (oldest = Jan lot)
+    const result = calculate([b1, b2, xfer], AccountingMethod.FIFO);
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    expect(riverLots).toHaveLength(1);
+    expect(riverLots[0].pricePerBTC).toBeCloseTo(30000, 2); // FIFO = oldest
+  });
+
+  it("mixed: selections + FIFO remainder", () => {
+    const b1 = buy("2024-01-01", 0.5, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 0.5, 50000, { wallet: "Coinbase" });
+    const xfer = {
+      ...transferIn("2024-03-01", 0.8, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b2.id, amountBTC: 0.5 }], // Pick 0.5 from Feb lot
+    };
+    // Needs 0.3 more — FIFO fills from Jan lot
+    const result = calculate([b1, b2, xfer], AccountingMethod.FIFO);
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    const totalAtRiver = riverLots.reduce((s, l) => s + l.remainingBTC, 0);
+    expect(totalAtRiver).toBeCloseTo(0.8, 8);
+    // Both lots should be at River
+    expect(riverLots).toHaveLength(2);
+  });
+
+  it("lot not found in selections — skip with warning, FIFO fills", () => {
+    const b1 = buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" });
+    const xfer = {
+      ...transferIn("2024-03-01", 0.5, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: "nonexistent-id", amountBTC: 0.5 }],
+    };
+    const result = calculate([b1, xfer], AccountingMethod.FIFO);
+    // Should warn about the missing lot
+    expect(result.warnings.some((w) => w.includes("not found"))).toBe(true);
+    // FIFO fallback should still transfer the BTC
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    expect(riverLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.5, 8);
+  });
+
+  it("selected lot in wrong wallet is skipped", () => {
+    const b1 = buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 0.5, 50000, { wallet: "Kraken" });
+    const xfer = {
+      ...transferIn("2024-03-01", 0.5, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b2.id, amountBTC: 0.5 }], // Kraken lot, not Coinbase
+    };
+    const result = calculate([b1, b2, xfer], AccountingMethod.FIFO);
+    // b2 is at Kraken, not Coinbase — should skip and use FIFO from Coinbase
+    expect(result.warnings.some((w) => w.includes("not found"))).toBe(true);
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    expect(riverLots).toHaveLength(1);
+    // FIFO picked the Coinbase lot at $40k
+    expect(riverLots[0].pricePerBTC).toBeCloseTo(40000, 2);
+  });
+
+  it("empty transferLotSelections treated same as absent", () => {
+    const b1 = buy("2024-01-01", 1.0, 40000, { wallet: "Coinbase" });
+    const xfer = {
+      ...transferIn("2024-03-01", 1.0, { wallet: "River", sourceWallet: "Coinbase" }),
+      transferLotSelections: [], // explicit empty
+    };
+    const result = calculate([b1, xfer], AccountingMethod.FIFO);
+    const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
+    expect(riverLots).toHaveLength(1);
+    expect(riverLots[0].pricePerBTC).toBeCloseTo(40000, 2);
+  });
+
+  it("multi-hop provenance: exchange → cold storage → exchange → sell with correct cost basis", () => {
+    const b1 = buy("2024-01-01", 0.5, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 0.5, 50000, { wallet: "Coinbase" });
+    // Move the $50k lot to cold storage (specific pick)
+    const xfer1 = {
+      ...transferIn("2024-03-01", 0.5, { wallet: "Ledger", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b2.id, amountBTC: 0.5 }],
+    };
+    // Move it from cold storage to Kraken for sale
+    // The lot now has a split ID from the first transfer — need to find it
+    const result1 = calculate([b1, b2, xfer1], AccountingMethod.FIFO);
+    const ledgerLot = result1.lots.find((l) => l.remainingBTC > 0 && l.wallet === "Ledger");
+    expect(ledgerLot).toBeDefined();
+
+    const xfer2 = {
+      ...transferIn("2024-05-01", 0.5, { wallet: "Kraken", sourceWallet: "Ledger" }),
+      transferLotSelections: [{ lotId: ledgerLot!.id, amountBTC: 0.5 }],
+    };
+    const s1 = sell("2024-06-01", 0.5, 60000, { wallet: "Kraken" });
+    const result = calculate([b1, b2, xfer1, xfer2, s1], AccountingMethod.FIFO);
+
+    expect(result.sales).toHaveLength(1);
+    // Should use the $50k cost basis that traveled Coinbase → Ledger → Kraken
+    expect(result.sales[0].costBasis).toBeCloseTo(25000, 2); // 0.5 * 50000
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
 // SIMULATE SALE
 // ═══════════════════════════════════════════════════════
 
