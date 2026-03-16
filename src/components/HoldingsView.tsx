@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAppState } from "../lib/app-state";
 import { calculate } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
@@ -9,6 +9,7 @@ import { HelpPanel } from "./HelpPanel";
 export function HoldingsView() {
   const { allTransactions, priceState, privacyBlur, setPrivacyBlur, setSelectedNav, selectedWallet, setSelectedWallet, availableWallets, recordedSales } = useAppState();
 
+  const [highlightedRow, setHighlightedRow] = useState<string | null>(null);
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
   const activeLots = result.lots.filter((l) => {
@@ -104,7 +105,7 @@ export function HoldingsView() {
             {activeLots
               .sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime())
               .map((lot) => (
-                <div key={lot.id} className="grid grid-cols-6 gap-2 py-2 text-sm border-b border-gray-100 dark:border-gray-800">
+                <div key={lot.id} className={`grid grid-cols-6 gap-2 py-2 text-sm border-b border-gray-100 dark:border-gray-800 cursor-pointer ${highlightedRow === lot.id ? "ring-2 ring-blue-400/60 rounded" : ""}`} onClick={() => setHighlightedRow(highlightedRow === lot.id ? null : lot.id)}>
                   <div>{formatDate(lot.purchaseDate)}</div>
                   <div className={`text-right tabular-nums ${blurSmClass}`}>{formatBTC(lot.amountBTC)}</div>
                   <div className={`text-right tabular-nums ${blurSmClass}`}>{formatBTC(lot.remainingBTC)}</div>

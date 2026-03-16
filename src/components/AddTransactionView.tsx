@@ -342,7 +342,7 @@ export function AddTransactionView() {
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Fee USD:</span>
           <input className="input w-48" placeholder="0.00" value={feeStr} onChange={(e) => setFeeStr(e.target.value)} />
-          <span className="text-xs text-gray-400">(optional — added to cost basis for buys, subtracted from proceeds for sells)</span>
+          <span className="text-xs text-gray-400">(optional — {type === TransactionType.Donation ? "on-chain/network fee. Enter total BTC sent (including fee) as the amount above so balances stay accurate" : "added to cost basis for buys, subtracted from proceeds for sells"})</span>
         </div>
 
         {/* Exchange */}

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Sovereign Tax",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "identifier": "com.sovereigntax.app",
   "build": {
     "frontendDist": "../dist",

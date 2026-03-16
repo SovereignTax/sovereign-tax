@@ -76,7 +76,7 @@ export function ReviewView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // --- Readiness status ---
-  const hasIssues = unassignedTransfers.length > 0 || walletMismatchSales.length > 0;
+  const hasIssues = selectedYear >= 2025 && (unassignedTransfers.length > 0 || walletMismatchSales.length > 0);
   const hasOptimizable = optimizableSells.length > 0;
   const readinessStatus: "ready" | "warning" | "action" =
     hasIssues ? "action" : hasOptimizable ? "warning" : "ready";
@@ -222,14 +222,16 @@ export function ReviewView() {
       {/* Section 1: Unassigned Transfers */}
       <ReviewSection
         title="Source Wallet Assignments"
-        status={unassignedTransfers.length === 0 ? "pass" : "fail"}
+        status={unassignedTransfers.length === 0 || selectedYear < 2025 ? "pass" : "fail"}
         summary={
-          unassignedTransfers.length === 0
-            ? `All ${selectedYear} Transfer In transactions have source wallets assigned${assignedTransferCount > 0 ? ` (${assignedTransferCount} assigned)` : ""}.`
-            : `${unassignedTransfers.length} Transfer In${unassignedTransfers.length === 1 ? "" : "s"} without a source wallet.`
+          selectedYear < 2025
+            ? `Per-wallet tracking rules took effect in 2025. Source wallet assignments are optional for ${selectedYear}.`
+            : unassignedTransfers.length === 0
+              ? `All ${selectedYear} Transfer In transactions have source wallets assigned${assignedTransferCount > 0 ? ` (${assignedTransferCount} assigned)` : ""}.`
+              : `${unassignedTransfers.length} Transfer In${unassignedTransfers.length === 1 ? "" : "s"} without a source wallet.`
         }
       >
-        {unassignedTransfers.length > 0 && (
+        {unassignedTransfers.length > 0 && selectedYear >= 2025 && (
           <>
             <p className="text-xs text-gray-500 mb-3">
               IRS per-wallet rules (Treasury Reg. §1.1012-1(j)) require cost basis from lots in the same wallet as the sale. Assign source wallets so lots are tracked correctly.
@@ -256,17 +258,19 @@ export function ReviewView() {
         )}
       </ReviewSection>
 
-      {/* Section 2: Wallet Mismatches */}
+      {/* Section 2: Wallet Mismatches — only relevant for 2025+ when per-wallet rules apply */}
       <ReviewSection
         title="Wallet Compliance"
-        status={walletMismatchSales.length === 0 ? "pass" : "fail"}
+        status={walletMismatchSales.length === 0 || selectedYear < 2025 ? "pass" : "fail"}
         summary={
-          walletMismatchSales.length === 0
-            ? `All ${selectedYear} sales used lots from the correct wallet.`
-            : `${walletMismatchSales.length} sale${walletMismatchSales.length === 1 ? "" : "s"} used lots from the wrong wallet.`
+          selectedYear < 2025
+            ? `Per-wallet cost basis rules took effect in 2025. Cross-wallet lot usage was permitted in ${selectedYear}.`
+            : walletMismatchSales.length === 0
+              ? `All ${selectedYear} sales used lots from the correct wallet.`
+              : `${walletMismatchSales.length} sale${walletMismatchSales.length === 1 ? "" : "s"} used lots from the wrong wallet.`
         }
       >
-        {walletMismatchSales.length > 0 && (
+        {walletMismatchSales.length > 0 && selectedYear >= 2025 && (
           <>
             <p className="text-xs text-gray-500 mb-3">
               These sales had no matching lots in their wallet, so the engine used lots from other wallets as a fallback. Usually this means a Transfer In needs a source wallet assigned above.
@@ -451,7 +455,7 @@ export function ReviewView() {
               </div>
             </div>
 
-            {batchOptimizeResult.walletMismatches > 0 && (
+            {batchOptimizeResult.walletMismatches > 0 && selectedYear >= 2025 && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
                 ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet.
                 Consider assigning source wallets on your Transfer In transactions first for full IRS compliance.
@@ -677,7 +681,7 @@ function SourceWalletModal({
                   amountLabel="Amount to Transfer"
                   allowPartial
                   initialSelections={lotSelections || txn.transferLotSelections}
-                  onConfirm={(sels) => setLotSelections(sels)}
+                  onConfirm={(sels) => { setLotSelections(sels); setShowLotPicker(false); }}
                   onCancel={() => { setShowLotPicker(false); setLotSelections(null); }}
                 />
               </div>

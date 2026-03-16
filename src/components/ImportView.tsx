@@ -461,7 +461,10 @@ export function ImportView() {
       {state.transactions.length > 0 && (
         <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
           <span className="text-gray-500 text-sm">📄 {state.transactions.length} transactions loaded</span>
-          <button className="btn-danger text-sm" onClick={async () => { await state.clearAllData(); setImportStatus(null); }}>
+          <button className="btn-danger text-sm" onClick={async () => {
+            if (!window.confirm(`Are you sure you want to clear all ${state.transactions.length} transactions and related data? This cannot be undone.`)) return;
+            await state.clearAllData(); setImportStatus(null);
+          }}>
             Clear All
           </button>
         </div>

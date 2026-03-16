@@ -1,12 +1,12 @@
 {
-  "latest": "1.4.4",
+  "latest": "1.4.5",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-15",
-  "notes": "Specific ID lot selection for transfers — choose exactly which lots move between wallets. Full multi-hop provenance tracking. 558 automated tests passing.",
+  "releaseDate": "2026-03-16",
+  "notes": "Bug fixes and UX improvements: year filter, transfer lot selection, wallet mismatch warnings, batch operations, row highlighting. 563 tests passing.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/ae428bd6-c11b-49e8-9b1b-c442d689a91b.dmg",
-    "windows": "https://sovereigntax.io/downloads/fa1aeb1e-6144-48b0-a96d-766ebd1658dc.exe",
-    "linux": "https://sovereigntax.io/downloads/abf621e1-200e-474e-a27c-eede58e0613a.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/42d7331f-05b8-4242-97f9-868306e03bd5.rpm"
+    "macos": "https://sovereigntax.io/downloads/fa3611a4-1b6c-433d-a825-a9ec0396e497.dmg",
+    "windows": "https://sovereigntax.io/downloads/b5eb2581-7f3e-4f0d-8e40-d0018ed1172f.exe",
+    "linux": "https://sovereigntax.io/downloads/330a3f9e-0d76-42bd-80b5-53519a1b43fa.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/46d626ab-efc5-453d-a8da-f191b2bd57db.rpm"
   }
 }

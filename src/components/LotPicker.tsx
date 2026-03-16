@@ -203,7 +203,8 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
         <div className="text-right">{amountLabel || "Amount to Sell"}</div>
       </div>
 
-      {sortedLots.map(({ lot, daysHeld, isLongTerm }) => {
+      <div className="max-h-[40vh] overflow-y-auto">
+        {sortedLots.map(({ lot, daysHeld, isLongTerm }) => {
           const isSelected = lot.id in selections;
           const termBg = isSelected
             ? "bg-blue-50 dark:bg-blue-900/10"
@@ -243,6 +244,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
             </div>
           );
         })}
+      </div>
 
       {remaining > 0.00000001 && (
         <div className="text-sm text-orange-500 mt-2">
@@ -255,7 +257,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
         </div>
       )}
 
-      <div className="sticky bottom-0 bg-white dark:bg-zinc-900 pt-3 pb-1 border-t border-gray-200 dark:border-gray-700 mt-4 flex items-center gap-3">
+      <div className="pt-3 pb-1 border-t border-gray-200 dark:border-gray-700 mt-2 flex items-center gap-3">
         <button className="btn-primary" disabled={!isValid} onClick={handleConfirm}>
           Confirm Selection
         </button>

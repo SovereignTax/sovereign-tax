@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAppState } from "../lib/app-state";
 import { formatUSD, formatBTC, formatDateTime, formatDate, hasCrossWalletLots } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames, AccountingMethod } from "../lib/types";
@@ -19,6 +19,11 @@ export function TransactionsView() {
   const setSortAsc = (a: boolean) => state.setTxnSortAsc(a);
   const [filterType, setFilterType] = useState<TransactionType | "">("");
   const [searchText, setSearchText] = useState("");
+  const [highlightedRow, setHighlightedRow] = useState<string | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [batchAction, setBatchAction] = useState<"delete" | "exchange" | null>(null);
+  const [batchExchange, setBatchExchange] = useState("");
+  const [batchProcessing, setBatchProcessing] = useState(false);
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
   const [deletingTxn, setDeletingTxn] = useState<Transaction | null>(null);
   const [editingLotsTxn, setEditingLotsTxn] = useState<Transaction | null>(null);
@@ -67,6 +72,8 @@ export function TransactionsView() {
 
   const filtered = useMemo(() => {
     let result = [...transactions];
+    // Filter by selected year
+    result = result.filter((t) => new Date(t.date).getFullYear() === state.selectedYear);
     if (filterType) result = result.filter((t) => t.transactionType === filterType);
     if (searchText) {
       const lower = searchText.toLowerCase();
@@ -89,7 +96,10 @@ export function TransactionsView() {
       return sortAsc ? cmp : -cmp;
     });
     return result;
-  }, [transactions, filterType, searchText, sortField, sortAsc]);
+  }, [transactions, filterType, searchText, sortField, sortAsc, state.selectedYear]);
+
+  // Clear batch selection when filters or underlying data change so users can't act on hidden/stale rows
+  useEffect(() => { setSelectedRows(new Set()); }, [filterType, searchText, state.selectedYear, transactions]);
 
   const counts = useMemo(() => ({
     buys: transactions.filter((t) => t.transactionType === TransactionType.Buy).length,
@@ -226,7 +236,7 @@ export function TransactionsView() {
     <div className="flex flex-col h-full">
       <div className="p-6 pb-3 text-center">
         <h1 className="text-3xl font-bold">All Transactions</h1>
-        <HelpPanel subtitle={`${transactions.length} transactions imported — click any column header to sort.`} />
+        <HelpPanel subtitle={`${filtered.length} of ${transactions.length} transactions in ${state.selectedYear} — click any column header to sort.`} />
       </div>
       {errorMessage && (
         <div className="mx-6 mb-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg flex items-center gap-2">
@@ -235,8 +245,8 @@ export function TransactionsView() {
         </div>
       )}
 
-      {/* Wallet Mismatch Warning */}
-      {walletMismatchCount > 0 && (
+      {/* Wallet Mismatch Warning — only show for 2025+ when per-wallet rules apply */}
+      {walletMismatchCount > 0 && state.selectedYear >= 2025 && (
         <div className="mx-6 mb-3 px-4 py-3 rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/10 flex items-start gap-3">
           <span className="text-yellow-500 text-base mt-0.5">⚠️</span>
           <div>
@@ -275,8 +285,8 @@ export function TransactionsView() {
         </div>
       )}
 
-      {/* Unassigned Transfer Warning */}
-      {unassignedTransferCount > 0 && (
+      {/* Unassigned Transfer Warning — only show for 2025+ when per-wallet rules apply */}
+      {unassignedTransferCount > 0 && state.selectedYear >= 2025 && (
         <div className="mx-6 mb-3 px-4 py-3 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 flex items-start gap-3">
           <span className="text-red-500 text-base mt-0.5">⚠️</span>
           <div>
@@ -346,11 +356,23 @@ export function TransactionsView() {
         )}
       </div>
 
+      {/* Batch Action Bar */}
+      {selectedRows.size > 0 && (
+        <div className="mx-6 mb-2 px-4 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 flex items-center gap-3">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{selectedRows.size} selected</span>
+          <span className="flex-1" />
+          <button className="text-xs px-3 py-1.5 rounded bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300" onClick={() => { setBatchExchange(""); setBatchAction("exchange"); }}>Change Exchange</button>
+          <button className="text-xs px-3 py-1.5 rounded bg-red-500 hover:bg-red-600 text-white font-medium" onClick={() => setBatchAction("delete")}>Delete ({selectedRows.size})</button>
+          <button className="text-xs px-2 py-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" onClick={() => setSelectedRows(new Set())} title="Clear selection">Clear</button>
+        </div>
+      )}
+
       {/* Table (scrollable with sticky header) */}
       <div className="flex-1 overflow-y-auto border-t border-gray-200 dark:border-gray-700">
         <div className="px-6">
           {/* Sticky Header */}
-          <div className="grid gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }}>
+          <div className="grid gap-2 py-2 text-xs font-semibold text-gray-500 bg-white dark:bg-zinc-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ gridTemplateColumns: '28px 1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }}>
+            <div><input type="checkbox" checked={filtered.length > 0 && selectedRows.size === filtered.length} onChange={(e) => { if (e.target.checked) { setSelectedRows(new Set(filtered.map((t) => t.id))); } else { setSelectedRows(new Set()); } }} title="Select all" /></div>
             <SortHeader label="Date" field="date" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <div>Type</div>
             <SortHeader label="Amount BTC" field="amountBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
@@ -372,7 +394,8 @@ export function TransactionsView() {
                 ? "bg-yellow-50 dark:bg-yellow-900/10 border-l-2 border-l-yellow-400"
                 : i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30";
             return (
-            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center ${rowHighlight}`} style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }}>
+            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center cursor-pointer ${rowHighlight} ${highlightedRow === t.id ? "ring-2 ring-blue-400/60 rounded" : ""}`} style={{ gridTemplateColumns: '28px 1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }} onClick={(e) => { if ((e.target as HTMLElement).closest("button, input, select, a")) return; setHighlightedRow(highlightedRow === t.id ? null : t.id); }}>
+              <div onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selectedRows.has(t.id)} onChange={(e) => { const next = new Set(selectedRows); if (e.target.checked) next.add(t.id); else next.delete(t.id); setSelectedRows(next); }} /></div>
               <div className="tabular-nums">{formatDateTime(t.date)}</div>
               <div className={typeColor(t.transactionType)}>
                 {typeIcon(t.transactionType)} {TransactionTypeDisplayNames[t.transactionType]}
@@ -381,13 +404,13 @@ export function TransactionsView() {
                 )}
               </div>
               <div className="tabular-nums">{formatBTC(t.amountBTC)}</div>
-              <div className="tabular-nums">{formatUSD(t.pricePerBTC)}</div>
+              <div className="tabular-nums">{(t.transactionType === TransactionType.TransferIn || t.transactionType === TransactionType.TransferOut) && t.pricePerBTC === 0 ? "—" : formatUSD(t.pricePerBTC)}</div>
               <div className="tabular-nums text-gray-400">{t.fee ? formatUSD(t.fee) : ""}</div>
-              <div className="tabular-nums">{formatUSD(t.totalUSD)}</div>
+              <div className="tabular-nums">{(t.transactionType === TransactionType.TransferIn || t.transactionType === TransactionType.TransferOut) && t.totalUSD === 0 ? "—" : formatUSD(t.totalUSD)}</div>
               <div className="truncate">{t.exchange}</div>
               <div className="text-gray-500 truncate">{t.notes}</div>
               <div className="flex gap-1 justify-end">
-                {walletMismatchIds.has(t.id) && (
+                {walletMismatchIds.has(t.id) && state.selectedYear >= 2025 && (
                   <span className="text-yellow-500 text-xs px-0.5" title="Wallet mismatch: This sale used lots from a different wallet. To fix, assign a source wallet on the Transfer In that moved Bitcoin to this wallet.">⚠️</span>
                 )}
                 {t.transactionType === TransactionType.TransferIn && (
@@ -431,6 +454,67 @@ export function TransactionsView() {
           })}
         </div>
       </div>
+
+      {/* Batch Delete Confirmation */}
+      {batchAction === "delete" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchAction(null)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-2">Delete {selectedRows.size} Transaction{selectedRows.size === 1 ? "" : "s"}?</h3>
+            <p className="text-gray-500 text-sm mb-4">
+              This will permanently remove the selected transactions. Tax calculations will be recalculated automatically. Any Specific ID lot elections referencing these transactions will also be removed.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => setBatchAction(null)}>Cancel</button>
+              <button className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium" disabled={batchProcessing} onClick={async () => {
+                setBatchProcessing(true);
+                setErrorMessage(null);
+                try {
+                  for (const id of selectedRows) { await deleteTransaction(id); }
+                  setSelectedRows(new Set());
+                  setBatchAction(null);
+                } catch (err) { setErrorMessage("Batch delete failed: " + (err instanceof Error ? err.message : String(err))); }
+                finally { setBatchProcessing(false); }
+              }}>
+                {batchProcessing ? "Deleting..." : `Delete (${selectedRows.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Change Exchange */}
+      {batchAction === "exchange" && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchAction(null)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-3">Change Exchange — {selectedRows.size} Transaction{selectedRows.size === 1 ? "" : "s"}</h3>
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="w-20 text-right text-gray-500 text-sm">Exchange:</span>
+                <input className="input flex-1 text-sm" placeholder="New exchange name" value={batchExchange} onChange={(e) => setBatchExchange(e.target.value)} list="batch-exchange-options" />
+                <datalist id="batch-exchange-options">
+                  {state.availableWallets.map((w) => <option key={w} value={w} />)}
+                </datalist>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button className="btn-secondary text-sm" onClick={() => setBatchAction(null)}>Cancel</button>
+              <button className="btn-primary text-sm" disabled={!batchExchange.trim() || batchProcessing} onClick={async () => {
+                setBatchProcessing(true);
+                setErrorMessage(null);
+                try {
+                  const name = batchExchange.trim();
+                  for (const id of selectedRows) { await updateTransaction(id, { exchange: name }); }
+                  setSelectedRows(new Set());
+                  setBatchAction(null);
+                } catch (err) { setErrorMessage("Batch update failed: " + (err instanceof Error ? err.message : String(err))); }
+                finally { setBatchProcessing(false); }
+              }}>
+                {batchProcessing ? "Updating..." : `Update (${selectedRows.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {editingTxn && (
@@ -551,7 +635,7 @@ export function TransactionsView() {
               </div>
             </div>
 
-            {batchOptimizeResult.walletMismatches > 0 && (
+            {batchOptimizeResult.walletMismatches > 0 && state.selectedYear >= 2025 && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
                 ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet because no lots were found in the selling wallet.
                 This usually means a transfer between wallets hasn't been recorded yet.
@@ -807,6 +891,7 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
           <div className="flex items-center gap-3">
             <span className="w-20 text-right text-gray-500 text-sm">Fee USD:</span>
             <input className="input w-44 text-sm" placeholder="0.00" value={feeStr} onChange={(e) => setFeeStr(e.target.value)} />
+            {type === TransactionType.Donation && <span className="text-xs text-gray-400">Network fee</span>}
           </div>
 
           {/* Exchange */}
@@ -1286,7 +1371,7 @@ function SourceWalletModal({
                   amountLabel="Amount to Transfer"
                   allowPartial
                   initialSelections={lotSelections || txn.transferLotSelections}
-                  onConfirm={(sels) => setLotSelections(sels)}
+                  onConfirm={(sels) => { setLotSelections(sels); setShowLotPicker(false); }}
                   onCancel={() => { setShowLotPicker(false); setLotSelections(null); }}
                 />
               </div>

@@ -178,8 +178,8 @@ export function TaxReportView() {
         </div>
       </div>
 
-      {/* Wallet Mismatch Warning */}
-      {walletMismatchCount > 0 && (
+      {/* Wallet Mismatch Warning — only show for 2025+ when per-wallet rules apply */}
+      {walletMismatchCount > 0 && selectedYear >= 2025 && (
         <div className="card mb-6 border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-900/10">
           <div className="flex items-start gap-3">
             <span className="text-yellow-500 text-lg mt-0.5">⚠️</span>
@@ -203,8 +203,8 @@ export function TaxReportView() {
         </div>
       )}
 
-      {/* Unassigned Transfer Warning */}
-      {unassignedTransferCount > 0 && (
+      {/* Unassigned Transfer Warning — only show for 2025+ when per-wallet rules apply */}
+      {unassignedTransferCount > 0 && selectedYear >= 2025 && (
         <div className="card mb-6 border-l-4 border-l-red-500 bg-red-50 dark:bg-red-900/10">
           <div className="flex items-start gap-3">
             <span className="text-red-500 text-lg mt-0.5">⚠️</span>
@@ -437,7 +437,7 @@ export function TaxReportView() {
               capital gains may be subject to an additional 3.8% Net Investment Income Tax (NIIT).
               Consult IRS Form 8960 or a tax professional.
             </p>
-            {walletMismatchCount > 0 && (
+            {walletMismatchCount > 0 && selectedYear >= 2025 && (
               <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-medium">
                 ⚠️ {walletMismatchCount} sale{walletMismatchCount === 1 ? "" : "s"} in this report used lots from a different wallet.
                 Go to Transactions and assign source wallets on your Transfer In records to fix this before exporting.
@@ -465,7 +465,7 @@ export function TaxReportView() {
                   <span className={`font-medium tabular-nums ${sale.gainLoss >= 0 ? "text-green-600" : "text-red-500"}`}>
                     {sale.gainLoss >= 0 ? "+" : ""}{formatUSD(sale.gainLoss)}
                   </span>
-                  {sale.walletMismatch && (
+                  {sale.walletMismatch && selectedYear >= 2025 && (
                     <span className="text-yellow-500 text-xs" title="Wallet mismatch: This sale used lots from a different wallet. To fix, assign a source wallet on the Transfer In that moved Bitcoin to this wallet.">⚠️</span>
                   )}
                   {sale.isDonation ? (
@@ -553,7 +553,7 @@ export function TaxReportView() {
               </div>
             </div>
 
-            {batchOptimizeResult.walletMismatches > 0 && (
+            {batchOptimizeResult.walletMismatches > 0 && selectedYear >= 2025 && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2 rounded-lg mb-4">
                 ⚠️ <strong>{batchOptimizeResult.walletMismatches} sale{batchOptimizeResult.walletMismatches === 1 ? "" : "s"}</strong> used lots from a different wallet because no lots were found in the selling wallet.
                 This usually means a transfer between wallets hasn't been recorded yet.
