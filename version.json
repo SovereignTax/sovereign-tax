@@ -4,9 +4,9 @@
   "releaseDate": "2026-03-16",
   "notes": "Bug fixes and UX improvements: year filter, transfer lot selection, wallet mismatch warnings, batch operations, row highlighting. 563 tests passing.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/fa3611a4-1b6c-433d-a825-a9ec0396e497.dmg",
-    "windows": "https://sovereigntax.io/downloads/b5eb2581-7f3e-4f0d-8e40-d0018ed1172f.exe",
-    "linux": "https://sovereigntax.io/downloads/330a3f9e-0d76-42bd-80b5-53519a1b43fa.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/46d626ab-efc5-453d-a8da-f191b2bd57db.rpm"
+    "macos": "https://sovereigntax.io/downloads/23d9eb18-add7-41d5-8c91-6840fdc4577d.dmg",
+    "windows": "https://sovereigntax.io/downloads/f5876564-db70-4603-8f31-8a777a3a09b1.exe",
+    "linux": "https://sovereigntax.io/downloads/fa8fa189-7761-4333-b474-2cf2837b6f15.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/c697100a-aa5c-45ef-8967-02461f88b3b5.rpm"
   }
 }
