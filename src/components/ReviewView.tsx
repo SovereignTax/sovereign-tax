@@ -658,17 +658,19 @@ function SourceWalletModal({
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
-                checked={showLotPicker}
+                checked={showLotPicker || (lotSelections !== null && lotSelections.length > 0)}
                 onChange={(e) => {
-                  setShowLotPicker(e.target.checked);
-                  if (!e.target.checked) setLotSelections(null);
+                  if (e.target.checked) { setShowLotPicker(true); }
+                  else { setShowLotPicker(false); setLotSelections(null); }
                 }}
                 className="rounded"
               />
               <span>Choose specific lots to transfer</span>
             </label>
             <p className="text-[11px] text-gray-400 mt-1 ml-6">
-              {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)." : "Default: oldest lots first (FIFO)"}
+              {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)."
+                : lotSelections?.length ? `${lotSelections.length} lot${lotSelections.length > 1 ? "s" : ""} selected — click Save to apply, or uncheck to revert to FIFO.`
+                : "Default: oldest lots first (FIFO)"}
             </p>
 
             {showLotPicker && lotsForPicker.length > 0 && (
@@ -719,7 +721,7 @@ function SourceWalletModal({
             onClick={async () => {
               setSaving(true);
               try {
-                await onSave(effectiveValue, showLotPicker && lotSelections?.length ? lotSelections : undefined);
+                await onSave(effectiveValue, lotSelections?.length ? lotSelections : undefined);
               } finally { setSaving(false); }
             }}
           >

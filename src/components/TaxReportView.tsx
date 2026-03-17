@@ -241,7 +241,7 @@ export function TaxReportView() {
           <div className="flex gap-2 ml-4 shrink-0">
             {unassignedCount > 0 ? (
               <button className="text-sm px-4 py-1.5 btn-primary" onClick={handleBatchOptimize}>
-                Optimize Sells ({unassignedCount})
+                Optimize ({unassignedCount})
               </button>
             ) : (
               <span className="text-sm px-4 py-1.5 btn-secondary opacity-50 cursor-default" title="All sells and donations in this year already have Specific ID lot elections assigned. Use Revert to FIFO to remove them.">All Optimized</span>
@@ -500,7 +500,7 @@ export function TaxReportView() {
       {batchOptimizeResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchOptimizeResult(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Optimize Sells — {selectedYear}</h3>
+            <h3 className="text-lg font-bold mb-4">Optimize — {selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
               IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
@@ -543,9 +543,9 @@ export function TaxReportView() {
                   const isPositive = savings > 0;
                   return (
                     <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                      <span className="text-gray-500 font-medium">{isPositive ? "Estimated savings:" : "Additional tax liability:"}</span>
+                      <span className="text-gray-500 font-medium">Change in taxable gains:</span>
                       <span className={`font-bold tabular-nums ${isPositive ? "text-green-600" : "text-red-500"}`}>
-                        {isPositive ? formatUSD(savings) : `+${formatUSD(Math.abs(savings))}`}
+                        {isPositive ? `−${formatUSD(savings)}` : `+${formatUSD(Math.abs(savings))}`}
                       </span>
                     </div>
                   );

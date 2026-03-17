@@ -331,7 +331,7 @@ export function TransactionsView() {
             onClick={handleBatchOptimize}
             title={`Auto-assign optimal Specific ID lots for ${unassignedCount} unassigned sells/donations in ${state.selectedYear}`}
           >
-            Optimize Sells ({unassignedCount})
+            Optimize ({unassignedCount})
           </button>
         ) : (
           <span className="text-xs px-3 py-1 btn-secondary opacity-50 cursor-default" title="All sells and donations in this year already have Specific ID lot elections assigned. Use Revert to FIFO to remove them.">All Optimized</span>
@@ -394,7 +394,7 @@ export function TransactionsView() {
                 ? "bg-yellow-50 dark:bg-yellow-900/10 border-l-2 border-l-yellow-400"
                 : i % 2 === 0 ? "" : "bg-gray-50 dark:bg-zinc-800/30";
             return (
-            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center cursor-pointer ${rowHighlight} ${highlightedRow === t.id ? "ring-2 ring-blue-400/60 rounded" : ""}`} style={{ gridTemplateColumns: '28px 1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }} onClick={(e) => { if ((e.target as HTMLElement).closest("button, input, select, a")) return; setHighlightedRow(highlightedRow === t.id ? null : t.id); }}>
+            <div key={t.id} className={`grid gap-2 py-1.5 text-sm items-center cursor-pointer ${rowHighlight} ${highlightedRow === t.id ? "outline outline-2 outline-blue-400/60 -outline-offset-2 rounded" : ""}`} style={{ gridTemplateColumns: '28px 1.4fr 0.9fr 1fr 1fr 0.7fr 1fr 0.8fr 0.8fr 0.8fr' }} onClick={(e) => { if ((e.target as HTMLElement).closest("button, input, select, a")) return; setHighlightedRow(highlightedRow === t.id ? null : t.id); }}>
               <div onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selectedRows.has(t.id)} onChange={(e) => { const next = new Set(selectedRows); if (e.target.checked) next.add(t.id); else next.delete(t.id); setSelectedRows(next); }} /></div>
               <div className="tabular-nums">{formatDateTime(t.date)}</div>
               <div className={typeColor(t.transactionType)}>
@@ -582,7 +582,7 @@ export function TransactionsView() {
       {batchOptimizeResult && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBatchOptimizeResult(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Optimize Sells — {state.selectedYear}</h3>
+            <h3 className="text-lg font-bold mb-4">Optimize — {state.selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
               IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
@@ -625,9 +625,9 @@ export function TransactionsView() {
                   const isPositive = savings > 0;
                   return (
                     <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                      <span className="text-gray-500 font-medium">{isPositive ? "Estimated savings:" : "Additional tax liability:"}</span>
+                      <span className="text-gray-500 font-medium">Change in taxable gains:</span>
                       <span className={`font-bold tabular-nums ${isPositive ? "text-green-600" : "text-red-500"}`}>
-                        {isPositive ? formatUSD(savings) : `+${formatUSD(Math.abs(savings))}`}
+                        {isPositive ? `−${formatUSD(savings)}` : `+${formatUSD(Math.abs(savings))}`}
                       </span>
                     </div>
                   );
@@ -1348,17 +1348,19 @@ function SourceWalletModal({
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
-                checked={showLotPicker}
+                checked={showLotPicker || (lotSelections !== null && lotSelections.length > 0)}
                 onChange={(e) => {
-                  setShowLotPicker(e.target.checked);
-                  if (!e.target.checked) setLotSelections(null);
+                  if (e.target.checked) { setShowLotPicker(true); }
+                  else { setShowLotPicker(false); setLotSelections(null); }
                 }}
                 className="rounded"
               />
               <span>Choose specific lots to transfer</span>
             </label>
             <p className="text-[11px] text-gray-400 mt-1 ml-6">
-              {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)." : "Default: oldest lots first (FIFO)"}
+              {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)."
+                : lotSelections?.length ? `${lotSelections.length} lot${lotSelections.length > 1 ? "s" : ""} selected — click Save to apply, or uncheck to revert to FIFO.`
+                : "Default: oldest lots first (FIFO)"}
             </p>
 
             {showLotPicker && lotsForPicker.length > 0 && (
@@ -1409,7 +1411,7 @@ function SourceWalletModal({
             onClick={async () => {
               setSaving(true);
               try {
-                await onSave(effectiveValue, showLotPicker && lotSelections?.length ? lotSelections : undefined);
+                await onSave(effectiveValue, lotSelections?.length ? lotSelections : undefined);
               } finally { setSaving(false); }
             }}
           >
