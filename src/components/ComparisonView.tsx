@@ -135,7 +135,7 @@ export function ComparisonView() {
             <span className="text-2xl">💰</span>
             <div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Estimated reduction in taxable gains using Specific ID:</div>
-              <div className="text-2xl font-bold text-green-600 tabular-nums">{formatUSD(savings)}</div>
+              <div className="text-2xl font-bold text-green-600 tabular-nums">−{formatUSD(savings)}</div>
             </div>
           </div>
         </div>
@@ -165,9 +165,9 @@ export function ComparisonView() {
           <>
             <div className="border-t my-3" />
             <div className="grid grid-cols-3 gap-4 py-2">
-              <div className="text-gray-500 font-medium">Savings</div>
+              <div className="text-gray-500 font-medium">Change in taxable gains</div>
               <div></div>
-              <div className="text-center tabular-nums font-bold text-green-600">{formatUSD(savings)}</div>
+              <div className="text-center tabular-nums font-bold text-green-600">−{formatUSD(savings)}</div>
             </div>
           </>
         )}
