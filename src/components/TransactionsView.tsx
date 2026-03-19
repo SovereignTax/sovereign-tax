@@ -1248,7 +1248,8 @@ function SourceWalletModal({
   const [selected, setSelected] = useState(txn.sourceWallet || "");
   const [customWallet, setCustomWallet] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showLotPicker, setShowLotPicker] = useState(!!(txn.transferLotSelections?.length));
+  // Don't auto-open LotPicker on reopen — show summary instead. User can re-check to edit.
+  const [showLotPicker, setShowLotPicker] = useState(false);
   const [lotSelections, setLotSelections] = useState<LotSelection[] | null>(
     txn.transferLotSelections?.length ? txn.transferLotSelections : null
   );
@@ -1278,8 +1279,15 @@ function SourceWalletModal({
   const selectedTotal = lotSelections?.reduce((sum, s) => sum + s.amountBTC, 0) ?? 0;
   const fifoRemainder = Math.max(0, txn.amountBTC - selectedTotal);
 
+  // Track whether unsaved lot selections exist (confirmed but not yet saved)
+  const hasUnsavedLots = !!(lotSelections?.length && !txn.transferLotSelections?.length);
+  // Also detect changes: user modified existing selections
+  const hasChangedLots = !!(lotSelections?.length && txn.transferLotSelections?.length &&
+    JSON.stringify(lotSelections) !== JSON.stringify(txn.transferLotSelections));
+  const hasPendingChanges = hasUnsavedLots || hasChangedLots;
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { if (!hasPendingChanges) onClose(); }}>
       <div className={`bg-white dark:bg-zinc-900 rounded-xl p-6 ${showLotPicker && lotsForPicker.length > 0 ? "max-w-3xl" : "max-w-md"} w-full shadow-2xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold mb-2">Assign Source Wallet</h3>
         <p className="text-sm text-gray-500 mb-1">
@@ -1302,7 +1310,12 @@ function SourceWalletModal({
               <button
                 key={w}
                 className={`w-full flex flex-col px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors ${isSelected ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-l-orange-500" : isSuggested ? "bg-green-50 dark:bg-green-900/10 border-l-2 border-l-green-500" : "border-l-2 border-l-transparent"}`}
-                onClick={() => { setSelected(isSelected ? "" : w); setLotSelections(null); }}
+                onClick={() => {
+                  if (isSelected) return; // Already selected — don't toggle off or clear lots
+                  setSelected(w);
+                  setLotSelections(null); // New wallet — clear stale lot selections
+                  setShowLotPicker(false);
+                }}
               >
                 <div className="flex items-center justify-between w-full">
                   <span className="flex items-center gap-2">
@@ -1359,9 +1372,14 @@ function SourceWalletModal({
             </label>
             <p className="text-[11px] text-gray-400 mt-1 ml-6">
               {showLotPicker ? "Select which lots to move. Any remainder transfers via FIFO (oldest first)."
-                : lotSelections?.length ? `${lotSelections.length} lot${lotSelections.length > 1 ? "s" : ""} selected — click Save to apply, or uncheck to revert to FIFO.`
+                : lotSelections?.length ? `${lotSelections.length} lot${lotSelections.length > 1 ? "s" : ""} selected (Specific ID). Uncheck to revert to FIFO.`
                 : "Default: oldest lots first (FIFO)"}
             </p>
+            {lotSelections?.length && !showLotPicker ? (
+              <button className="text-[11px] text-orange-500 hover:text-orange-400 ml-6 mt-1 underline" onClick={() => setShowLotPicker(true)}>
+                Edit lot selections
+              </button>
+            ) : null}
 
             {showLotPicker && lotsForPicker.length > 0 && (
               <div className="mt-3">
@@ -1374,7 +1392,7 @@ function SourceWalletModal({
                   allowPartial
                   initialSelections={lotSelections || txn.transferLotSelections}
                   onConfirm={(sels) => { setLotSelections(sels); setShowLotPicker(false); }}
-                  onCancel={() => { setShowLotPicker(false); setLotSelections(null); }}
+                  onCancel={() => { setShowLotPicker(false); setLotSelections(txn.transferLotSelections?.length ? txn.transferLotSelections : null); }}
                 />
               </div>
             )}

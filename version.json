@@ -1,12 +1,12 @@
 {
-  "latest": "1.4.5",
+  "latest": "1.4.6",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-16",
-  "notes": "Bug fixes and UX improvements: year filter, transfer lot selection, wallet mismatch warnings, batch operations, row highlighting. 563 tests passing.",
+  "releaseDate": "2026-03-18",
+  "notes": "Fix transfer lot selection persistence: prevent accidental clearing of Specific ID lot picks in SourceWalletModal.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/23d9eb18-add7-41d5-8c91-6840fdc4577d.dmg",
-    "windows": "https://sovereigntax.io/downloads/f5876564-db70-4603-8f31-8a777a3a09b1.exe",
-    "linux": "https://sovereigntax.io/downloads/fa8fa189-7761-4333-b474-2cf2837b6f15.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/c697100a-aa5c-45ef-8967-02461f88b3b5.rpm"
+    "macos": "https://sovereigntax.io/downloads/e0a4b7c4-895d-4849-9949-5a8db4448253.dmg",
+    "windows": "https://sovereigntax.io/downloads/aef85923-36c2-43a4-8f5e-2b8a002b5732.exe",
+    "linux": "https://sovereigntax.io/downloads/f2196676-d463-465f-9d1b-ea930a32c021.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/9741709c-53e9-4d36-b44c-23a55e9dc500.rpm"
   }
 }
