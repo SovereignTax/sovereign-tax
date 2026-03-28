@@ -23,6 +23,12 @@ export function TaxReportView() {
   // Count wallet mismatches for the selected year
   const walletMismatchCount = useMemo(() => getWalletMismatchSales(result.sales, selectedYear).length, [result.sales, selectedYear]);
 
+  // Engine warnings (stale Specific ID elections that fell back to FIFO, etc.) — year-scoped
+  const engineWarnings = useMemo(
+    () => result.warnings.filter((w) => w.message.length > 0 && (!w.txnDate || new Date(w.txnDate).getFullYear() === selectedYear)),
+    [result.warnings, selectedYear]
+  );
+
   // Batch optimize state
   const [batchOptimizeResult, setBatchOptimizeResult] = useState<{ records: SaleRecord[]; skipped: number; fifoGainLoss: number; optimizedGainLoss: number; walletMismatches: number } | null>(null);
   const [batchSaving, setBatchSaving] = useState(false);
@@ -35,7 +41,7 @@ export function TaxReportView() {
     () => resolveRecordedSales(allTransactions, recordedSales),
     [recordedSales, allTransactions]
   );
-  const unassignedCount = useMemo(() => getOptimizableSells(allTransactions, recordedByTxnId, selectedYear).length, [allTransactions, selectedYear, recordedByTxnId]);
+  const unassignedCount = useMemo(() => getOptimizableSells(allTransactions, recordedByTxnId, selectedYear, result.fallbackTxnIds).length, [allTransactions, selectedYear, recordedByTxnId, result.fallbackTxnIds]);
 
   const handleBatchOptimize = useCallback(() => {
     const { records, skipped, walletMismatches } = batchOptimizeSpecificId(allTransactions, recordedSales, selectedYear);
@@ -66,7 +72,7 @@ export function TaxReportView() {
   }, [batchOptimizeResult, state.recordSalesBatch]);
 
   // Count assigned Specific ID elections for the year (for clear all)
-  const assignedCount = useMemo(() => getAssignedSells(allTransactions, recordedByTxnId, selectedYear).length, [allTransactions, selectedYear, recordedByTxnId]);
+  const assignedCount = useMemo(() => getAssignedSells(allTransactions, recordedByTxnId, selectedYear, result.fallbackTxnIds).length, [allTransactions, selectedYear, recordedByTxnId, result.fallbackTxnIds]);
 
   const handleClearAll = useCallback(async () => {
     setClearing(true);
@@ -198,6 +204,25 @@ export function TaxReportView() {
                 (2) The Bitcoin was purchased elsewhere and needs a Transfer In to move lots to the selling wallet.
                 (3) Not enough lots exist in the source wallet to cover the full transfer amount.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Engine Warnings — stale Specific ID elections that fell back to FIFO, etc. */}
+      {engineWarnings.length > 0 && (
+        <div className="card mb-6 border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-900/10">
+          <div className="flex items-start gap-3">
+            <span className="text-orange-500 text-lg mt-0.5">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-sm text-orange-700 dark:text-orange-400 mb-1">
+                {engineWarnings.length} cost basis warning{engineWarnings.length === 1 ? "" : "s"}
+              </h3>
+              <div className="space-y-1">
+                {engineWarnings.map((w, i) => (
+                  <p key={i} className="text-xs text-orange-700 dark:text-orange-400/80">{w.message}</p>
+                ))}
+              </div>
             </div>
           </div>
         </div>

@@ -314,7 +314,7 @@ describe("FIFO — per-wallet enforcement", () => {
     const result = calculate(txns, AccountingMethod.FIFO);
     expect(result.sales).toHaveLength(1);
     expect(result.sales[0].amountSold).toBeCloseTo(0.5, 8);
-    expect(result.warnings.some((w) => w.includes("Fell back to global"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("Fell back to global"))).toBe(true);
   });
 });
 
@@ -569,7 +569,7 @@ describe("TransferIn lot re-tagging", () => {
     ];
     const result = calculate(txns, AccountingMethod.FIFO);
     // Should re-tag what's available (0.5) and warn about the missing 0.5
-    expect(result.warnings.some((w) => w.includes("Could not find"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("Could not find"))).toBe(true);
     const riverLots = result.lots.filter(
       (l) => l.remainingBTC > 0 && (l.wallet || "").toLowerCase() === "river"
     );
@@ -684,7 +684,7 @@ describe("TransferIn with specific lot selections", () => {
     };
     const result = calculate([b1, xfer], AccountingMethod.FIFO);
     // Should warn about the missing lot
-    expect(result.warnings.some((w) => w.includes("not found"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("not found"))).toBe(true);
     // FIFO fallback should still transfer the BTC
     const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
     expect(riverLots.reduce((s, l) => s + l.remainingBTC, 0)).toBeCloseTo(0.5, 8);
@@ -699,7 +699,7 @@ describe("TransferIn with specific lot selections", () => {
     };
     const result = calculate([b1, b2, xfer], AccountingMethod.FIFO);
     // b2 is at Kraken, not Coinbase — should skip and use FIFO from Coinbase
-    expect(result.warnings.some((w) => w.includes("not found"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("not found"))).toBe(true);
     const riverLots = result.lots.filter((l) => l.remainingBTC > 0 && l.wallet === "River");
     expect(riverLots).toHaveLength(1);
     // FIFO picked the Coinbase lot at $40k
@@ -1171,7 +1171,7 @@ describe("extractLotSelections engine guard (stale lotId fallback)", () => {
     // Should fall back to FIFO (using b2), not silently produce wrong cost basis
     expect(result.sales).toHaveLength(1);
     expect(result.sales[0].costBasis).toBeCloseTo(0.5 * 35000, 2); // b2 cost basis, not b1's
-    expect(result.warnings.some((w) => w.includes("could not be applied") && w.includes("Edit Lots"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied") && w.message.includes("Edit Lots"))).toBe(true);
   });
 
   it("applies election normally when all referenced lots exist", () => {
@@ -1200,7 +1200,7 @@ describe("extractLotSelections engine guard (stale lotId fallback)", () => {
 
     expect(result.sales).toHaveLength(1);
     expect(result.sales[0].costBasis).toBeCloseTo(0.5 * 30000, 2); // b1 cost basis
-    expect(result.warnings.filter((w) => w.includes("could not be applied"))).toHaveLength(0);
+    expect(result.warnings.filter((w) => w.message.includes("could not be applied"))).toHaveLength(0);
   });
 
   it("falls back when one of multiple referenced lots is missing", () => {
@@ -1234,7 +1234,7 @@ describe("extractLotSelections engine guard (stale lotId fallback)", () => {
     expect(result.sales).toHaveLength(1);
     // FIFO with only b2 available: 1.0 BTC at $35k
     expect(result.sales[0].costBasis).toBeCloseTo(1.0 * 35000, 2);
-    expect(result.warnings.some((w) => w.includes("could not be applied"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied"))).toBe(true);
   });
 
   it("warning message tells user to use Edit Lots button", () => {
@@ -1260,10 +1260,10 @@ describe("extractLotSelections engine guard (stale lotId fallback)", () => {
     // b1 is missing — triggers the fallback warning
     const result = calculate([sell("2024-03-01", 0.1, 40000), s1], AccountingMethod.FIFO, [record]);
 
-    const warning = result.warnings.find((w) => w.includes("could not be applied"));
+    const warning = result.warnings.find((w) => w.message.includes("could not be applied"));
     expect(warning).toBeDefined();
-    expect(warning).toContain("Edit Lots");
-    expect(warning).toContain("no longer exist or were modified");
+    expect(warning!.message).toContain("Edit Lots");
+    expect(warning!.message).toContain("no longer exist or were modified");
   });
 });
 
@@ -1435,5 +1435,240 @@ describe("cross-wallet Specific ID elections", () => {
     expect(result.sales[0].costBasis).toBeCloseTo(25000, 0); // Ledger lot honored
     expect(result.sales[0].isDonation).toBe(true);
     expect(result.sales[0].walletMismatch).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// P1 #1: extractLotSelections remaining amount check
+// A Specific ID election that requests more BTC than the lot has remaining
+// must trigger atomic fallback (return null → FIFO), NOT a silent partial fill.
+// ═══════════════════════════════════════════════════════
+
+describe("extractLotSelections rejects insufficient remaining amount", () => {
+  it("falls back to FIFO when lot has less BTC than election requests (transfer amount reduced)", () => {
+    // Buy 1.0 BTC in Coinbase, transfer 0.5 to Ledger (was 0.8, now reduced)
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+    const t1 = transferIn("2024-03-01", 0.5, { wallet: "Ledger", sourceWallet: "Coinbase" });
+    const s1 = sell("2024-06-15", 0.8, 60000, { wallet: "Ledger" });
+
+    // Election was created when transfer was 0.8 BTC — references the split lot for 0.8 BTC
+    // The split lot ID would be `b1.id + "-xfer-" + t1.id.slice(0,8)`
+    const splitLotId = b1.id + "-xfer-" + t1.id.slice(0, 8);
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.8,
+      salePricePerBTC: 60000,
+      totalProceeds: 48000,
+      costBasis: 24000,
+      gainLoss: 24000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: splitLotId,
+        purchaseDate: b1.date,
+        amountBTC: 0.8, // Election requested 0.8 BTC
+        costBasisPerBTC: 30000,
+        totalCost: 24000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Ledger", // Lot was in Ledger when election was made
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    // Transfer is now 0.5 BTC → split lot only has 0.5 remaining
+    // Election requests 0.8 → must fail atomically, not silently sell 0.5
+    const result = calculate([b1, b2, t1, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // FIFO fallback: should use Ledger lots (b2 has 1.0 BTC + split lot has 0.5)
+    // NOT a partial 0.5 BTC sale — must sell the full 0.8 BTC via FIFO
+    expect(result.sales[0].amountSold).toBeCloseTo(0.8, 8);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied"))).toBe(true);
+  });
+
+  it("applies election normally when lot has exactly enough remaining", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Coinbase" });
+
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 15000,
+      gainLoss: 15000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: b1.id,
+        purchaseDate: b1.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Coinbase",
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, s1], AccountingMethod.FIFO, [record]);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 2);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.warnings.filter((w) => w.message.includes("could not be applied"))).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// P1 #2: extractLotSelections wallet stability check
+// When a lot's wallet has changed since the election was recorded (e.g., transfer
+// re-routing), the election is stale and must fall back to FIFO.
+// Intentional cross-wallet elections (lot wallet matches recorded wallet) are NOT affected.
+// ═══════════════════════════════════════════════════════
+
+describe("extractLotSelections detects stale wallet after transfer re-routing", () => {
+  it("falls back to FIFO when lot wallet changed since election (transfer re-routed)", () => {
+    // Setup: Coinbase lot ($30k) and Kraken lot ($50k)
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Kraken" });
+    // Transfer was from Coinbase→Ledger, but is now Kraken→Ledger
+    const t1 = transferIn("2024-03-01", 1.0, { wallet: "Ledger", sourceWallet: "Kraken" });
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Ledger" });
+
+    // Election was made when transfer source was Coinbase — b1 lot was in Ledger
+    // Now transfer source is Kraken — b1 lot is back in Coinbase, b2 lot is in Ledger
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 15000,
+      gainLoss: 15000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: b1.id, // Coinbase lot — was in Ledger, now back in Coinbase
+        purchaseDate: b1.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Ledger", // Recorded when lot was in Ledger
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, b2, t1, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // Must NOT use the Coinbase lot ($30k) — it's no longer in Ledger
+    // FIFO fallback should use the Kraken lot (now in Ledger after transfer) at $50k
+    expect(result.sales[0].costBasis).toBeCloseTo(0.5 * 50000, 0);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied"))).toBe(true);
+  });
+
+  it("does NOT reject intentional cross-wallet elections (lot wallet unchanged)", () => {
+    // User explicitly picked a Coinbase lot for a Ledger sale via "Show all wallets"
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Ledger" });
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Ledger" });
+
+    // lotDetail.wallet = "Coinbase" (where the lot actually is)
+    // lot's current wallet = "Coinbase" (unchanged)
+    // These match → not stale, just intentionally cross-wallet
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 15000,
+      gainLoss: 15000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: b1.id,
+        purchaseDate: b1.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Coinbase", // Matches lot's current wallet
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    // Must use the Coinbase lot ($30k) — intentional cross-wallet election
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 0);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.sales[0].walletMismatch).toBe(true); // tagged for warning
+    expect(result.warnings.filter((w) => w.message.includes("could not be applied"))).toHaveLength(0);
+  });
+
+  it("skips wallet check when lotDetail has no wallet recorded (legacy records)", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Coinbase" });
+
+    // Legacy record without wallet field
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 15000,
+      gainLoss: 15000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: b1.id,
+        purchaseDate: b1.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        // wallet intentionally omitted (legacy record)
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, s1], AccountingMethod.FIFO, [record]);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 0);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.warnings.filter((w) => w.message.includes("could not be applied"))).toHaveLength(0);
   });
 });

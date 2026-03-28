@@ -47,8 +47,12 @@ export function ReviewView() {
   const unassignedTransfers = useMemo(() => getUnassignedTransfers(transactions, selectedYear), [transactions, selectedYear]);
   const assignedTransferCount = useMemo(() => getAssignedTransferCount(transactions, selectedYear), [transactions, selectedYear]);
   const walletMismatchSales = useMemo(() => getWalletMismatchSales(calcResult.sales, selectedYear), [calcResult.sales, selectedYear]);
-  const optimizableSells = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, selectedYear), [transactions, recordedByTxnId, selectedYear]);
-  const assignedSells = useMemo(() => getAssignedSells(transactions, recordedByTxnId, selectedYear), [transactions, recordedByTxnId, selectedYear]);
+  const optimizableSells = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds), [transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds]);
+  const assignedSells = useMemo(() => getAssignedSells(transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds), [transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds]);
+  const engineWarnings = useMemo(
+    () => calcResult.warnings.filter((w) => w.message.length > 0 && (!w.txnDate || new Date(w.txnDate).getFullYear() === selectedYear)),
+    [calcResult.warnings, selectedYear]
+  );
 
   // Wallet balances for source wallet modal
   const walletBalances = useMemo(() => {
@@ -79,7 +83,7 @@ export function ReviewView() {
   const hasIssues = selectedYear >= 2025 && (unassignedTransfers.length > 0 || walletMismatchSales.length > 0);
   const hasOptimizable = optimizableSells.length > 0;
   const readinessStatus: "ready" | "warning" | "action" =
-    hasIssues ? "action" : hasOptimizable ? "warning" : "ready";
+    hasIssues ? "action" : (hasOptimizable || engineWarnings.length > 0) ? "warning" : "ready";
 
   // --- Handlers ---
   const handleBatchOptimize = useCallback(() => {
@@ -195,7 +199,7 @@ export function ReviewView() {
               {readinessStatus === "ready"
                 ? `${selectedYear} Tax Data Ready`
                 : readinessStatus === "warning"
-                  ? `${selectedYear} Almost Ready — Optimization Available`
+                  ? `${selectedYear} Almost Ready — Review Needed`
                   : `${selectedYear} Needs Attention`
               }
             </h3>
@@ -203,7 +207,10 @@ export function ReviewView() {
               {readinessStatus === "ready"
                 ? "All checks passed. You can generate your tax report."
                 : readinessStatus === "warning"
-                  ? `No blocking issues, but ${optimizableSells.length} sale${optimizableSells.length === 1 ? "" : "s"} can be optimized with Specific ID to reduce your tax liability.`
+                  ? [
+                      hasOptimizable && `${optimizableSells.length} sale${optimizableSells.length === 1 ? "" : "s"} can be optimized with Specific ID`,
+                      engineWarnings.length > 0 && `${engineWarnings.length} cost basis warning${engineWarnings.length === 1 ? "" : "s"} to review`,
+                    ].filter(Boolean).join("; ") + "."
                   : `${unassignedTransfers.length > 0 ? `${unassignedTransfers.length} unassigned transfer${unassignedTransfers.length === 1 ? "" : "s"}` : ""}${unassignedTransfers.length > 0 && walletMismatchSales.length > 0 ? " and " : ""}${walletMismatchSales.length > 0 ? `${walletMismatchSales.length} wallet mismatch${walletMismatchSales.length === 1 ? "" : "es"}` : ""} need${(unassignedTransfers.length + walletMismatchSales.length) === 1 ? "s" : ""} to be resolved.`
               }
             </p>
@@ -336,6 +343,25 @@ export function ReviewView() {
           )}
         </div>
       </ReviewSection>
+
+      {/* Engine Warnings — stale Specific ID elections that fell back to FIFO, etc. */}
+      {engineWarnings.length > 0 && (
+        <div className="card border-l-4 border-l-orange-500 mt-4">
+          <div className="flex items-start gap-3">
+            <span className="text-orange-500 text-lg mt-0.5">⚠️</span>
+            <div>
+              <h3 className="font-semibold text-sm text-orange-700 dark:text-orange-400 mb-1">
+                {engineWarnings.length} cost basis warning{engineWarnings.length === 1 ? "" : "s"}
+              </h3>
+              <div className="space-y-1">
+                {engineWarnings.map((w, i) => (
+                  <p key={i} className="text-xs text-orange-700 dark:text-orange-400/80">{w.message}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ready to File */}
       {readinessStatus === "ready" && (

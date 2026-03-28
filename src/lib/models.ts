@@ -68,10 +68,18 @@ export interface SaleRecord {
   walletMismatch?: boolean; // true when sale used lots from a different wallet (global fallback)
 }
 
+export interface EngineWarning {
+  message: string;
+  /** ISO date of the transaction that generated this warning (for year-scoping). */
+  txnDate?: string;
+}
+
 export interface CalculationResult {
   lots: Lot[];
   sales: SaleRecord[];
-  warnings: string[];
+  warnings: EngineWarning[];
+  /** Transaction IDs whose Specific ID elections were rejected at calc time (fell back to FIFO). */
+  fallbackTxnIds: string[];
 }
 
 export interface ImportRecord {

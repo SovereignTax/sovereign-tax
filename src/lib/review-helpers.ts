@@ -50,32 +50,39 @@ export function getWalletMismatchIds(sales: SaleRecord[]): Set<string> {
 }
 
 /**
- * Get sells/donations in the given year that don't have Specific ID elections.
+ * Get sells/donations in the given year that don't have effective Specific ID elections.
+ * Elections that fell back to FIFO at calc time (in fallbackTxnIds) are treated as optimizable.
  */
 export function getOptimizableSells(
   transactions: Transaction[],
   recordedByTxnId: Map<string, SaleRecord>,
-  year: number
+  year: number,
+  fallbackTxnIds?: string[]
 ): Transaction[] {
+  const fallbackSet = fallbackTxnIds ? new Set(fallbackTxnIds) : new Set<string>();
   return transactions.filter((t) => {
     if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
     if (new Date(t.date).getFullYear() !== year) return false;
-    if (recordedByTxnId.has(t.id)) return false;
-    return true;
+    // Not recorded, or recorded but fell back to FIFO → optimizable
+    if (!recordedByTxnId.has(t.id)) return true;
+    return fallbackSet.has(t.id);
   });
 }
 
 /**
- * Get sells/donations in the given year that DO have Specific ID elections.
+ * Get sells/donations in the given year that DO have effective Specific ID elections.
+ * Elections that fell back to FIFO at calc time (in fallbackTxnIds) are excluded.
  */
 export function getAssignedSells(
   transactions: Transaction[],
   recordedByTxnId: Map<string, SaleRecord>,
-  year: number
+  year: number,
+  fallbackTxnIds?: string[]
 ): Transaction[] {
+  const fallbackSet = fallbackTxnIds ? new Set(fallbackTxnIds) : new Set<string>();
   return transactions.filter((t) => {
     if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;
     if (new Date(t.date).getFullYear() !== year) return false;
-    return recordedByTxnId.has(t.id);
+    return recordedByTxnId.has(t.id) && !fallbackSet.has(t.id);
   });
 }

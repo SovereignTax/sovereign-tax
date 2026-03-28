@@ -6,6 +6,7 @@ import {
   LotSelection,
   SaleRecord,
   CalculationResult,
+  EngineWarning,
   createLot,
 } from "./models";
 export type { LotSelection };
@@ -115,7 +116,8 @@ export function calculate(
 ): CalculationResult {
   const lots: Lot[] = [];
   const sales: SaleRecord[] = [];
-  const warnings: string[] = [];
+  const warnings: EngineWarning[] = [];
+  const fallbackTxnIds: string[] = [];
 
   // Resolve which transactions have recorded Specific ID elections
   const resolved = recordedSales ? resolveRecordedSales(transactions, recordedSales) : new Map<string, SaleRecord>();
@@ -151,10 +153,12 @@ export function calculate(
         // If recorded but lot matching failed (partial or total), fall back to current method with warning.
         // This triggers when a Buy referenced by the election was edited or deleted.
         if (recorded && lotSelections === null) {
-          warnings.push(
-            `Specific ID election for sale on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
-            `Using ${method} as fallback. To fix: open this sale in the Transactions view and re-assign lots using the Edit Lots button.`
-          );
+          warnings.push({
+            message: `Specific ID election for sale on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
+              `Using ${method} as fallback. To fix: open this sale in the Transactions view and re-assign lots using the Edit Lots button.`,
+            txnDate: trans.date,
+          });
+          fallbackTxnIds.push(trans.id);
           lotSelections = undefined;
           effectiveMethod = method;
         }
@@ -163,7 +167,7 @@ export function calculate(
         if (sale) {
           sales.push(sale);
         } else {
-          warnings.push(`No lots available for sale on ${formatDateShort(trans.date)}`);
+          warnings.push({ message: `No lots available for sale on ${formatDateShort(trans.date)}`, txnDate: trans.date });
         }
         break;
       }
@@ -176,10 +180,12 @@ export function calculate(
         // If recorded but lot matching failed (partial or total), fall back to current method with warning.
         // This triggers when a Buy referenced by the election was edited or deleted.
         if (recorded && lotSelections === null) {
-          warnings.push(
-            `Specific ID election for donation on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
-            `Using ${method} as fallback. To fix: open this donation in the Transactions view and re-assign lots using the Edit Lots button.`
-          );
+          warnings.push({
+            message: `Specific ID election for donation on ${formatDateShort(trans.date)} could not be applied — one or more selected lots no longer exist or were modified. ` +
+              `Using ${method} as fallback. To fix: open this donation in the Transactions view and re-assign lots using the Edit Lots button.`,
+            txnDate: trans.date,
+          });
+          fallbackTxnIds.push(trans.id);
           lotSelections = undefined;
           effectiveMethod = method;
         }
@@ -189,7 +195,7 @@ export function calculate(
         if (donationResult) {
           sales.push(donationResult);
         } else {
-          warnings.push(`No lots available for donation on ${formatDateShort(trans.date)}`);
+          warnings.push({ message: `No lots available for donation on ${formatDateShort(trans.date)}`, txnDate: trans.date });
         }
         break;
       }
@@ -239,9 +245,10 @@ export function calculate(
                        (l.wallet || l.exchange || "").trim().toLowerCase() === sourceNorm
               );
               if (lotIdx === -1) {
-                warnings.push(
-                  `TransferIn on ${formatDateShort(trans.date)}: Selected lot "${sel.lotId.slice(0, 8)}…" not found in "${trans.sourceWallet}" — skipped.`
-                );
+                warnings.push({
+                  message: `TransferIn on ${formatDateShort(trans.date)}: Selected lot "${sel.lotId.slice(0, 8)}…" not found in "${trans.sourceWallet}" — skipped.`,
+                  txnDate: trans.date,
+                });
                 continue;
               }
               retagLot(lotIdx, Math.min(sel.amountBTC, lots[lotIdx].remainingBTC, remaining));
@@ -266,9 +273,10 @@ export function calculate(
           }
 
           if (remaining > 1e-8) {
-            warnings.push(
-              `TransferIn on ${formatDateShort(trans.date)}: Could not find ${remaining.toFixed(8)} BTC in "${trans.sourceWallet}" to re-tag. Some lots may remain at the source wallet.`
-            );
+            warnings.push({
+              message: `TransferIn on ${formatDateShort(trans.date)}: Could not find ${remaining.toFixed(8)} BTC in "${trans.sourceWallet}" to re-tag. Some lots may remain at the source wallet.`,
+              txnDate: trans.date,
+            });
           }
         }
         // If no sourceWallet assigned, do nothing (same as before)
@@ -282,7 +290,7 @@ export function calculate(
     }
   }
 
-  return { lots, sales, warnings };
+  return { lots, sales, warnings, fallbackTxnIds };
 }
 
 /**
@@ -298,11 +306,32 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
   const selections: LotSelection[] = [];
   const usedLotIds = new Set<string>();
   let unmatchedCount = 0;
+  const norm = (s: string | undefined) => (s || "").trim().toLowerCase();
 
   for (const d of recorded.lotDetails) {
     if (d.lotId) {
       // New-style: has deterministic lotId — verify lot still exists in current pool
-      if (currentLots && !currentLots.some((l) => l.id === d.lotId)) {
+      const lot = currentLots?.find((l) => l.id === d.lotId);
+      if (currentLots && !lot) {
+        // Lot no longer exists (deleted Buy, changed transfer routing, etc.)
+        unmatchedCount++;
+      } else if (lot && lot.remainingBTC < d.amountBTC - 1e-8) {
+        // Lot exists but doesn't have enough remaining BTC for this election.
+        // This can happen when a TransferIn amount is reduced (lot was split smaller)
+        // or a prior sale consumed more than expected. Without this check,
+        // processSale() silently caps at remainingBTC, producing a partial sale
+        // with wrong tax numbers and no warning.
+        unmatchedCount++;
+      } else if (lot && d.wallet && norm(d.wallet) && norm(lot.wallet || lot.exchange) !== norm(d.wallet)) {
+        // Lot's wallet changed since the election was made (transfer re-routing).
+        // The election referenced this lot when it was in wallet X, but now it's in
+        // wallet Y. This means the transfer that originally moved the lot was edited
+        // (sourceWallet changed, etc.), making this election stale. Without this check,
+        // processSale() would silently use the lot cross-wallet from its new location,
+        // consuming the wrong lot and producing wrong cost basis numbers.
+        // Intentional cross-wallet elections are NOT affected: when the user picks a
+        // lot from another wallet via "Show all wallets", the lotDetail records the
+        // lot's actual wallet — which hasn't changed, so this check passes.
         unmatchedCount++;
       } else {
         selections.push({ lotId: d.lotId, amountBTC: d.amountBTC });
@@ -586,7 +615,7 @@ function processSale(
   lots: Lot[],
   method: AccountingMethod,
   lotSelections?: LotSelection[],
-  warnings?: string[],
+  warnings?: EngineWarning[],
   dispositionType: DispositionType = "sale",
   fmvPerBTC?: number
 ): SaleRecord | null {
@@ -614,9 +643,10 @@ function processSale(
     if (availableIndices.length > 0) {
       walletMismatch = true;
       if (warnings) {
-        warnings.push(
-          `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`
-        );
+        warnings.push({
+          message: `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`,
+          txnDate: sale.date,
+        });
       }
     }
   }

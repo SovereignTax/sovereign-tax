@@ -431,7 +431,7 @@ describe("IRS TD 9989 — Per-wallet cost basis enforcement", () => {
     ];
     const result = calculate(txns, AccountingMethod.FIFO);
     expect(result.sales).toHaveLength(1);
-    expect(result.warnings.some((w) => w.includes("Fell back to global"))).toBe(true);
+    expect(result.warnings.some((w) => w.message.includes("Fell back to global"))).toBe(true);
   });
 
   it("Specific ID honors cross-wallet lot selections with walletMismatch warning", () => {

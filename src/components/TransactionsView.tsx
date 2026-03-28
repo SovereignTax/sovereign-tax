@@ -64,8 +64,14 @@ export function TransactionsView() {
   const walletMismatchSales = useMemo(() => getWalletMismatchSales(calcResult.sales, state.selectedYear), [calcResult.sales, state.selectedYear]);
   const walletMismatchCount = walletMismatchSales.length;
 
+  // Engine warnings (stale Specific ID elections that fell back to FIFO, etc.) — year-scoped
+  const engineWarnings = useMemo(
+    () => calcResult.warnings.filter((w) => w.message.length > 0 && (!w.txnDate || new Date(w.txnDate).getFullYear() === state.selectedYear)),
+    [calcResult.warnings, state.selectedYear]
+  );
+
   // Count unassigned sells/donations in the selected year for the batch optimize button
-  const unassignedCount = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, state.selectedYear).length, [transactions, state.selectedYear, recordedByTxnId]);
+  const unassignedCount = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, state.selectedYear, calcResult.fallbackTxnIds).length, [transactions, state.selectedYear, recordedByTxnId, calcResult.fallbackTxnIds]);
 
   // Count unassigned TransferIn transactions (no sourceWallet set)
   const unassignedTransferCount = useMemo(() => getUnassignedTransfers(transactions, state.selectedYear).length, [transactions, state.selectedYear]);
@@ -281,6 +287,23 @@ export function TransactionsView() {
               (2) The Bitcoin was purchased elsewhere and needs a Transfer In to move lots to the selling wallet.
               (3) Not enough lots exist in the source wallet to cover the full transfer amount.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Engine Warnings — stale Specific ID elections that fell back to FIFO, etc. */}
+      {engineWarnings.length > 0 && (
+        <div className="mx-6 mb-3 px-4 py-3 rounded-lg border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10 flex items-start gap-3">
+          <span className="text-orange-500 text-base mt-0.5">⚠️</span>
+          <div>
+            <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">
+              {engineWarnings.length} cost basis warning{engineWarnings.length === 1 ? "" : "s"}
+            </span>
+            <div className="mt-2 space-y-1">
+              {engineWarnings.map((w, i) => (
+                <p key={i} className="text-xs text-orange-700 dark:text-orange-400/80">{w.message}</p>
+              ))}
+            </div>
           </div>
         </div>
       )}

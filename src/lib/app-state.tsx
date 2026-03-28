@@ -42,49 +42,12 @@ export function isMaterialChange(
   );
 }
 
-/**
- * Pure function: given a TransferIn edit, determines which downstream Specific ID
- * SaleRecords should be invalidated.
- * Returns the IDs of stale SaleRecords that should be removed.
- *
- * Affected wallets = old source + new source + destination + new destination.
- * Only invalidates Specific ID elections on sells/donations in affected wallets
- * at or after the transfer date. Sells in unrelated wallets are untouched.
- */
-export function findStaleDownstreamRecords(
-  original: Transaction,
-  updates: Partial<Omit<Transaction, "id">>,
-  allTransactions: Transaction[],
-  allSaleRecords: SaleRecord[]
-): string[] {
-  if (original.transactionType !== TransactionType.TransferIn) return [];
-  if (!isMaterialChange(original, updates)) return [];
-
-  const transferDate = new Date(updates.date || original.date).getTime();
-  const norm = (s?: string) => (s || "").trim().toLowerCase();
-  const affectedWallets = new Set<string>();
-  if (original.sourceWallet) affectedWallets.add(norm(original.sourceWallet));
-  if (updates.sourceWallet) affectedWallets.add(norm(updates.sourceWallet));
-  affectedWallets.add(norm(original.wallet || original.exchange));
-  if (updates.wallet) affectedWallets.add(norm(updates.wallet));
-  affectedWallets.delete(""); // Prevent empty-string from matching transactions with no wallet
-
-  const downstreamIds = new Set(
-    allTransactions
-      .filter((t) =>
-        (t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.Donation) &&
-        new Date(t.date).getTime() >= transferDate &&
-        affectedWallets.has(norm(t.wallet || t.exchange))
-      )
-      .map((t) => t.id)
-  );
-
-  return allSaleRecords
-    .filter(
-      (s) => s.sourceTransactionId && downstreamIds.has(s.sourceTransactionId) && s.method === "SpecificID"
-    )
-    .map((s) => s.id);
-}
+// findStaleDownstreamRecords was removed in v1.4.7.
+// TransferIn edits no longer proactively delete downstream Specific ID elections.
+// The engine's extractLotSelections() safety net handles stale elections at calc time:
+// missing lots → returns null → FIFO fallback with user-facing warning.
+// The old wallet-scoped invalidation was too broad — it wiped elections on unrelated
+// sales just because they happened to be in the same wallet as the transfer endpoints.
 
 /** Session-only saved lot selections from Simulation → Record Sale / Add Transaction */
 export interface SavedLotSelections {
@@ -616,29 +579,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // TransferIn sourceWallet changes invalidate downstream Specific ID elections.
-    // Two passes: (1) wallet-scoped for immediate wallets, (2) lot-ID-scoped for multi-hop descendants.
-    if (original && original.transactionType === TransactionType.TransferIn && isMaterialChange(original, updates)) {
-      // Pass 1: wallet-scoped — sells/donations in old source, new source, destination wallets
-      const staleIds = findStaleDownstreamRecords(original, updates, transactionsRef.current, recordedSalesRef.current);
-
-      // Pass 2: lot-ID-scoped — any Specific ID election referencing lots derived from this transfer
-      // Catches multi-hop descendants (e.g., buyId-xfer-t1[:8]-xfer-t2[:8]) that Pass 1 misses
-      const xferSuffix = "-xfer-" + id.slice(0, 8);
-      const lotStaleSaleIds = recordedSalesRef.current
-        .filter((s) => s.method === AccountingMethod.SpecificID && s.lotDetails.some((d) => d.lotId && d.lotId.includes(xferSuffix)))
-        .map((s) => s.id);
-
-      const allStaleIds = [...new Set([...staleIds, ...lotStaleSaleIds])];
-      if (allStaleIds.length > 0) {
-        const staleSet = new Set(allStaleIds);
-        const nextSales = recordedSalesRef.current.filter((s) => !staleSet.has(s.id));
-        setRecordedSales(nextSales);
-        recordedSalesRef.current = nextSales;
-        await guardedSave(() => persistence.saveRecordedSales(nextSales));
-        await appendAuditLog(AuditAction.SaleRecorded, `Auto-removed ${allStaleIds.length} downstream Specific ID election(s) after TransferIn edit`);
-      }
-    }
+    // TransferIn edits do NOT proactively delete downstream Specific ID elections.
+    // The engine's extractLotSelections() safety net handles stale elections at calc time:
+    // if a referenced lot no longer exists, it returns null → FIFO fallback with user-facing warning.
+    // processSale() honors Specific ID selections from the FULL lot pool (not wallet-filtered),
+    // so cross-wallet lots from re-tagging are still used with a walletMismatch tag for warnings.
+    // Proactive deletion was too aggressive — it wiped elections on unrelated sales in affected wallets.
 
     // Buy edits that break lot eligibility invalidate downstream Specific ID elections
     // referencing this Buy as a lot source. Only triggers for truly destructive changes:

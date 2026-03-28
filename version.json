@@ -1,12 +1,12 @@
 {
-  "latest": "1.4.6",
+  "latest": "1.4.7",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-18",
-  "notes": "Fix transfer lot selection persistence: prevent accidental clearing of Specific ID lot picks in SourceWalletModal.",
+  "releaseDate": "2026-03-28",
+  "notes": "P0 fix: TransferIn edits no longer wipe downstream Specific ID elections; hardened extractLotSelections safety net; engine warnings surfaced in UI and year-scoped.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/e0a4b7c4-895d-4849-9949-5a8db4448253.dmg",
-    "windows": "https://sovereigntax.io/downloads/aef85923-36c2-43a4-8f5e-2b8a002b5732.exe",
-    "linux": "https://sovereigntax.io/downloads/f2196676-d463-465f-9d1b-ea930a32c021.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/9741709c-53e9-4d36-b44c-23a55e9dc500.rpm"
+    "macos": "https://sovereigntax.io/downloads/885fbd44-3601-4823-93bb-0199de27d27a.dmg",
+    "windows": "https://sovereigntax.io/downloads/64dfcb1f-a283-4b0b-b725-3a09a6938dd1.exe",
+    "linux": "https://sovereigntax.io/downloads/0fe6c882-b060-473d-b3e9-cac10811fe93.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/a4eb8081-58fb-4dbe-bb6e-81d165f856a6.rpm"
   }
 }
