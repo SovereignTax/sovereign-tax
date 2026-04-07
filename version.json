@@ -1,12 +1,12 @@
 {
-  "latest": "1.4.7",
+  "latest": "1.4.8",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-03-28",
-  "notes": "P0 fix: TransferIn edits no longer wipe downstream Specific ID elections; hardened extractLotSelections safety net; engine warnings surfaced in UI and year-scoped.",
+  "releaseDate": "2026-04-06",
+  "notes": "Reconciliation approve/reject decisions and manual transfer matches now persist across app sessions.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/885fbd44-3601-4823-93bb-0199de27d27a.dmg",
-    "windows": "https://sovereigntax.io/downloads/64dfcb1f-a283-4b0b-b725-3a09a6938dd1.exe",
-    "linux": "https://sovereigntax.io/downloads/0fe6c882-b060-473d-b3e9-cac10811fe93.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/a4eb8081-58fb-4dbe-bb6e-81d165f856a6.rpm"
+    "macos": "https://sovereigntax.io/downloads/414e754d-adbb-46fe-9cfa-cde29a706631.dmg",
+    "windows": "https://sovereigntax.io/downloads/5613f1ae-9d72-46b5-806f-2a0229a155c4.exe",
+    "linux": "https://sovereigntax.io/downloads/7c6f9871-dc7d-42c9-bc23-e0746017d392.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/4e1d8dfc-4f78-4970-92fd-6db31a5118e5.rpm"
   }
 }

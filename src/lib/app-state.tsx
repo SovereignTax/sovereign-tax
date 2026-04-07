@@ -88,6 +88,11 @@ interface AppStateContextType {
   setTxnSortField: (field: string) => void;
   txnSortAsc: boolean;
   setTxnSortAsc: (asc: boolean) => void;
+  reconciliationDecisions: Record<string, "approved" | "rejected">;
+  setReconciliationDecision: (pairKey: string, decision: "approved" | "rejected" | null) => void;
+  manualTransferMatches: Array<{ outId: string; inId: string }>;
+  addManualTransferMatch: (match: { outId: string; inId: string }) => void;
+  removeManualTransferMatch: (outId: string, inId: string) => void;
 
   // Session-only: saved lot selections from Simulation
   savedLotSelections: SavedLotSelections | null;
@@ -173,6 +178,35 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [priorCarryforwardLT, setPriorCarryforwardLT] = useState(prefs.priorCarryforwardLT ?? 0);
   const [txnSortField, setTxnSortField] = useState(prefs.txnSortField ?? "date");
   const [txnSortAsc, setTxnSortAsc] = useState(prefs.txnSortAsc ?? true);
+  const [reconciliationDecisions, setReconciliationDecisionsState] = useState<Record<string, "approved" | "rejected">>(
+    prefs.reconciliationDecisions ?? {}
+  );
+  const [manualTransferMatches, setManualTransferMatchesState] = useState<Array<{ outId: string; inId: string }>>(
+    prefs.manualTransferMatches ?? []
+  );
+
+  const setReconciliationDecision = useCallback((pairKey: string, decision: "approved" | "rejected" | null) => {
+    setReconciliationDecisionsState((prev) => {
+      const next = { ...prev };
+      if (decision === null) {
+        delete next[pairKey];
+      } else {
+        next[pairKey] = decision;
+      }
+      return next;
+    });
+  }, []);
+
+  const addManualTransferMatch = useCallback((match: { outId: string; inId: string }) => {
+    setManualTransferMatchesState((prev) => {
+      if (prev.some((m) => m.outId === match.outId && m.inId === match.inId)) return prev;
+      return [...prev, match];
+    });
+  }, []);
+
+  const removeManualTransferMatch = useCallback((outId: string, inId: string) => {
+    setManualTransferMatchesState((prev) => prev.filter((m) => !(m.outId === outId && m.inId === inId)));
+  }, []);
   const [savedLotSelections, setSavedLotSelections] = useState<SavedLotSelections | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -197,8 +231,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       priorCarryforwardLT,
       txnSortField,
       txnSortAsc,
+      reconciliationDecisions,
+      manualTransferMatches,
     });
-  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc]);
+  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches]);
 
   // Apply appearance mode — default to dark when System is selected
   useEffect(() => {
@@ -873,6 +909,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
       if (p.txnSortField !== undefined) setTxnSortField(p.txnSortField);
       if (p.txnSortAsc !== undefined) setTxnSortAsc(p.txnSortAsc);
+      if (p.reconciliationDecisions !== undefined) setReconciliationDecisionsState(p.reconciliationDecisions);
+      if (p.manualTransferMatches !== undefined) setManualTransferMatchesState(p.manualTransferMatches);
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -906,6 +944,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setTxnSortField,
     txnSortAsc,
     setTxnSortAsc,
+    reconciliationDecisions,
+    setReconciliationDecision,
+    manualTransferMatches,
+    addManualTransferMatch,
+    removeManualTransferMatch,
     savedLotSelections,
     setSavedLotSelections,
     isUnlocked,

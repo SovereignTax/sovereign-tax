@@ -8,18 +8,47 @@ import { AccountingMethod } from "../lib/types";
 import { HelpPanel } from "./HelpPanel";
 
 export function ReconciliationView() {
-  const { allTransactions, recordedSales, selectedYear, availableYears, setSelectedYear, setSelectedNav } = useAppState();
+  const {
+    allTransactions,
+    recordedSales,
+    selectedYear,
+    availableYears,
+    setSelectedYear,
+    setSelectedNav,
+    reconciliationDecisions,
+    setReconciliationDecision,
+    manualTransferMatches,
+    addManualTransferMatch,
+    removeManualTransferMatch,
+  } = useAppState();
 
   const result = useMemo(() => reconcileTransfers(allTransactions), [allTransactions]);
 
-  // Local state for flagged pair review
-  const [approvedFlags, setApprovedFlags] = useState<Set<string>>(new Set());
-  const [rejectedFlags, setRejectedFlags] = useState<Set<string>>(new Set());
-
-  // Local state for manual matching
-  const [manualMatches, setManualMatches] = useState<TransferPair[]>([]);
+  // Local selection state for manual matching UI (ephemeral)
   const [selectedOutId, setSelectedOutId] = useState<string | null>(null);
   const [selectedInId, setSelectedInId] = useState<string | null>(null);
+
+  // Reconstruct manual match pairs from persisted id-only references
+  const manualMatches: TransferPair[] = useMemo(() => {
+    const idx = new Map<string, Transaction>();
+    for (const t of allTransactions) idx.set(t.id, t);
+    const out: TransferPair[] = [];
+    for (const ref of manualTransferMatches) {
+      const o = idx.get(ref.outId);
+      const i = idx.get(ref.inId);
+      if (!o || !i) continue; // transaction was deleted — drop silently
+      const impliedFee = Math.max(0, o.amountBTC - i.amountBTC);
+      out.push({
+        transferOut: o,
+        transferIn: i,
+        amountBTC: o.amountBTC,
+        daysBetween: daysBetweenDates(o.date, i.date),
+        impliedFeeBTC: impliedFee,
+        confidence: MatchConfidence.Confident,
+      });
+    }
+    return out;
+  }, [manualTransferMatches, allTransactions]);
 
   // Lot assignments: compute from calculate() result, scoped to selectedYear
   const calcResult = useMemo(
@@ -46,12 +75,9 @@ export function ReconciliationView() {
   const flaggedPairs = result.matchedTransfers.filter((p) => p.confidence === MatchConfidence.Flagged);
 
   // Flagged pairs that haven't been reviewed yet
-  const pendingFlagged = flaggedPairs.filter((p) => {
-    const key = pairKey(p);
-    return !approvedFlags.has(key) && !rejectedFlags.has(key);
-  });
-  const approvedFlaggedPairs = flaggedPairs.filter((p) => approvedFlags.has(pairKey(p)));
-  const rejectedFlaggedPairs = flaggedPairs.filter((p) => rejectedFlags.has(pairKey(p)));
+  const pendingFlagged = flaggedPairs.filter((p) => !reconciliationDecisions[pairKey(p)]);
+  const approvedFlaggedPairs = flaggedPairs.filter((p) => reconciliationDecisions[pairKey(p)] === "approved");
+  const rejectedFlaggedPairs = flaggedPairs.filter((p) => reconciliationDecisions[pairKey(p)] === "rejected");
 
   // Effective unmatched = original unmatched + rejected flagged transfers - manually matched
   const manualOutIds = new Set(manualMatches.map((m) => m.transferOut.id));
@@ -75,26 +101,16 @@ export function ReconciliationView() {
   const selectedIn = effectiveUnmatchedIns.find((t) => t.id === selectedInId) ?? null;
 
   const handleApproveFlag = (pair: TransferPair) => {
-    setApprovedFlags((prev) => new Set(prev).add(pairKey(pair)));
+    setReconciliationDecision(pairKey(pair), "approved");
   };
 
   const handleRejectFlag = (pair: TransferPair) => {
-    setRejectedFlags((prev) => new Set(prev).add(pairKey(pair)));
+    setReconciliationDecision(pairKey(pair), "rejected");
   };
 
   const handleManualMatch = () => {
     if (!selectedOut || !selectedIn) return;
-    const impliedFee = Math.max(0, selectedOut.amountBTC - selectedIn.amountBTC);
-    const days = daysBetweenDates(selectedOut.date, selectedIn.date);
-    const newPair: TransferPair = {
-      transferOut: selectedOut,
-      transferIn: selectedIn,
-      amountBTC: selectedOut.amountBTC,
-      daysBetween: days,
-      impliedFeeBTC: impliedFee,
-      confidence: MatchConfidence.Confident, // User explicitly confirmed
-    };
-    setManualMatches((prev) => [...prev, newPair]);
+    addManualTransferMatch({ outId: selectedOut.id, inId: selectedIn.id });
     setSelectedOutId(null);
     setSelectedInId(null);
   };
