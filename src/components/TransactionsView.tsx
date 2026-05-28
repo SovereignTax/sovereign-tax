@@ -926,7 +926,7 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
           {/* Date */}
           <div className="flex items-center gap-3">
             <span className="w-20 text-right text-gray-500 text-sm">Date:</span>
-            <input type="date" className="input w-44 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input type="date" className="input w-44 text-sm" value={date} min="2009-01-03" max="2099-12-31" onChange={(e) => setDate(e.target.value)} />
           </div>
 
           {/* Amount */}
