@@ -41,10 +41,36 @@ export function TaxLossHarvestingView() {
   const losingLots = lotsWithGL.filter((l) => l.unrealizedGL < 0);
   const totalHarvestable = losingLots.reduce((a, l) => a + l.unrealizedGL, 0);
   const totalHarvestBTC = losingLots.reduce((a, l) => a + l.remainingBTC, 0);
+  // Split harvestable losses by term for ST/LT-aware tax-savings estimate.
+  const stHarvestable = losingLots.filter((l) => !l.isLongTerm).reduce((a, l) => a + l.unrealizedGL, 0);
+  const ltHarvestable = losingLots.filter((l) => l.isLongTerm).reduce((a, l) => a + l.unrealizedGL, 0);
+  // Max federal rates: ST = ordinary income max 37%, LT = 20% + 3.8% NIIT = 23.8%.
+  // This is an UPPER BOUND estimate — actual savings depend on user's marginal bracket.
+  const ST_MAX_RATE = 0.37;
+  const LT_MAX_RATE = 0.238;
+  const potentialSavings = Math.abs(stHarvestable) * ST_MAX_RATE + Math.abs(ltHarvestable) * LT_MAX_RATE;
 
-  // Current year realized gains
+  // Current year realized gains — wallet-filtered to match the losingLots scope.
+  // Without this filter, "Net After Harvesting" mixed per-wallet harvestable losses
+  // with all-wallet realized gains, encouraging exactly the universal-pooling
+  // that Treasury Reg. §1.1012-1(j) (2025+) prohibits. See BUG-FIX-PLAN.md B4.
   const salesThisYear = result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
-  const realizedGains = salesThisYear.reduce((a, s) => a + s.gainLoss, 0);
+  const realizedGains = (() => {
+    if (!selectedWallet) {
+      return salesThisYear.reduce((a, s) => a + s.gainLoss, 0);
+    }
+    const wf = selectedWallet.trim().toLowerCase();
+    return salesThisYear.reduce((total, s) => {
+      // Sum the gain/loss only from lot details whose wallet matches.
+      // Per-lot gain = amountBTC * salePricePerBTC - totalCost (matches engine semantics).
+      return total + s.lotDetails.reduce((sub, d) => {
+        const lotWallet = (d.wallet || d.exchange || "").trim().toLowerCase();
+        if (lotWallet !== wf) return sub;
+        const proceeds = d.amountBTC * s.salePricePerBTC;
+        return sub + (proceeds - d.totalCost);
+      }, 0);
+    }, 0);
+  })();
   const netAfterHarvest = realizedGains + totalHarvestable;
 
   const simulateHarvest = () => {
@@ -111,12 +137,14 @@ export function TaxLossHarvestingView() {
           <div className="text-xs text-gray-500 mb-1">Net After Harvesting</div>
           <div className={`text-xl font-semibold tabular-nums ${netAfterHarvest >= 0 ? "text-green-600" : "text-red-500"}`}>{formatUSD(netAfterHarvest)}</div>
         </div>
-        <div className="card">
+        <div className="card" title="Upper-bound estimate using federal maximum rates: 37% short-term (ordinary income) and 23.8% long-term (20% + 3.8% NIIT). Your actual marginal rate may be lower.">
           <div className="text-xs text-gray-500 mb-1">Potential Tax Savings</div>
           <div className="text-xl font-semibold tabular-nums text-green-600">
-            {formatUSD(Math.abs(totalHarvestable) * 0.37)}
+            {formatUSD(potentialSavings)}
           </div>
-          <div className="text-xs text-gray-400">est. @ 37% rate</div>
+          <div className="text-xs text-gray-400">
+            est. up to {Math.abs(stHarvestable) > 0 && Math.abs(ltHarvestable) > 0 ? "ST+LT" : Math.abs(stHarvestable) > 0 ? "37% ST" : "23.8% LT"}
+          </div>
         </div>
       </div>
 
