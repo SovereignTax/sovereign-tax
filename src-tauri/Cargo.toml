@@ -1,12 +1,14 @@
 [package]
 name = "sovereign-tax"
 version = "1.0.0"
-description = "A privacy-focused Bitcoin tax calculator"
-authors = ["you"]
-license = ""
-repository = ""
+description = "Self-sovereign Bitcoin-only tax software. Privacy-first, encrypted, local-only."
+authors = ["Joshua Himmelspach <support@sovereigntax.io>"]
+license-file = "../LICENSE"
+repository = "https://github.com/sovereigntax/sovereign-tax"
+homepage = "https://sovereigntax.io"
 edition = "2021"
 rust-version = "1.77.2"
+publish = false
 
 [lib]
 name = "app_lib"
