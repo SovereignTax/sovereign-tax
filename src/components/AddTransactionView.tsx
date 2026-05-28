@@ -85,11 +85,26 @@ export function AddTransactionView() {
   const requestedAmount = Number(amountStr) || 0;
   const showWalletWarning = isDisposition && wallet && walletBTCAvailable !== null && requestedAmount > 0 && requestedAmount > walletBTCAvailable + 0.00000001;
 
-  /** Use saved lot selections from Simulation to pre-fill the LotPicker */
+  /** Use saved lot selections from Simulation to pre-fill the LotPicker.
+   *  If any saved selection references a lot in a different wallet than the current
+   *  `wallet` input, auto-enable showAllWallets so LotPicker's buildInitialMap
+   *  doesn't silently drop those cross-wallet selections.
+   *  See BUG-FIX-PLAN.md A5 — mirrors the v1.4.2 EditLotsModal fix pattern. */
   const useSavedSelectionsHandler = () => {
     if (!saved) return;
     setError(null);
     if (!amountStr) setAmountStr(String(saved.amountBTC));
+
+    // Detect cross-wallet selections: any saved lotId whose wallet differs from current input
+    const walletNorm = (wallet || "").trim().toLowerCase();
+    const hasCrossWallet = walletNorm !== "" && saved.lotSelections.some((sel) => {
+      const lot = currentLots.find((l) => l.id === sel.lotId);
+      if (!lot) return false;
+      const lotWallet = (lot.wallet || lot.exchange || "").trim().toLowerCase();
+      return lotWallet !== walletNorm;
+    });
+    if (hasCrossWallet) setShowAllWallets(true);
+
     setUsingSavedSelections(true);
     setShowLotPicker(true);
     setDispositionPreview(null);
