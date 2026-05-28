@@ -123,17 +123,22 @@ export function reconcileTransfers(transactions: Transaction[]): ReconciliationR
   const unmatchedTransferOuts = transferOuts.filter((t) => !usedOuts.has(t.id));
   const unmatchedTransferIns = transferIns.filter((t) => !usedIns.has(t.id));
 
-  // Calculate per-exchange balances
+  // Calculate per-exchange balances.
+  // Key by normalized exchange name (trim + lowercase) so "Coinbase" and "coinbase "
+  // do not produce two separate buckets — that would split a single user's holdings
+  // and falsely warn about missing transactions on each side. Display field uses
+  // the first-seen spelling so the UI shows the user's preferred capitalization.
   const balances: Record<string, ExchangeBalance> = {};
   for (const t of transactions) {
-    const ex = t.exchange;
-    if (!balances[ex]) {
-      balances[ex] = { exchange: ex, totalIn: 0, totalOut: 0, netBalance: 0 };
+    const rawEx = t.exchange ?? "";
+    const key = rawEx.trim().toLowerCase();
+    if (!balances[key]) {
+      balances[key] = { exchange: rawEx, totalIn: 0, totalOut: 0, netBalance: 0 };
     }
     if (t.transactionType === TransactionType.Buy || t.transactionType === TransactionType.TransferIn) {
-      balances[ex].totalIn += t.amountBTC;
+      balances[key].totalIn += t.amountBTC;
     } else if (t.transactionType === TransactionType.Sell || t.transactionType === TransactionType.TransferOut || t.transactionType === TransactionType.Donation) {
-      balances[ex].totalOut += t.amountBTC;
+      balances[key].totalOut += t.amountBTC;
     }
   }
   for (const b of Object.values(balances)) {
