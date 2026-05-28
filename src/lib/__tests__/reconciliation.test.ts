@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { suggestSourceWallet, MatchConfidence } from "../reconciliation";
+import { suggestSourceWallet, reconcileTransfers, MatchConfidence } from "../reconciliation";
 import { createTransaction } from "../models";
 import { TransactionType } from "../types";
 
@@ -138,5 +138,51 @@ describe("suggestSourceWallet", () => {
     expect(result).not.toBeNull();
     expect(result!.reason).toContain("Jun");
     expect(result!.reason).toContain("2024");
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// Exchange balance key normalization (Batch A7)
+// ═══════════════════════════════════════════════════════
+
+describe("reconcileTransfers: exchange balance normalization", () => {
+  it("merges balances for the same exchange with different casing or whitespace", () => {
+    // Three buys for the same exchange under varied spellings — should land in one balance row.
+    const b1 = buy("2024-01-01", 1.0, 30000, { exchange: "Coinbase" });
+    const b2 = buy("2024-01-02", 0.5, 30000, { exchange: "coinbase" });
+    const b3 = buy("2024-01-03", 0.25, 30000, { exchange: " Coinbase " });
+
+    const result = reconcileTransfers([b1, b2, b3]);
+
+    // Exactly one balance row for the merged Coinbase bucket
+    expect(result.exchangeBalances).toHaveLength(1);
+    expect(result.exchangeBalances[0].totalIn).toBeCloseTo(1.75, 8);
+    expect(result.exchangeBalances[0].netBalance).toBeCloseTo(1.75, 8);
+    // Display value uses first-seen spelling
+    expect(result.exchangeBalances[0].exchange).toBe("Coinbase");
+  });
+
+  it("does not emit duplicate negative-balance warnings for case-variant exchange names", () => {
+    // A TransferOut from "Coinbase" with no corresponding buy under either spelling
+    // should produce at most ONE negative-balance warning (not one per spelling).
+    const tOut1 = transferOut("2024-03-01", 0.5, { exchange: "Coinbase" });
+    const tOut2 = transferOut("2024-03-02", 0.3, { exchange: "coinbase" });
+
+    const result = reconcileTransfers([tOut1, tOut2]);
+
+    const negativeWarnings = result.suggestedMissing.filter((m) => m.toLowerCase().includes("negative"));
+    expect(negativeWarnings).toHaveLength(1);
+    expect(result.exchangeBalances).toHaveLength(1);
+    expect(result.exchangeBalances[0].netBalance).toBeCloseTo(-0.8, 8);
+  });
+
+  it("still separates genuinely different exchanges", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { exchange: "Coinbase" });
+    const b2 = buy("2024-01-02", 0.5, 30000, { exchange: "Kraken" });
+    const b3 = buy("2024-01-03", 0.25, 30000, { exchange: "River" });
+
+    const result = reconcileTransfers([b1, b2, b3]);
+
+    expect(result.exchangeBalances).toHaveLength(3);
   });
 });

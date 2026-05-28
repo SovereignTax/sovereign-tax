@@ -26,6 +26,9 @@ export function SettingsView() {
   const state = useAppState();
   const [showChangePIN, setShowChangePIN] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState("");
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
@@ -199,21 +202,84 @@ export function SettingsView() {
           </div>
         </div>
         <div className="flex justify-end">
-          {showClearConfirm ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-red-500">Delete all data? This cannot be undone.</span>
-              <button className="btn-danger text-sm" onClick={async () => { await state.clearAllData(); setShowClearConfirm(false); }}>
-                Confirm Delete
-              </button>
-              <button className="btn-secondary text-sm" onClick={() => setShowClearConfirm(false)}>Cancel</button>
-            </div>
-          ) : (
-            <button className="btn-danger text-sm" onClick={() => setShowClearConfirm(true)}>
-              Clear All Data
-            </button>
-          )}
+          <button className="btn-danger text-sm" onClick={() => { setClearConfirmText(""); setClearError(null); setShowClearConfirm(true); }}>
+            Clear All Data
+          </button>
         </div>
       </div>
+
+      {/* Clear All Data confirmation modal — requires typing DELETE to proceed */}
+      {showClearConfirm && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => { if (!isClearing) setShowClearConfirm(false); }}
+        >
+          <div
+            className="card max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-data-title"
+          >
+            <h3 id="clear-data-title" className="font-semibold text-lg mb-3 text-red-500">⚠️ Permanently Delete All Data</h3>
+            <p className="text-sm mb-3">
+              This will erase every transaction, recorded sale, audit log entry,
+              column mapping, and import history from this device. <strong>This cannot be undone.</strong>
+            </p>
+            <p className="text-sm mb-3 text-gray-500">
+              {state.transactions.length} transaction{state.transactions.length === 1 ? "" : "s"} and {state.recordedSales.length} recorded sale{state.recordedSales.length === 1 ? "" : "s"} will be lost.
+            </p>
+            <p className="text-sm mb-2">
+              If you haven&apos;t already, create a backup first (Cancel, then use the Backup &amp; Restore section above).
+            </p>
+            <label className="block text-sm font-medium mt-4 mb-1">
+              Type <code className="bg-gray-200 dark:bg-gray-800 px-1 rounded">DELETE</code> to confirm:
+            </label>
+            <input
+              type="text"
+              className="input w-full"
+              value={clearConfirmText}
+              onChange={(e) => setClearConfirmText(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              disabled={isClearing}
+            />
+            {clearError && (
+              <p className="text-sm text-red-500 mt-2">{clearError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => setShowClearConfirm(false)}
+                disabled={isClearing}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-danger text-sm"
+                disabled={clearConfirmText !== "DELETE" || isClearing}
+                onClick={async () => {
+                  setClearError(null);
+                  setIsClearing(true);
+                  try {
+                    await state.clearAllData();
+                    setShowClearConfirm(false);
+                    setClearConfirmText("");
+                  } catch (err) {
+                    setClearError(err instanceof Error ? err.message : "Failed to clear data. Please try again.");
+                  } finally {
+                    setIsClearing(false);
+                  }
+                }}
+              >
+                {isClearing ? "Deleting…" : "Permanently Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Backup & Restore */}
       <div className="card mb-4">

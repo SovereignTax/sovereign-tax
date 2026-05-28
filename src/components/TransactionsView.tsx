@@ -765,8 +765,10 @@ export function TransactionsView() {
 
 function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (updates: Partial<Omit<Transaction, "id">>) => Promise<void>; onClose: () => void }) {
   const [type, setType] = useState(txn.transactionType);
-  const [date, setDate] = useState(new Date(txn.date).toISOString().split("T")[0]);
-  const [amountStr, setAmountStr] = useState(txn.amountBTC.toFixed(8));
+  const initDate = new Date(txn.date).toISOString().split("T")[0];
+  const [date, setDate] = useState(initDate);
+  const initAmountStr = txn.amountBTC.toFixed(8);
+  const [amountStr, setAmountStr] = useState(initAmountStr);
   // Back out fee from stored totals so user sees pre-fee values (fee is re-applied on save)
   const baseTotalUSD = txn.fee
     ? txn.transactionType === TransactionType.Buy
@@ -780,16 +782,50 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
   const initPriceStr = basePricePerBTC.toFixed(2);
   const initTotalStr = baseTotalUSD.toFixed(2);
   const initFeeStr = txn.fee ? txn.fee.toFixed(2) : "";
+  const initExchange = txn.exchange;
+  const initWallet = txn.wallet || "";
+  const initNotes = txn.notes;
+  const initIncomeType: IncomeType | "" = txn.incomeType || "";
   const [priceStr, setPriceStr] = useState(initPriceStr);
   const [totalStr, setTotalStr] = useState(initTotalStr);
   const [feeStr, setFeeStr] = useState(initFeeStr);
-  const [exchange, setExchange] = useState(txn.exchange);
-  const [wallet, setWallet] = useState(txn.wallet || "");
-  const [notes, setNotes] = useState(txn.notes);
-  const [incomeType, setIncomeType] = useState<IncomeType | "">(txn.incomeType || "");
+  const [exchange, setExchange] = useState(initExchange);
+  const [wallet, setWallet] = useState(initWallet);
+  const [notes, setNotes] = useState(initNotes);
+  const [incomeType, setIncomeType] = useState<IncomeType | "">(initIncomeType);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Dirty detection — true when any input differs from its initial value.
+  // Used to guard accidental backdrop clicks against losing in-progress edits.
+  const isDirty =
+    type !== txn.transactionType ||
+    date !== initDate ||
+    amountStr !== initAmountStr ||
+    priceStr !== initPriceStr ||
+    totalStr !== initTotalStr ||
+    feeStr !== initFeeStr ||
+    exchange !== initExchange ||
+    wallet !== initWallet ||
+    notes !== initNotes ||
+    incomeType !== initIncomeType;
+
+  const handleBackdropClick = () => {
+    // During save: block all dismiss attempts so we don't lose error feedback.
+    if (isSaving) return;
+    // With unsaved edits: silent block (user can use explicit Cancel to discard).
+    if (isDirty) return;
+    onClose();
+  };
+
+  const handleCancel = () => {
+    if (isSaving) return;
+    if (isDirty && !window.confirm("Discard your unsaved changes?")) return;
+    onClose();
+  };
 
   const handleSave = async () => {
+    if (isSaving) return; // double-submit guard
     setError(null);
     const amount = Number(amountStr);
     if (!amount || amount <= 0) { setError("Enter a valid BTC amount"); return; }
@@ -845,11 +881,19 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
     if (newIncomeType !== txn.incomeType) updates.incomeType = newIncomeType;
     if (notes !== txn.notes) updates.notes = notes;
 
-    await onSave(updates);
+    setIsSaving(true);
+    try {
+      await onSave(updates);
+      // Parent component closes the modal on success via its own state.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save changes. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={handleBackdropClick}>
       <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold mb-4">Edit Transaction</h3>
 
@@ -940,8 +984,10 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
         {error && <div className="text-red-500 text-sm mt-3">{error}</div>}
 
         <div className="flex gap-3 justify-end mt-5">
-          <button className="btn-secondary text-sm" onClick={onClose}>Cancel</button>
-          <button className="btn-primary text-sm" onClick={handleSave}>Save Changes</button>
+          <button className="btn-secondary text-sm" onClick={handleCancel} disabled={isSaving}>Cancel</button>
+          <button className="btn-primary text-sm" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Saving…" : "Save Changes"}
+          </button>
         </div>
       </div>
     </div>
