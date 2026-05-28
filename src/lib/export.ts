@@ -22,10 +22,55 @@ function formatUSD(value: number): string {
   }).format(value);
 }
 
+/** Defang against CSV formula injection (OWASP).
+ *  Prefixes a single quote if the value starts with =, +, -, @, \t, or \r —
+ *  characters that Excel/Numbers interpret as the start of a formula.
+ *  Apply ONLY to user-controlled strings, NEVER to pre-formatted numbers
+ *  (e.g. negative dollar amounts must remain "-100.00" not "'-100.00").
+ *  See https://owasp.org/www-community/attacks/CSV_Injection */
+function defangFormula(value: string): string {
+  if (!value) return value;
+  const c = value.charAt(0);
+  if (c === "=" || c === "+" || c === "-" || c === "@" || c === "\t" || c === "\r") {
+    return "'" + value;
+  }
+  return value;
+}
+
+/** Render a user-controlled string as a fully safe CSV cell.
+ *  - Strips embedded line endings (would otherwise split the CSV row).
+ *  - Defangs CSV formula injection.
+ *  - Wraps in double-quotes and escapes internal quotes if the value contains
+ *    comma, quote, or any other character that would break CSV parsing.
+ *  Apply to: wallet, exchange, notes, audit details, action — any user-typed field. */
+function csvCell(value: string | undefined | null): string {
+  if (value === undefined || value === null) return "";
+  // Collapse any embedded CR/LF to a single space so notes with newlines don't split the row.
+  let str = String(value).replace(/[\r\n]+/g, " ");
+  if (str === "") return "";
+  str = defangFormula(str);
+  if (/[",]/.test(str)) {
+    str = '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+/** Sanitize a user-controlled string for safe inclusion inside another field
+ *  (e.g. inside the parens of formatPropertyDescription).
+ *  Strips line endings and defangs formula triggers but does NOT add CSV
+ *  quote-wrapping (the outer cell formatter handles that). */
+function sanitizeUserString(value: string | undefined | null): string {
+  if (value === undefined || value === null) return "";
+  return defangFormula(String(value).replace(/[\r\n]+/g, " "));
+}
+
 /** Form 8949 description: "0.50000000 BTC (Coinbase)" — includes wallet for audit trail.
- *  CSV-safe: wraps in quotes and escapes internal quotes so commas/quotes in exchange names don't break CSV parsing. */
+ *  CSV-safe: wraps in quotes and escapes internal quotes so commas/quotes in exchange names don't break CSV parsing.
+ *  Wallet name is sanitized to strip line endings (would break CSV) — formula triggers can't reach cell-start
+ *  here because the cell always begins with the BTC digit string. */
 function formatPropertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
-  const walletName = detail.wallet || detail.exchange;
+  const walletNameRaw = detail.wallet || detail.exchange;
+  const walletName = sanitizeUserString(walletNameRaw);
   const desc = walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
   return `"${desc.replace(/"/g, '""')}"`;
 }
@@ -172,7 +217,7 @@ export function exportLegacyCSV(sales: SaleRecord[], walletMismatchCount?: numbe
           formatCSVDecimal(gainLoss),
           String(detail.daysHeld),
           detail.isLongTerm ? "Long-term" : "Short-term",
-          detail.exchange,
+          csvCell(detail.exchange),
         ].join(",")
       );
     }
@@ -207,7 +252,7 @@ export function exportIncomeCSV(transactions: Transaction[], year: number): stri
   for (const t of incomeTransactions) {
     const typeName = t.incomeType ? IncomeTypeDisplayNames[t.incomeType] : "Unknown";
     lines.push(
-      `${formatDate(t.date)},${typeName},${formatBTC(t.amountBTC)},${formatCSVDecimal(t.totalUSD)},${t.exchange},"${t.notes || ""}"`
+      `${formatDate(t.date)},${typeName},${formatBTC(t.amountBTC)},${formatCSVDecimal(t.totalUSD)},${csvCell(t.exchange)},${csvCell(t.notes)}`
     );
     totalIncome += t.totalUSD;
   }
@@ -398,8 +443,8 @@ export function exportForm8283CSV(
           formatCSVDecimal(lotFMV),
           donation.fmvPerBTC > 0 ? "CoinGecko / Exchange Rate" : "Not provided",
           lot.isLongTerm ? "Long-term" : "Short-term",
-          donation.exchange,
-          `"${(donation.notes || "").replace(/"/g, '""')}"`,
+          csvCell(donation.exchange),
+          csvCell(donation.notes),
         ].join(",")
       );
     }
@@ -429,7 +474,7 @@ export function exportAuditLogCSV(entries: { id: string; timestamp: string; acti
   ];
 
   for (const entry of entries) {
-    lines.push(`${entry.timestamp},"${entry.action}","${entry.details.replace(/"/g, '""')}"`);
+    lines.push(`${csvCell(entry.timestamp)},${csvCell(entry.action)},${csvCell(entry.details)}`);
   }
 
   return lines.join("\n");

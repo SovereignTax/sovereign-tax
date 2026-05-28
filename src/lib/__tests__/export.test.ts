@@ -6,6 +6,7 @@ import {
   exportTurboTaxCSV,
   exportIncomeCSV,
   exportForm8283CSV,
+  exportAuditLogCSV,
   buildDonationSummary,
 } from "../export";
 import { AccountingMethod, TransactionType, IncomeType } from "../types";
@@ -383,5 +384,177 @@ describe("buildDonationSummary", () => {
     });
     const summary = buildDonationSummary([sale], [], 2024);
     expect(summary[0].holdingPeriod).toBe("Mixed");
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// CSV Formula Injection Defense (Batch A — A1)
+// Every user-controlled string field that flows into an export must be
+// defanged against CSV formula injection (OWASP). Excel/Numbers execute
+// cells starting with = + - @ \t \r — a malicious imported CSV can chain
+// into the user's exported file and run on their accountant's machine.
+// ═══════════════════════════════════════════════════════
+
+describe("CSV formula injection defense", () => {
+  const MALICIOUS = "=cmd|'/c calc'!A1";
+  const HYPERLINK = '=HYPERLINK("http://evil","Click")';
+
+  it("Form 8949 CSV: defangs malicious wallet name in property description", () => {
+    const sale = makeSaleRecord({
+      lotDetails: [makeLotDetail({ wallet: MALICIOUS, exchange: "Coinbase" })],
+    });
+    const csv = exportForm8949CSV([sale], 2024, AccountingMethod.FIFO);
+    // Property description cell always starts with the BTC digit, so cell-start
+    // can't be a formula, but the wallet inside parens must not be raw either.
+    // After sanitize, the leading "=" inside the parens is prefixed with '.
+    expect(csv).toContain("('=cmd");
+    // Original malicious form must not appear unescaped
+    expect(csv).not.toMatch(/\(=cmd/);
+  });
+
+  it("Legacy CSV: defangs malicious exchange field", () => {
+    const sale = makeSaleRecord({
+      lotDetails: [makeLotDetail({ exchange: MALICIOUS })],
+    });
+    const csv = exportLegacyCSV([sale]);
+    // The exchange column is its own cell at end of row — must be defanged.
+    // After defang it starts with '=, then no special chars so no quote wrap needed.
+    expect(csv).toMatch(/,'=cmd/);
+    // Bare "=cmd" at start of a cell must NOT appear
+    expect(csv).not.toMatch(/,=cmd/);
+  });
+
+  it("Legacy CSV: HYPERLINK injection in exchange is defanged", () => {
+    const sale = makeSaleRecord({
+      lotDetails: [makeLotDetail({ exchange: HYPERLINK })],
+    });
+    const csv = exportLegacyCSV([sale]);
+    // HYPERLINK contains comma + quotes → quote-wrap kicks in, leading = is defanged
+    // Quote-wrapped cell with internal quotes escaped: ,"'=HYPERLINK(""http://evil"",""Click"")"
+    expect(csv).toContain('"\'=HYPERLINK(');
+    expect(csv).not.toMatch(/,=HYPERLINK/);
+  });
+
+  it("Income CSV: defangs malicious notes field", () => {
+    const tx: Transaction = {
+      id: "t1",
+      date: "2024-03-01T12:00:00.000Z",
+      amountBTC: 0.01,
+      pricePerBTC: 60000,
+      totalUSD: 600,
+      transactionType: TransactionType.Buy,
+      exchange: "MyMiner",
+      incomeType: IncomeType.Mining,
+      notes: MALICIOUS,
+    };
+    const csv = exportIncomeCSV([tx], 2024);
+    expect(csv).toContain("'=cmd");
+    expect(csv).not.toMatch(/,=cmd/);
+  });
+
+  it("Income CSV: strips embedded newlines from notes to prevent row splits", () => {
+    const tx: Transaction = {
+      id: "t1",
+      date: "2024-03-01T12:00:00.000Z",
+      amountBTC: 0.01,
+      pricePerBTC: 60000,
+      totalUSD: 600,
+      transactionType: TransactionType.Buy,
+      exchange: "MyMiner",
+      incomeType: IncomeType.Mining,
+      notes: "line1\nline2\r\nline3",
+    };
+    const csv = exportIncomeCSV([tx], 2024);
+    // The header line + 1 data row + blank + total = 4 lines for the data block,
+    // plus the 4 preamble lines (title, year, generated, blank) = 8 total.
+    // Critically: the data row stays on ONE line.
+    const dataRow = csv.split("\n").find((l) => l.includes("MyMiner"));
+    expect(dataRow).toBeDefined();
+    expect(dataRow).not.toContain("\n");
+    // Newlines collapsed to spaces — content preserved
+    expect(dataRow).toContain("line1 line2 line3");
+  });
+
+  it("Form 8283 CSV: defangs malicious exchange and notes", () => {
+    const donation = makeDonationRecord({
+      lotDetails: [makeLotDetail({ amountBTC: 0.3, exchange: MALICIOUS, isLongTerm: true })],
+    });
+    const summary = buildDonationSummary([donation], [], 2024);
+    summary[0].exchange = MALICIOUS;
+    summary[0].notes = MALICIOUS;
+    const csv = exportForm8283CSV(summary, 2024);
+    // No raw =cmd at cell start
+    expect(csv).not.toMatch(/,=cmd/);
+    // Defanged variant present
+    expect(csv).toContain("'=cmd");
+  });
+
+  it("Audit log CSV: defangs malicious action and details", () => {
+    const entries = [
+      { id: "1", timestamp: "2024-01-01T00:00:00.000Z", action: MALICIOUS, details: MALICIOUS },
+    ];
+    const csv = exportAuditLogCSV(entries);
+    expect(csv).not.toMatch(/,=cmd/);
+    expect(csv).toContain("'=cmd");
+  });
+
+  it("Audit log CSV: details with commas and newlines stay on one row, quoted", () => {
+    const entries = [
+      {
+        id: "1",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        action: "Edit",
+        details: "field1: a, field2: b\nfield3: c",
+      },
+    ];
+    const csv = exportAuditLogCSV(entries);
+    const rows = csv.split("\n");
+    // Header + 1 data row = 2 rows exactly
+    expect(rows).toHaveLength(2);
+    // Comma inside details → row must be quote-wrapped
+    expect(rows[1]).toContain('"field1: a, field2: b field3: c"');
+  });
+
+  it("Negative dollar amounts in CSV are NOT prefixed with quote (defang doesn't touch numeric formatters)", () => {
+    // A loss sale produces negative gain — formatted as "-100.00"
+    // The defang would (wrongly) turn this into "'-100.00" if applied to numbers.
+    // This test confirms numeric formatters bypass defang.
+    const sale = makeSaleRecord({
+      salePricePerBTC: 30000, // loss: bought at 40k, sold at 30k → -5000 on 0.5 BTC
+    });
+    const csv = exportForm8949CSV([sale], 2024, AccountingMethod.FIFO);
+    // Should contain a negative number formatted as -5000.00 (gain/loss column)
+    expect(csv).toContain("-5000.00");
+    // Should NOT contain "'-5000.00" (would mean defang was wrongly applied to numbers)
+    expect(csv).not.toContain("'-5000.00");
+  });
+
+  it("TurboTax TXF: embedded newlines in wallet do not split the P tag across lines", () => {
+    const sale = makeSaleRecord({
+      lotDetails: [makeLotDetail({ wallet: "line1\nline2\nline3" })],
+    });
+    const txf = exportTurboTaxTXF([sale], 2024);
+    // P tag must remain a single line per TXF spec
+    const lines = txf.split("\n");
+    const pLines = lines.filter((l) => l.startsWith("P"));
+    expect(pLines).toHaveLength(1);
+    // Embedded newlines stripped to spaces — content preserved
+    expect(pLines[0]).toContain("line1 line2 line3");
+  });
+
+  it("TurboTax TXF: wallet starting with = is defanged inside the description", () => {
+    // When the wallet ITSELF starts with =, sanitizeUserString defangs it before
+    // it's interpolated into the description string.
+    const sale = makeSaleRecord({
+      lotDetails: [makeLotDetail({ wallet: "=cmd|inj" })],
+    });
+    const txf = exportTurboTaxTXF([sale], 2024);
+    const lines = txf.split("\n");
+    const pLine = lines.find((l) => l.startsWith("P"));
+    expect(pLine).toBeDefined();
+    // The wallet name inside parens is defanged because it starts with =
+    expect(pLine).toContain("'=cmd");
+    // Raw "(=cmd" must not appear
+    expect(pLine).not.toMatch(/\(=cmd/);
   });
 });
