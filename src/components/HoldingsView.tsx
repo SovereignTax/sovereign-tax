@@ -17,8 +17,14 @@ export function HoldingsView() {
     if (selectedWallet && (l.wallet || l.exchange || "").trim().toLowerCase() !== selectedWallet.trim().toLowerCase()) return false;
     return true;
   });
+  // Fee-inclusive per-BTC cost basis — matches the Tax Report engine.
+  // Using raw lot.pricePerBTC (fee-exclusive) understated the basis and made
+  // Holdings disagree with Form 8949 numbers. See BUG-FIX-PLAN.md B1.
+  const lotCostBasisPerBTC = (l: { amountBTC: number; totalCost: number; pricePerBTC: number }) =>
+    l.amountBTC > 0 ? l.totalCost / l.amountBTC : l.pricePerBTC;
+
   const totalBTC = activeLots.reduce((a, l) => a + l.remainingBTC, 0);
-  const totalCostBasis = activeLots.reduce((a, l) => a + l.remainingBTC * l.pricePerBTC, 0);
+  const totalCostBasis = activeLots.reduce((a, l) => a + l.remainingBTC * lotCostBasisPerBTC(l), 0);
   const avgCostPerBTC = totalBTC > 0 ? totalCostBasis / totalBTC : 0;
   const currentValue = priceState.currentPrice ? totalBTC * priceState.currentPrice : null;
   const unrealizedGL = currentValue != null ? currentValue - totalCostBasis : null;
@@ -110,7 +116,7 @@ export function HoldingsView() {
                   <div className={`text-right tabular-nums ${blurSmClass}`}>{formatBTC(lot.amountBTC)}</div>
                   <div className={`text-right tabular-nums ${blurSmClass}`}>{formatBTC(lot.remainingBTC)}</div>
                   <div className={`text-right tabular-nums ${blurSmClass}`}>{formatUSD(lot.pricePerBTC)}</div>
-                  <div className={`text-right tabular-nums ${blurSmClass}`}>{formatUSD(lot.remainingBTC * lot.pricePerBTC)}</div>
+                  <div className={`text-right tabular-nums ${blurSmClass}`}>{formatUSD(lot.remainingBTC * lotCostBasisPerBTC(lot))}</div>
                   <div className="truncate">{lot.exchange}</div>
                 </div>
               ))}

@@ -141,12 +141,19 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
     return sortDir === "asc" ? " \u25B2" : " \u25BC";
   };
 
+  // Fee-inclusive per-BTC cost basis — matches the engine and Holdings view.
+  // The "Cost/BTC" column is a cost-basis number (used for tax decisions),
+  // not the raw historical purchase price.
+  const lotCostBasisPerBTC = (lot: { amountBTC: number; totalCost: number; pricePerBTC: number }) =>
+    lot.amountBTC > 0 ? lot.totalCost / lot.amountBTC : lot.pricePerBTC;
+
   const sortedLots = useMemo(() => {
     const lotsWithMeta = availableLots.map((lot) => ({
       lot,
       daysHeld: daysBetween(lot.purchaseDate, referenceDate),
       isLongTerm: isMoreThanOneYear(lot.purchaseDate, referenceDate),
       walletName: (lot.wallet || lot.exchange || "").toLowerCase(),
+      costBasisPerBTC: lotCostBasisPerBTC(lot),
     }));
 
     lotsWithMeta.sort((a, b) => {
@@ -162,7 +169,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
           cmp = a.lot.remainingBTC - b.lot.remainingBTC;
           break;
         case "cost":
-          cmp = a.lot.pricePerBTC - b.lot.pricePerBTC;
+          cmp = a.costBasisPerBTC - b.costBasisPerBTC;
           break;
         case "daysHeld":
           cmp = a.daysHeld - b.daysHeld;
@@ -204,7 +211,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
       </div>
 
       <div className="max-h-[40vh] overflow-y-auto">
-        {sortedLots.map(({ lot, daysHeld, isLongTerm }) => {
+        {sortedLots.map(({ lot, daysHeld, isLongTerm, costBasisPerBTC }) => {
           const isSelected = lot.id in selections;
           const termBg = isSelected
             ? "bg-blue-50 dark:bg-blue-900/10"
@@ -223,7 +230,7 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
               <div>{formatDate(lot.purchaseDate)}</div>
               <div className="text-xs text-gray-500 truncate" title={lot.wallet || lot.exchange}>{lot.wallet || lot.exchange}</div>
               <div className="text-right tabular-nums">{formatBTC(lot.remainingBTC)}</div>
-              <div className="text-right tabular-nums">{formatUSD(lot.pricePerBTC)}</div>
+              <div className="text-right tabular-nums" title="Cost basis per BTC (includes purchase fees)">{formatUSD(costBasisPerBTC)}</div>
               <div className="text-right tabular-nums">{daysHeld}</div>
               <div>
                 <span className={`badge ${isLongTerm ? "badge-green" : "badge-orange"} text-xs`}>

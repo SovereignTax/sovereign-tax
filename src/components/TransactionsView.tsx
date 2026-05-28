@@ -526,7 +526,30 @@ export function TransactionsView() {
                 setErrorMessage(null);
                 try {
                   const name = batchExchange.trim();
-                  for (const id of selectedRows) { await updateTransaction(id, { exchange: name }); }
+                  const nameNorm = name.toLowerCase();
+                  for (const id of selectedRows) {
+                    // If the transaction's wallet is empty OR matches its current
+                    // exchange (the default-fallback pattern from createTransaction
+                    // and EditModal: wallet = wallet || exchange), the user has not
+                    // overridden wallet — so update it too. Otherwise leave the
+                    // explicitly-chosen wallet alone.
+                    // Without this, per-wallet IRS tracking (2025+ rules) splits
+                    // a single user's lots across "Coinbse" (old) and "Coinbase"
+                    // (new) wallets and emits wallet-mismatch warnings.
+                    const t = transactions.find((tx) => tx.id === id);
+                    const updates: { exchange: string; wallet?: string } = { exchange: name };
+                    if (t) {
+                      const currentWallet = (t.wallet || "").trim();
+                      const currentExchange = (t.exchange || "").trim();
+                      const walletIsDefault =
+                        currentWallet === "" ||
+                        currentWallet.toLowerCase() === currentExchange.toLowerCase();
+                      if (walletIsDefault && currentWallet.toLowerCase() !== nameNorm) {
+                        updates.wallet = name;
+                      }
+                    }
+                    await updateTransaction(id, updates);
+                  }
                   setSelectedRows(new Set());
                   setBatchAction(null);
                 } catch (err) { setErrorMessage("Batch update failed: " + (err instanceof Error ? err.message : String(err))); }
@@ -926,7 +949,7 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
           {/* Date */}
           <div className="flex items-center gap-3">
             <span className="w-20 text-right text-gray-500 text-sm">Date:</span>
-            <input type="date" className="input w-44 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input type="date" className="input w-44 text-sm" value={date} min="2009-01-03" max="2099-12-31" onChange={(e) => setDate(e.target.value)} />
           </div>
 
           {/* Amount */}

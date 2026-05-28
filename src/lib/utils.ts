@@ -119,3 +119,23 @@ export function partitionLooseDuplicates<T extends { date: string; transactionTy
   }
   return { matchCount, nonMatching };
 }
+
+/** Maximum carryforward value accepted in Settings ($100M).
+ *  Realistic prior-year capital loss carryforwards never approach this.
+ *  Cap prevents NaN/Infinity/scientific-notation inputs from polluting state. */
+export const CARRYFORWARD_MAX = 100_000_000;
+
+/** Sanitize a Settings carryforward input string into a stored loss value
+ *  (negative number per existing convention).
+ *  - Empty/null input → 0
+ *  - NaN, ±Infinity → 0 (invalid input rejected silently rather than poisoning state)
+ *  - Scientific notation that overflows → clamped to CARRYFORWARD_MAX
+ *  - Otherwise: returns -Math.abs(value), clamped at CARRYFORWARD_MAX
+ *  See BUG-FIX-PLAN.md B6. */
+export function sanitizeCarryforward(raw: string): number {
+  if (raw === "" || raw == null) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0; // catches NaN and ±Infinity
+  const clamped = Math.min(Math.abs(n), CARRYFORWARD_MAX);
+  return -clamped;
+}

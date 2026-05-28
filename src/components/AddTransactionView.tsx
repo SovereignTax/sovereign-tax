@@ -308,7 +308,7 @@ export function AddTransactionView() {
         {/* Date */}
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Date:</span>
-          <input type="date" className="input w-48" value={date} onChange={(e) => { setDate(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
+          <input type="date" className="input w-48" value={date} min="2009-01-03" max="2099-12-31" onChange={(e) => { setDate(e.target.value); setDispositionPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
         </div>
 
         {/* Amount */}

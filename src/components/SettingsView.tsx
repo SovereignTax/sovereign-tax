@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
 import { isEncryptedBackup, listSavedBackups, readSavedBackup, deleteSavedBackup, downloadBackup, SavedBackupInfo } from "../lib/backup";
+import { sanitizeCarryforward } from "../lib/utils";
 
 const APP_VERSION = __APP_VERSION__;
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
@@ -21,6 +22,7 @@ function compareSemver(a: string, b: string): number {
   }
   return 0;
 }
+
 
 export function SettingsView() {
   const state = useAppState();
@@ -152,12 +154,10 @@ export function SettingsView() {
                 type="number"
                 className="input w-28 text-sm text-right tabular-nums"
                 value={state.priorCarryforwardST === 0 ? "" : Math.abs(state.priorCarryforwardST)}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  state.setPriorCarryforwardST(val === "" ? 0 : -Math.abs(Number(val)));
-                }}
+                onChange={(e) => state.setPriorCarryforwardST(sanitizeCarryforward(e.target.value))}
                 placeholder="0"
                 min="0"
+                max="100000000"
                 step="1"
               />
             </div>
@@ -170,18 +170,16 @@ export function SettingsView() {
                 type="number"
                 className="input w-28 text-sm text-right tabular-nums"
                 value={state.priorCarryforwardLT === 0 ? "" : Math.abs(state.priorCarryforwardLT)}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  state.setPriorCarryforwardLT(val === "" ? 0 : -Math.abs(Number(val)));
-                }}
+                onChange={(e) => state.setPriorCarryforwardLT(sanitizeCarryforward(e.target.value))}
                 placeholder="0"
                 min="0"
+                max="100000000"
                 step="1"
               />
             </div>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Enter the short-term and long-term capital loss carryforward from your prior-year Schedule D Capital Loss Carryover Worksheet. These are applied to their respective categories in the Tax Report.</p>
+        <p className="text-xs text-gray-500 mt-2">Enter the short-term and long-term capital loss carryforward from your prior-year Schedule D Capital Loss Carryover Worksheet. These are applied to their respective categories in the Tax Report. Values are capped at $100,000,000.</p>
       </div>
 
       {/* Data */}

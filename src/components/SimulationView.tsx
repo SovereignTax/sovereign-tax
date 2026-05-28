@@ -15,6 +15,10 @@ export function SimulationView() {
   const [useLive, setUseLive] = useState(false);
   const [method, setMethod] = useState(AccountingMethod.FIFO);
   const [selectedWallet, setSelectedWallet] = useState("");
+  // Simulated sale date — defaults to today but user can backdate or future-date
+  // for "what if I sell next March?" scenarios. Required for accurate holding-
+  // period (ST/LT) classification. See BUG-FIX-PLAN.md B2.
+  const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [result, setResult] = useState<SaleRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showLotPicker, setShowLotPicker] = useState(false);
@@ -23,6 +27,23 @@ export function SimulationView() {
   const fullResult = useMemo(() => calculate(allTransactions, method, state.recordedSales), [allTransactions, method, state.recordedSales]);
 
   const isSpecificID = method === AccountingMethod.SpecificID;
+
+  // Sale date as ISO string at noon UTC — matches the convention used elsewhere
+  // in the app for day-precision dates and avoids edge-of-day TZ issues.
+  const saleDateISO = saleDate ? new Date(saleDate + "T12:00:00").toISOString() : undefined;
+
+  /** Clear stale result and any saved selections — call from every input handler.
+   *  Without this, the user can edit Amount/Price/Method/Wallet but see stale
+   *  result from a previous simulation, and saved lot selections from a prior
+   *  method/wallet could silently pre-fill the next disposition flow.
+   *  See BUG-FIX-PLAN.md B3. */
+  const resetStaleState = () => {
+    setResult(null);
+    setShowLotPicker(false);
+    setLastSelections(null);
+    setSavedLotSelections(null);
+    setError(null);
+  };
 
   const canSimulate = () => {
     const amt = Number(amountStr);
@@ -47,7 +68,7 @@ export function SimulationView() {
     }
 
     const wallet = selectedWallet || undefined;
-    const sim = simulateSale(amount, price, fullResult.lots, method, undefined, wallet);
+    const sim = simulateSale(amount, price, fullResult.lots, method, undefined, wallet, saleDateISO);
     if (!sim) { setError("Not enough BTC in holdings"); return; }
     setResult(sim);
   };
@@ -57,7 +78,7 @@ export function SimulationView() {
     const amount = Number(amountStr);
     const price = useLive ? priceState.currentPrice! : Number(priceStr);
     const wallet = selectedWallet || undefined;
-    const sim = simulateSale(amount, price, fullResult.lots, method, selections, wallet);
+    const sim = simulateSale(amount, price, fullResult.lots, method, selections, wallet, saleDateISO);
     if (!sim) { setError("Not enough BTC from selected lots"); return; }
     setResult(sim);
     // Save lot selections for use in Record Sale / Add Transaction
@@ -81,28 +102,39 @@ export function SimulationView() {
       <HelpPanel subtitle="Preview capital gains and lot matching for a hypothetical sale — nothing is recorded." />
 
       <div className="card mb-6">
-        <div className="flex gap-6 mb-4">
+        <div className="flex gap-6 mb-4 flex-wrap">
           <div>
             <label className="text-xs text-gray-500 block mb-1">BTC Amount</label>
-            <input className="input w-48" placeholder="0.00000000" value={amountStr} onChange={(e) => setAmountStr(e.target.value)} />
+            <input className="input w-48" placeholder="0.00000000" value={amountStr} onChange={(e) => { setAmountStr(e.target.value); resetStaleState(); }} />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
               <label className="text-xs text-gray-500">Price per BTC (USD)</label>
               <label className="flex items-center gap-1 text-xs">
-                <input type="checkbox" checked={useLive} onChange={(e) => { setUseLive(e.target.checked); if (e.target.checked) fetchPrice(); }} />
+                <input type="checkbox" checked={useLive} onChange={(e) => { setUseLive(e.target.checked); if (e.target.checked) fetchPrice(); resetStaleState(); }} />
                 Live
               </label>
             </div>
             {useLive ? (
               <div className="text-lg font-medium tabular-nums h-8">{priceState.currentPrice ? formatUSD(priceState.currentPrice) : "..."}</div>
             ) : (
-              <input className="input w-48" placeholder="0.00" value={priceStr} onChange={(e) => setPriceStr(e.target.value)} />
+              <input className="input w-48" placeholder="0.00" value={priceStr} onChange={(e) => { setPriceStr(e.target.value); resetStaleState(); }} />
             )}
           </div>
           <div>
+            <label className="text-xs text-gray-500 block mb-1" title="The hypothetical sale date — used for short-term vs long-term holding-period classification.">Sale Date</label>
+            <input
+              type="date"
+              className="input w-48"
+              value={saleDate}
+              min="2009-01-03"
+              max="2099-12-31"
+              onChange={(e) => { setSaleDate(e.target.value); resetStaleState(); }}
+            />
+          </div>
+          <div>
             <label className="text-xs text-gray-500 block mb-1">Method</label>
-            <select className="select" value={method} onChange={(e) => { setMethod(e.target.value as AccountingMethod); setResult(null); setShowLotPicker(false); }}>
+            <select className="select" value={method} onChange={(e) => { setMethod(e.target.value as AccountingMethod); resetStaleState(); }}>
               <option value={AccountingMethod.FIFO}>FIFO</option>
               <option value={AccountingMethod.SpecificID}>Specific ID</option>
             </select>
@@ -110,7 +142,7 @@ export function SimulationView() {
           {availableWallets.length > 1 && (
             <div>
               <label className="text-xs text-gray-500 block mb-1">Wallet</label>
-              <select className="select" value={selectedWallet} onChange={(e) => { setSelectedWallet(e.target.value); setResult(null); }}>
+              <select className="select" value={selectedWallet} onChange={(e) => { setSelectedWallet(e.target.value); resetStaleState(); }}>
                 <option value="">All Wallets</option>
                 {availableWallets.map((w) => <option key={w} value={w}>{w}</option>)}
               </select>
@@ -133,6 +165,7 @@ export function SimulationView() {
               : fullResult.lots}
             targetAmount={Number(amountStr)}
             salePrice={useLive ? priceState.currentPrice || undefined : Number(priceStr) || undefined}
+            saleDate={saleDateISO}
             onConfirm={handleLotPickerConfirm}
             onCancel={handleLotPickerCancel}
           />

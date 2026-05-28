@@ -149,7 +149,7 @@ export function RecordSaleView() {
         <div className="flex gap-4 mb-4 flex-wrap">
           <div>
             <label className="text-xs text-gray-500 block mb-1">Sale Date</label>
-            <input type="date" className="input" value={saleDate} onChange={(e) => { setSaleDate(e.target.value); setPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
+            <input type="date" className="input" value={saleDate} min="2009-01-03" max="2099-12-31" onChange={(e) => { setSaleDate(e.target.value); setPreview(null); setLotSelections(null); setShowLotPicker(false); setUsingSavedSelections(false); }} />
           </div>
           <div>
             <label className="text-xs text-gray-500 block mb-1">BTC Amount</label>

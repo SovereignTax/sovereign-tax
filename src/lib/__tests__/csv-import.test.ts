@@ -7,6 +7,7 @@ import {
   readHeaders,
   parseCSVContent,
   excelSerialToDate,
+  decodeCSVBuffer,
 } from "../csv-import";
 import { TransactionType } from "../types";
 import { ColumnMapping } from "../models";
@@ -936,5 +937,109 @@ describe("Swan Bitcoin CSV", () => {
     expect(result.transactions[0].transactionType).toBe(TransactionType.TransferIn);
     expect(result.transactions[1].transactionType).toBe(TransactionType.Buy);
     expect(result.transactions[2].transactionType).toBe(TransactionType.Buy);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// decodeCSVBuffer — BOM and heuristic encoding detection (Batch B10)
+// ═══════════════════════════════════════════════════════
+
+describe("decodeCSVBuffer", () => {
+  function buf(...bytes: number[]): ArrayBuffer {
+    return new Uint8Array(bytes).buffer;
+  }
+  function utf16leBuf(text: string, withBom: boolean): ArrayBuffer {
+    const bom = withBom ? [0xff, 0xfe] : [];
+    const bytes: number[] = [...bom];
+    for (const ch of text) {
+      const code = ch.charCodeAt(0);
+      bytes.push(code & 0xff, (code >> 8) & 0xff);
+    }
+    return new Uint8Array(bytes).buffer;
+  }
+  function utf16beBuf(text: string, withBom: boolean): ArrayBuffer {
+    const bom = withBom ? [0xfe, 0xff] : [];
+    const bytes: number[] = [...bom];
+    for (const ch of text) {
+      const code = ch.charCodeAt(0);
+      bytes.push((code >> 8) & 0xff, code & 0xff);
+    }
+    return new Uint8Array(bytes).buffer;
+  }
+
+  it("decodes plain UTF-8 (no BOM)", () => {
+    const text = "Date,Amount,Price\n2024-01-01,1.0,40000";
+    const bytes = new TextEncoder().encode(text);
+    const result = decodeCSVBuffer(bytes.buffer);
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-8");
+  });
+
+  it("strips UTF-8 BOM and decodes", () => {
+    const text = "Date,Amount,Price\n2024-01-01,1.0,40000";
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+    const body = new TextEncoder().encode(text);
+    const combined = new Uint8Array(bom.length + body.length);
+    combined.set(bom, 0);
+    combined.set(body, bom.length);
+    const result = decodeCSVBuffer(combined.buffer);
+    expect(result.text).toBe(text); // BOM stripped by TextDecoder
+    expect(result.encoding).toBe("utf-8-bom");
+  });
+
+  it("decodes UTF-16 LE with BOM (Excel Windows default)", () => {
+    const text = "Date,Amount,Price\n2024-01-01,1.0,40000";
+    const result = decodeCSVBuffer(utf16leBuf(text, true));
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-16-le");
+  });
+
+  it("decodes UTF-16 BE with BOM", () => {
+    const text = "Date,Amount,Price\n2024-01-01,1.0,40000";
+    const result = decodeCSVBuffer(utf16beBuf(text, true));
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-16-be");
+  });
+
+  it("detects UTF-16 LE WITHOUT BOM via NUL-byte heuristic", () => {
+    // Long enough that the heuristic sample has >30% NUL bytes at odd indices.
+    const text = "Date,Amount,Price,Type,Wallet,Exchange,Notes\n" +
+                 "2024-01-01T00:00:00Z,1.00000000,40000.00,Buy,Coinbase,Coinbase,note one\n" +
+                 "2024-01-02T00:00:00Z,0.50000000,42000.00,Buy,Kraken,Kraken,note two\n";
+    const result = decodeCSVBuffer(utf16leBuf(text, false));
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-16-le");
+  });
+
+  it("detects UTF-16 BE WITHOUT BOM via NUL-byte heuristic", () => {
+    const text = "Date,Amount,Price,Type,Wallet,Exchange,Notes\n" +
+                 "2024-01-01T00:00:00Z,1.00000000,40000.00,Buy,Coinbase,Coinbase,note one\n" +
+                 "2024-01-02T00:00:00Z,0.50000000,42000.00,Buy,Kraken,Kraken,note two\n";
+    const result = decodeCSVBuffer(utf16beBuf(text, false));
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-16-be");
+  });
+
+  it("returns string without replacement chars for a Windows-Excel UTF-16 LE file", () => {
+    // Regression for the customer-reported bug: reading UTF-16 as UTF-8 produced
+    // U+FFFD replacement characters (⊠) in the data preview.
+    const text = "Date,Amount,Price\n2024-01-01,1.0,40000";
+    const result = decodeCSVBuffer(utf16leBuf(text, true));
+    expect(result.text).not.toContain("�");
+  });
+
+  it("falls through to UTF-8 for empty buffer", () => {
+    const result = decodeCSVBuffer(buf());
+    expect(result.text).toBe("");
+    expect(result.encoding).toBe("utf-8");
+  });
+
+  it("falls through to UTF-8 for a buffer too small to apply the no-BOM heuristic", () => {
+    // 4 bytes is below the 8-byte minimum sample size.
+    const text = "Hi!";
+    const bytes = new TextEncoder().encode(text);
+    const result = decodeCSVBuffer(bytes.buffer);
+    expect(result.text).toBe(text);
+    expect(result.encoding).toBe("utf-8");
   });
 });

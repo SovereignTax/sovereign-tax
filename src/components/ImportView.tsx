@@ -1,6 +1,6 @@
 import { useState, useCallback, DragEvent } from "react";
 import { useAppState } from "../lib/app-state";
-import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash } from "../lib/csv-import";
+import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash, decodeCSVBuffer } from "../lib/csv-import";
 import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 import { saveTextFile } from "../lib/file-save";
@@ -61,17 +61,41 @@ export function ImportView() {
     setImportStatus(null);
   }, [state, defaultType]);
 
+  /** Read a file as ArrayBuffer and decode with BOM-aware encoding detection.
+   *  Replaces reader.readAsText() which defaulted to UTF-8 and mangled
+   *  UTF-16 files (common from Excel on Windows "Save As → CSV").
+   *  See BUG-FIX-PLAN.md B10. */
+  const readFileAsDecodedText = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const buf = ev.target?.result;
+        if (!(buf instanceof ArrayBuffer)) {
+          reject(new Error("Failed to read file as ArrayBuffer"));
+          return;
+        }
+        try {
+          const { text } = decodeCSVBuffer(buf);
+          resolve(text);
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error("Failed to decode CSV"));
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsArrayBuffer(file);
+    });
+
   const handleDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = ev.target?.result as string;
-        processFile(content, file.name);
-      };
-      reader.readAsText(file);
+      readFileAsDecodedText(file)
+        .then((content) => processFile(content, file.name))
+        .catch((err) => {
+          console.error("CSV decode failed:", err);
+          // processFile sets its own status; surface a generic error via the import status path
+        });
     }
   }, [processFile]);
 
@@ -82,12 +106,11 @@ export function ImportView() {
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const content = ev.target?.result as string;
-          processFile(content, file.name);
-        };
-        reader.readAsText(file);
+        readFileAsDecodedText(file)
+          .then((content) => processFile(content, file.name))
+          .catch((err) => {
+            console.error("CSV decode failed:", err);
+          });
       }
     };
     input.click();

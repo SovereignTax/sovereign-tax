@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../lib/app-state";
 import { calculate, daysBetween, isMoreThanOneYear } from "../lib/cost-basis";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
@@ -9,8 +9,26 @@ export function LotMaturityView() {
   const { allTransactions, setSelectedNav, recordedSales } = useAppState();
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
+  // Tracked "now" — previously captured once inside useMemo, which froze the
+  // daysUntilLongTerm countdowns whenever the app was left open across midnight.
+  // We update hourly (granularity matches the day-precision display) and also
+  // immediately when the tab regains visibility. See BUG-FIX-PLAN.md B9.
+  const [now, setNow] = useState<string>(() => new Date().toISOString());
+
+  useEffect(() => {
+    const HOUR = 60 * 60 * 1000;
+    const interval = setInterval(() => setNow(new Date().toISOString()), HOUR);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setNow(new Date().toISOString());
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
   const lotsWithMaturity = useMemo(() => {
-    const now = new Date().toISOString();
     return result.lots
       .filter((l) => l.remainingBTC > 0)
       .map((lot) => {
@@ -25,7 +43,7 @@ export function LotMaturityView() {
         return { ...lot, daysHeld, daysUntilLongTerm, longTermDate, isLongTerm };
       })
       .sort((a, b) => a.daysUntilLongTerm - b.daysUntilLongTerm);
-  }, [result.lots]);
+  }, [result.lots, now]);
 
   const approaching30 = lotsWithMaturity.filter((l) => !l.isLongTerm && l.daysUntilLongTerm <= 30);
   const approaching90 = lotsWithMaturity.filter((l) => !l.isLongTerm && l.daysUntilLongTerm > 30 && l.daysUntilLongTerm <= 90);
