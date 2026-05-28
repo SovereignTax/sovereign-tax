@@ -13,6 +13,74 @@ export interface CSVImportResult {
   headers: string[];
 }
 
+/** Detected encoding label, exported for telemetry/UI surfacing. */
+export type CSVEncoding = "utf-8" | "utf-8-bom" | "utf-16-le" | "utf-16-be";
+
+/** Decode a CSV file's bytes into a string with the correct text encoding.
+ *
+ *  FileReader.readAsText() defaults to UTF-8. Files saved by Excel on Windows
+ *  (Save As → CSV) are commonly UTF-16 LE with a BOM, and reading those as
+ *  UTF-8 turns every other byte into the Unicode replacement character (⊠).
+ *  Customer-reported as "CSV won't import" — see BUG-FIX-PLAN.md B10.
+ *
+ *  Detection order:
+ *    1. UTF-16 LE BOM (0xFF 0xFE)        — Windows-Excel default
+ *    2. UTF-16 BE BOM (0xFE 0xFF)        — older Mac and Java exports
+ *    3. UTF-8 BOM    (0xEF 0xBB 0xBF)   — strip BOM, decode as UTF-8
+ *    4. No-BOM heuristic: if >30% of the first 1KB are NUL bytes, treat as
+ *       UTF-16 LE (the most common no-BOM variant from Windows tooling).
+ *    5. Fall through to UTF-8 (the modern default).
+ *
+ *  Always returns a string with no BOM at position 0 (TextDecoder strips it
+ *  automatically when the encoding is recognized). */
+export function decodeCSVBuffer(buffer: ArrayBuffer): { text: string; encoding: CSVEncoding } {
+  const bytes = new Uint8Array(buffer);
+
+  // 1. UTF-16 LE BOM
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return { text: new TextDecoder("utf-16le").decode(buffer), encoding: "utf-16-le" };
+  }
+  // 2. UTF-16 BE BOM
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return { text: new TextDecoder("utf-16be").decode(buffer), encoding: "utf-16-be" };
+  }
+  // 3. UTF-8 BOM
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xef &&
+    bytes[1] === 0xbb &&
+    bytes[2] === 0xbf
+  ) {
+    // TextDecoder with default ignoreBOM=false strips the BOM for us.
+    return { text: new TextDecoder("utf-8").decode(buffer), encoding: "utf-8-bom" };
+  }
+
+  // 4. No-BOM heuristic for UTF-16. Sample the first 1KB and count NUL bytes.
+  //    Real ASCII CSV has essentially zero NUL bytes; UTF-16 LE puts a NUL
+  //    after every ASCII char (and vice versa for UTF-16 BE).
+  const sampleLen = Math.min(bytes.length, 1024);
+  if (sampleLen >= 8) {
+    let evenNulls = 0; // bytes at odd indices = 0 → likely UTF-16 LE
+    let oddNulls = 0;  // bytes at even indices = 0 → likely UTF-16 BE
+    for (let i = 0; i < sampleLen; i++) {
+      if (bytes[i] === 0x00) {
+        if (i % 2 === 1) evenNulls++;
+        else oddNulls++;
+      }
+    }
+    const pairs = Math.floor(sampleLen / 2);
+    if (evenNulls / pairs > 0.3) {
+      return { text: new TextDecoder("utf-16le").decode(buffer), encoding: "utf-16-le" };
+    }
+    if (oddNulls / pairs > 0.3) {
+      return { text: new TextDecoder("utf-16be").decode(buffer), encoding: "utf-16-be" };
+    }
+  }
+
+  // 5. Fall through to UTF-8.
+  return { text: new TextDecoder("utf-8").decode(buffer), encoding: "utf-8" };
+}
+
 // Column name variations for auto-detection
 const columnVariations: Record<string, string[]> = {
   date: [
