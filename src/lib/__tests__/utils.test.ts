@@ -9,6 +9,8 @@ import {
   findSimilarTransactions,
   transactionNaturalKey,
   hasCrossWalletLots,
+  sanitizeCarryforward,
+  CARRYFORWARD_MAX,
 } from "../utils";
 
 // ═══════════════════════════════════════════════════════
@@ -273,5 +275,69 @@ describe("hasCrossWalletLots", () => {
       { wallet: "ColdCard", exchange: "" },
     ];
     expect(hasCrossWalletLots(lots, "Coinbase")).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// sanitizeCarryforward (Batch B6)
+// ═══════════════════════════════════════════════════════
+
+describe("sanitizeCarryforward", () => {
+  it("returns 0 for empty string", () => {
+    expect(sanitizeCarryforward("")).toBe(0);
+  });
+
+  it("returns 0 for null/undefined-like input", () => {
+    // null and undefined cast to string-empty by the caller; defensive check
+    expect(sanitizeCarryforward(null as unknown as string)).toBe(0);
+    expect(sanitizeCarryforward(undefined as unknown as string)).toBe(0);
+  });
+
+  it("returns 0 for non-numeric input (would otherwise be NaN)", () => {
+    expect(sanitizeCarryforward("abc")).toBe(0);
+    expect(sanitizeCarryforward("nan")).toBe(0);
+    expect(sanitizeCarryforward("$%^")).toBe(0);
+  });
+
+  it("returns 0 for explicit Infinity / -Infinity", () => {
+    expect(sanitizeCarryforward("Infinity")).toBe(0);
+    expect(sanitizeCarryforward("-Infinity")).toBe(0);
+  });
+
+  it("normalizes positive input to a negative loss value", () => {
+    expect(sanitizeCarryforward("5000")).toBe(-5000);
+    expect(sanitizeCarryforward("0")).toBe(-0);
+  });
+
+  it("normalizes negative input to a negative loss value (Math.abs)", () => {
+    expect(sanitizeCarryforward("-5000")).toBe(-5000);
+  });
+
+  it("accepts decimal inputs", () => {
+    expect(sanitizeCarryforward("1234.56")).toBeCloseTo(-1234.56, 2);
+  });
+
+  it("clamps scientific notation overflow to CARRYFORWARD_MAX", () => {
+    // 1e10 = 10 billion, way above realistic. Clamped to -100M.
+    expect(sanitizeCarryforward("1e10")).toBe(-CARRYFORWARD_MAX);
+    expect(sanitizeCarryforward("1e100")).toBe(-CARRYFORWARD_MAX);
+  });
+
+  it("clamps any value above CARRYFORWARD_MAX", () => {
+    expect(sanitizeCarryforward(String(CARRYFORWARD_MAX + 1))).toBe(-CARRYFORWARD_MAX);
+  });
+
+  it("preserves values at or below CARRYFORWARD_MAX", () => {
+    expect(sanitizeCarryforward(String(CARRYFORWARD_MAX))).toBe(-CARRYFORWARD_MAX);
+    expect(sanitizeCarryforward("99999999")).toBe(-99999999);
+  });
+
+  it("never returns NaN regardless of input", () => {
+    const inputs = ["", "abc", "Infinity", "-Infinity", "NaN", "1e999", "null", "{}"];
+    for (const input of inputs) {
+      const result = sanitizeCarryforward(input);
+      expect(Number.isNaN(result)).toBe(false);
+      expect(Number.isFinite(result)).toBe(true);
+    }
   });
 });
