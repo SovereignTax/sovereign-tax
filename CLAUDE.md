@@ -1,136 +1,114 @@
-# Sovereign Tax — Project Guide
+# Sovereign Tax — Developer Guide
+
+> This is the in-repo developer guide. Maintainer-only operational runbooks
+> (release/signing/deployment, infrastructure, payment configuration) are kept
+> out of this public, source-available repository.
 
 ## What This Is
 Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + TypeScript 5.9). All data stays local, encrypted at rest with AES-256-GCM. No accounts, no cloud, no telemetry. One-time purchase, not a subscription.
 
-## Repository
-- **Source code:** `sovereign-tax/` (cloned from github.com/sovereigntax/sovereign-tax)
-- **Website/deployment:** `cloudflare-package/` (static site on Cloudflare Pages at sovereigntax.io)
-- **Builds archive:** `builds/` (versioned .dmg and .exe installers)
-- **Pre-launch backup:** `cloudflare-package-PRELAUNCH-BACKUP/`
-
-**IMPORTANT:** `sovereign-tax-pro` (jhimm2300/sovereign-tax-pro) is a SEPARATE multi-crypto project. Do NOT modify those files.
+**IMPORTANT:** `sovereign-tax-pro` is a SEPARATE multi-crypto project. Do NOT modify those files.
 
 ## Tech Stack
 - **Frontend:** React 19, TypeScript 5.9, Tailwind CSS v4, Vite 7
 - **Desktop:** Tauri v2 (Rust backend)
 - **Encryption:** AES-256-GCM, PBKDF2 key derivation (600,000 iterations)
-- **Payments:** BTCPay Server (Bitcoin), Gumroad (card)
-- **Hosting:** Cloudflare Pages
+- **Hosting:** Cloudflare Pages (marketing site + invoice-gated downloads)
 
-## Source Architecture (`sovereign-tax/src/`)
+## Source Architecture (`src/`)
 
-### Components (20 views)
+### Components (20 active views)
 | File | Purpose |
 |------|---------|
-| `App.tsx` | Root — TOS → PIN setup → Lock screen → Main app |
-| `LockScreen.tsx` | PIN entry for returning users |
-| `SetupPIN.tsx` | First-time PIN creation |
+| `App.tsx` | Root — TOS → PIN setup → Lock screen → Main app; Help Guide bar |
+| `LockScreen.tsx` | PIN entry for returning users (keyboard + click input) |
+| `SetupPIN.tsx` | First-time PIN creation (keyboard + click input) |
 | `TermsOfService.tsx` | TOS acceptance gate |
-| `Sidebar.tsx` | Navigation sidebar |
+| `Sidebar.tsx` | Navigation — Data, Portfolio, Tax (incl. Review), Insights |
 | `ImportView.tsx` | CSV import with auto-detection (60+ column variations) |
-| `TransactionsView.tsx` | Transaction list with edit/delete |
-| `HoldingsView.tsx` | Current BTC holdings by lot |
+| `TransactionsView.tsx` | Transaction list, edit/delete, EditLots (Specific ID), Optimize All |
+| `HoldingsView.tsx` | Current BTC holdings by lot (FIFO, wallet filter) |
 | `TaxReportView.tsx` | Form 8949 generation (PDF, CSV, TXF) |
 | `SimulationView.tsx` | "What-if" sale simulator |
-| `RecordSaleView.tsx` | Record actual sales |
 | `AddTransactionView.tsx` | Manual transaction entry |
-| `ComparisonView.tsx` | Side-by-side method comparison |
+| `ComparisonView.tsx` | FIFO vs Optimal Specific ID comparison |
 | `IncomeView.tsx` | Mining/rewards income (Schedule 1) |
 | `AuditLogView.tsx` | Change history log |
 | `TaxLossHarvestingView.tsx` | Tax-loss harvesting dashboard |
 | `MultiYearDashboardView.tsx` | Multi-year analysis |
 | `LotMaturityView.tsx` | When lots become long-term |
+| `ReviewView.tsx` | Guided tax-prep checklist (unassigned transfers, mismatches, readiness) |
 | `ReconciliationView.tsx` | Match transfers between wallets |
-| `SettingsView.tsx` | App settings (method, year, theme, backup/restore) |
+| `SettingsView.tsx` | Settings (method, year, theme, backup/restore, carryforward) |
 
-### Lib (15 modules)
+`RecordSaleView.tsx` is legacy — removed from navigation/routing, file retained.
+
+### Lib (16 modules)
 | File | Purpose |
 |------|---------|
-| `app-state.tsx` | React context for global state (AppStateProvider) |
-| `types.ts` | Enums: AccountingMethod (FIFO/LIFO/HIFO/SpecificID), TransactionType, IncomeType |
-| `models.ts` | Core interfaces: Transaction, Lot, SaleRecord, ColumnMapping, Preferences |
-| `cost-basis.ts` | Cost basis calculation engine (all 4 methods) |
+| `app-state.tsx` | React context for global state; `isMaterialChange()`; edit invalidation |
+| `types.ts` | Enums: AccountingMethod (FIFO / SpecificID), TransactionType, IncomeType |
+| `models.ts` | Core interfaces: Transaction, Lot, SaleRecord, LotSelection, Preferences |
+| `cost-basis.ts` | Cost basis engine (FIFO + Specific ID), batchOptimizeSpecificId |
 | `csv-import.ts` | CSV parser with auto-detection for all major exchanges |
-| `crypto.ts` | AES-256-GCM encryption/decryption |
-| `persistence.ts` | localStorage with encryption layer; encrypted keys vs plaintext keys |
+| `crypto.ts` | AES-256-GCM encryption/decryption (chunked encoding for large data) |
+| `persistence.ts` | localStorage with encryption layer; encrypted vs plaintext keys |
 | `export.ts` | Form 8949 CSV/TXF export |
 | `pdf-export.ts` | Form 8949 PDF generation (jsPDF) |
 | `price-service.ts` | CoinGecko price fetching (optional, can run offline) |
 | `audit.ts` | Audit log entries |
-| `backup.ts` | Encrypted backup/restore |
-| `carryforward.ts` | Year-to-year lot carryforward |
-| `reconciliation.ts` | Transfer matching logic |
+| `backup.ts` | Encrypted backup/restore, in-app backup management |
+| `carryforward.ts` | Capital loss carryforward with IRS ST/LT split (Schedule D worksheet) |
+| `review-helpers.ts` | Shared warning-aggregation utilities for the review/report views |
+| `reconciliation.ts` | Transfer matching logic, source-wallet suggestions |
 | `utils.ts` | Shared utilities |
 
+### Theming
+- `src/index.css` — Original flat light/dark theme
+- `src/index-glass.css` — Glass aesthetic (translucent cards, backdrop blur)
+- Switch the import in `src/main.tsx`. Users toggle System/Light/Dark in Settings (default Dark).
+
 ### Tauri Config (`src-tauri/`)
-- `tauri.conf.json` — App config: identifier `com.sovereigntax.app`, min 900x600, CSP locked down
-- `Cargo.toml` — Rust deps: tauri 2.10, plugins for fs/dialog/store/opener
-- Builds to macOS universal binary (.dmg) and Windows (.exe)
+- `tauri.conf.json` — identifier `com.sovereigntax.app`, min 900×600, locked-down CSP
+- macOS builds use the `universal-apple-darwin` target (ARM + Intel).
+
+### Build Config
+- `vite.config.ts` injects `__APP_VERSION__` from `package.json`. Never hardcode version strings in components.
 
 ## Key Data Flow
-1. **First launch:** TOS → PIN setup → derives encryption key via PBKDF2 → stores encrypted salt
-2. **Returning:** PIN entry → derives key → decrypts localStorage data → unlocks app
-3. **Data storage:** localStorage with encrypted/plaintext split. Sensitive keys (transactions, sales, mappings, import history, audit log) are AES-256-GCM encrypted. Preferences and price cache are plaintext.
-4. **Import:** CSV file → auto-detect columns (60+ variations) → parse → deduplicate → store
-5. **Tax calc:** Transactions + method → cost-basis engine → lots + sale records → Form 8949
+1. **First launch:** TOS → PIN setup → derive key via PBKDF2 → store encrypted salt
+2. **Returning:** PIN entry → derive key → decrypt localStorage → unlock
+3. **Storage:** localStorage, encrypted/plaintext split. Sensitive keys (transactions, sales, mappings, import history, audit log) are AES-256-GCM encrypted; preferences and price cache are plaintext. All saves are async and must be awaited.
+4. **Import:** CSV → auto-detect columns → parse → deduplicate → store
+5. **Tax calc:** transactions + method → cost-basis engine → lots + sale records → Form 8949
 
-## Current Version
-**v1.1.0** (released 2026-02-14) — Edit/delete transactions, duplicate detection, fee column visibility.
+## CSV Import
+- **Required:** Date, Amount, and (Price OR Total)
+- **Optional:** Type, Fee, Wallet, Exchange, Notes
+- Bitcoin-only (non-BTC rows skipped); dual-column (Received/Sent) supported; file- and transaction-level dedup.
 
-## Website (`cloudflare-package/`)
-- `index.html` — Landing page (glass aesthetic, privacy-first messaging, pricing, screenshots)
-- `download.html` — Invoice-gated download page (BTCPay verification)
-- `support.html` — Troubleshooting and CSV import guide
-- `privacy-policy.html` / `terms-of-service.html` — Legal pages
-- `downloads/` — Current .dmg and .exe installers
-- `screenshots_original/` — 19 app screenshots for the website
-- `version.json` — Version metadata for update checks
-
-## CRITICAL — Live Revenue & Update Paths (DO NOT BREAK)
-
-### Payment Flows
-1. **Gumroad (card $59.99):** `https://sovereigntax.gumroad.com/l/epddkw` → Gumroad overlay checkout on `index.html` → Gumroad delivers download link
-2. **BTCPay (BTC $49.99):** `https://pay.sovereigntax.io/apps/21zpxF4wbp4FWCkvJyt3PiNWbdSL/pos` → after payment redirects to `download.html?invoiceId=XXX`
-3. **Download page:** `download.html` verifies invoice via URL param, BTCPay referrer, or localStorage stored invoices → grants access to `downloads/SovereignTax-macOS.dmg` and `downloads/SovereignTax-Windows.exe`
-4. **Returning customers:** invoice IDs stored in localStorage key `st_invoices`
-
-### App Update Check
-- `SettingsView.tsx` line 7: fetches `https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json`
-- Compares semver against current app version
-- Shows download link to `sovereigntax.io` if update available
-
-### Sacred Paths (never rename/move)
-- `cloudflare-package/downloads/SovereignTax-macOS.dmg`
-- `cloudflare-package/downloads/SovereignTax-Windows.exe`
-- `sovereign-tax/version.json` (GitHub raw — update check source)
-- `cloudflare-package/download.html` (invoice gate logic)
-- `cloudflare-package/index.html` (Gumroad + BTCPay purchase buttons)
-
-### Binary Policy
-- `.dmg` and `.exe` files are deployed to Cloudflare but NEVER committed to git
-- Use GitHub Releases for versioned binary archival
-- `builds/` directory is local-only backup
-
-## Pricing (Beta)
-- Bitcoin: $49.99 (BTCPay Server)
-- Card: $59.99 (Gumroad)
-- Normal price: $100 BTC / $120 card
-
-## Build Commands
+## Build & Test
 ```bash
 # Dev
-cd sovereign-tax && npm run dev        # Vite dev server on :1420
-cd sovereign-tax && npm run tauri dev   # Full Tauri dev with hot reload
+npm run dev          # Vite dev server on :1420
+npm run tauri dev    # Full Tauri dev with hot reload
 
-# Production build
-cd sovereign-tax && npm run tauri build # Builds .dmg / .exe
+# Test (must pass before commit/release)
+npm test             # vitest run — full suite
+
+# Production build (macOS — universal binary for Intel + ARM)
+npm run tauri build -- --target universal-apple-darwin
+# Windows/Linux installers are produced via CI.
 ```
 
+## Version Bump
+Update `package.json`, `src-tauri/tauri.conf.json`, and `version.json` together. The in-app update check reads `version.json` from the repo's raw GitHub URL, so it must stay in sync with the app version.
+
 ## IRS Compliance
-- Per-wallet cost basis tracking (2025+ rules)
-- 4 accounting methods: FIFO, LIFO, HIFO, Specific ID
-- Form 8949 export: PDF, CSV, TurboTax TXF
-- Short-term vs long-term capital gains
-- Mining/rewards classified as ordinary income (Schedule 1)
+- Per-wallet cost basis tracking (2025+ rules, Treasury Reg. §1.1012-1(j))
+- Two IRS-permitted accounting methods: **FIFO** and **Specific ID** (LIFO/HIFO are not permitted and were removed)
+- Form 8949 export: PDF, CSV, TurboTax TXF; Form 8283 CSV for charitable donations
+- Short-term vs long-term capital gains (1-year holding period, IRC §1222)
+- Mining/rewards as ordinary income (Schedule 1)
 - Mixed-term sale splitting
+- Capital loss carryforward ($3,000 annual limit, ST/LT split per Schedule D worksheet)
