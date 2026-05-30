@@ -586,3 +586,26 @@ describe("D2 — Form 8949 fee apportioned by BTC weight", () => {
     expect(feeOf(small)).toBeCloseTo(10, 2);
   });
 });
+
+describe("D3+D7 — donation summary matches raw donations by date AND amount", () => {
+  it("attributes exchange/notes to the correct same-date donation by amount, consuming the pool once", () => {
+    const rawA: Transaction = { id: "raw-a", date: "2024-06-15T12:00:00.000Z", transactionType: TransactionType.Donation, amountBTC: 0.5, pricePerBTC: 60000, totalUSD: 30000, exchange: "Kraken", notes: "noteA" };
+    const rawB: Transaction = { id: "raw-b", date: "2024-06-15T12:00:00.000Z", transactionType: TransactionType.Donation, amountBTC: 0.3, pricePerBTC: 60000, totalUSD: 18000, exchange: "River", notes: "noteB" };
+    // Both sales have FMV present; raw txns listed A(0.5) before B(0.3) so date-only matching would swap them
+    const sale03 = makeDonationRecord({ id: "s03", amountSold: 0.3, lotDetails: [makeLotDetail({ amountBTC: 0.3, exchange: "Unknown" })] });
+    const sale05 = makeDonationRecord({ id: "s05", amountSold: 0.5, lotDetails: [makeLotDetail({ amountBTC: 0.5, exchange: "Unknown" })] });
+    const summary = buildDonationSummary([sale03, sale05], [rawA, rawB], 2024);
+    expect(summary[0].exchange).toBe("River");
+    expect(summary[0].notes).toBe("noteB");
+    expect(summary[1].exchange).toBe("Kraken");
+    expect(summary[1].notes).toBe("noteA");
+  });
+
+  it("matches a legacy donation whose amount differs by sub-satoshi rounding (D3 epsilon)", () => {
+    const sale: SaleRecord = { ...makeDonationRecord(), amountSold: 0.3, donationFmvPerBTC: undefined, donationFmvTotal: undefined };
+    const raw: Transaction = { id: "raw-1", date: sale.saleDate, transactionType: TransactionType.Donation, amountBTC: 0.3 + 8e-9, pricePerBTC: 65000, totalUSD: 19500, exchange: "Coinbase", notes: "rounded" };
+    const summary = buildDonationSummary([sale], [raw], 2024);
+    expect(summary[0].fmvPerBTC).toBe(65000);
+    expect(summary[0].notes).toBe("rounded");
+  });
+});

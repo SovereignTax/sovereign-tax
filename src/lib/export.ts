@@ -358,27 +358,22 @@ export function buildDonationSummary(
     let exchange = sale.lotDetails[0]?.exchange ?? "Unknown";
     let notes = "";
 
-    // Fallback: match to raw transaction for legacy data or if FMV not on SaleRecord
-    if (!fmvPerBTC) {
-      const rawMatch = rawDonations.find(
-        (t) => !usedIds.has(t.id) && t.date === sale.saleDate && Math.abs(t.amountBTC - sale.amountSold) < 0.000000005
-      );
-      if (rawMatch) {
-        usedIds.add(rawMatch.id);
+    // Consume the matching raw donation (date + amount, ~1-satoshi tolerance) from the
+    // pool exactly once — whether or not we need its FMV. This prevents an FMV-present
+    // record from leaving its raw donation available for a later legacy record to
+    // mis-match (D7), and ensures exchange/notes come from the same-amount transaction
+    // rather than whichever donation happened to share the date. The 1e-8 epsilon (D3)
+    // tolerates sub-satoshi rounding between the recorded amount and the raw amount.
+    const rawMatch = rawDonations.find(
+      (t) => !usedIds.has(t.id) && t.date === sale.saleDate && Math.abs(t.amountBTC - sale.amountSold) < 1e-8
+    );
+    if (rawMatch) {
+      usedIds.add(rawMatch.id);
+      exchange = rawMatch.exchange;
+      notes = rawMatch.notes;
+      if (!fmvPerBTC) {
         fmvPerBTC = rawMatch.pricePerBTC;
         totalFMV = rawMatch.totalUSD || sale.amountSold * fmvPerBTC;
-        exchange = rawMatch.exchange;
-        notes = rawMatch.notes;
-      }
-    } else {
-      // Still try to get exchange/notes from raw transaction (match by date only for flexibility)
-      const rawMatch = rawDonations.find(
-        (t) => !usedIds.has(t.id) && t.date === sale.saleDate
-      );
-      if (rawMatch) {
-        usedIds.add(rawMatch.id);
-        exchange = rawMatch.exchange;
-        notes = rawMatch.notes;
       }
     }
 
