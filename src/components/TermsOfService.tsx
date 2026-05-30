@@ -37,9 +37,9 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           className="flex-1 overflow-y-auto card text-sm leading-relaxed mb-4"
           style={{ maxHeight: "55vh" }}
         >
-          <p className="text-xs text-gray-400 mb-4">Effective Date: February 10, 2026</p>
+          <p className="text-xs text-gray-400 mb-4">Effective Date: May 29, 2026</p>
 
-          <p className="mb-3">These Terms of Service ("Terms") govern your use of the Sovereign Tax desktop application ("Software," "App," or "Product") developed and distributed by Sovereign Tax ("we," "us," or "our"). By purchasing, downloading, installing, or using the Software, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not accept these Terms, you will not install, access, or otherwise use the Software.</p>
+          <p className="mb-3">These Terms of Service ("Terms") govern your use of the Sovereign Tax desktop application ("Software," "App," or "Product") developed and distributed by Sovereign Tax Solutions LLC ("Sovereign Tax," "we," "us," or "our"). By purchasing, downloading, installing, or using the Software, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not accept these Terms, you will not install, access, or otherwise use the Software.</p>
 
           <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 mb-4">
             <p className="font-semibold text-sm">PLEASE READ THESE TERMS CAREFULLY. They contain an agreement to arbitrate disputes, a class action waiver, a limitation on the time period in which claims may be brought, and other important provisions affecting your legal rights.</p>
@@ -61,7 +61,7 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           </ul>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">3. Nature of the Software</h3>
-          <p className="mb-2">Sovereign Tax is a <strong>local, offline desktop application</strong> that runs entirely on your device. The Software does not collect, transmit, or store any of your data on external servers. It does not require an internet connection to function (except for optional live BTC price fetching). It does not create user accounts or require personal information to operate. It encrypts all stored data locally using AES-256-GCM encryption.</p>
+          <p className="mb-2">Sovereign Tax is a <strong>local, offline desktop application</strong> that runs entirely on your device. The Software does not collect, transmit, or store any of your data on external servers. It does not require an internet connection to function (except for optional live BTC price fetching and an optional check for software updates). It does not create user accounts or require personal information to operate. It encrypts all stored data locally using AES-256-GCM encryption.</p>
           <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-4 my-3">
             <p className="font-semibold text-sm">Your data is yours alone. We have no access to your financial data, transaction history, tax calculations, or any other information you enter into the Software. We cannot recover lost data or PINs because we do not have them.</p>
           </div>
@@ -102,7 +102,7 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           <p className="mb-2 font-semibold uppercase text-xs">SOVEREIGN TAX EXPRESSLY DISCLAIMS ANY AND ALL LIABILITY FOR DAMAGES OF ANY KIND ARISING FROM ANY SECURITY BREACH, UNAUTHORIZED ACCESS, OR DATA COMPROMISE RELATING TO YOUR USE OF THE SOFTWARE OR THE DEVICE ON WHICH IT IS INSTALLED.</p>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">8. Payment and Refunds</h3>
-          <p className="mb-2">Sovereign Tax is sold as a <strong>one-time purchase</strong> through our authorized payment processor. Payments made are final and non-refundable unless otherwise determined by Sovereign Tax at its sole discretion. Payment processing services are subject to the processor's terms and conditions. Refunds are not available once you have used the Software to generate, export, or download any tax reports, Form 8949 documents, CSV files, or PDF files.</p>
+          <p className="mb-2">Sovereign Tax is sold as a <strong>one-time purchase</strong> through our authorized payment processors (currently <strong>Strike</strong> for Bitcoin payments and <strong>Gumroad</strong> for card payments). Payment processing services are subject to the applicable processor's terms and conditions. You may request a refund within <strong>30 days</strong> of purchase by contacting us (see Section 28), <strong>provided you have not already used the Software to generate, export, or download any tax reports, Form 8949 documents, CSV files, PDF files, or TXF files</strong>. Because the Software delivers its core value the moment such tax outputs are produced, once you have generated or exported any of these outputs your purchase is final and non-refundable. After 30 days, payments are likewise final and non-refundable unless otherwise determined by Sovereign Tax at its sole discretion.</p>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">9. Updates</h3>
           <p className="mb-2">We may release updates from time to time that include bug fixes, new features, or compatibility improvements. Updates are provided at our discretion and are not guaranteed. When updates are available, you will need to download and install the new version manually.</p>
@@ -124,7 +124,7 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           <p className="mb-2">No employee, agent, or affiliate of any competing provider of cryptocurrency tax or asset management software is permitted to access, use, or evaluate the Software without the express written permission of Sovereign Tax.</p>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">13. Third-Party Services</h3>
-          <p className="mb-2">The Software may optionally connect to third-party APIs (such as CoinGecko) solely to fetch current Bitcoin price data. Your access to and use of any third-party service is subject to that service's own terms. No personal or financial data is transmitted to these services. YOU EXPRESSLY RELIEVE SOVEREIGN TAX FROM ANY AND ALL LIABILITY THAT MAY ARISE FROM YOUR USE OF ANY THIRD-PARTY SERVICES.</p>
+          <p className="mb-2">The Software may optionally connect to third-party APIs (such as CoinGecko) solely to fetch current Bitcoin price data, and may optionally check for new versions by requesting a public version file from our code repository (GitHub). Your access to and use of any third-party service is subject to that service's own terms. No personal or financial data is transmitted to these services. YOU EXPRESSLY RELIEVE SOVEREIGN TAX FROM ANY AND ALL LIABILITY THAT MAY ARISE FROM YOUR USE OF ANY THIRD-PARTY SERVICES.</p>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">14. Disclaimer of Warranties</h3>
           <p className="mb-2 font-semibold uppercase text-xs">YOUR USE OF THE SOFTWARE IS AT YOUR SOLE RISK. THE SOFTWARE IS PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS. SOVEREIGN TAX EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, ACCURACY, AND NON-INFRINGEMENT.</p>
@@ -144,7 +144,7 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           <p className="mb-2"><strong>Agreement to Arbitrate:</strong> Any disputes or claims between you and Sovereign Tax will be resolved exclusively through <strong>final and binding arbitration</strong>, rather than in court, except for individual claims in small claims court. You and Sovereign Tax are each waiving the right to a trial by jury.</p>
           <p className="mb-2"><strong>Class Action Waiver:</strong> YOU AND SOVEREIGN TAX AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER <strong>ONLY IN YOUR INDIVIDUAL CAPACITY</strong>, AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY CLASS, CONSOLIDATED, OR REPRESENTATIVE ACTION.</p>
           <p className="mb-2"><strong>Arbitration Procedures:</strong> Arbitration will be conducted in accordance with the American Arbitration Association's rules and procedures, including Consumer Arbitration Rules.</p>
-          <p className="mb-2"><strong>Pre-Arbitration Dispute Resolution:</strong> Before initiating arbitration, you must first send a written Notice of Dispute. If we do not resolve the claim within sixty (60) calendar days, you or Sovereign Tax may commence arbitration.</p>
+          <p className="mb-2"><strong>Pre-Arbitration Dispute Resolution:</strong> Before initiating arbitration, you must first send a written Notice of Dispute to the contact address provided in Section 28. If we do not resolve the claim within sixty (60) calendar days, you or Sovereign Tax may commence arbitration.</p>
 
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">18. Time Limitation on Claims</h3>
           <p className="mb-2"><strong>Any claim or cause of action arising out of or related to use of the Software or these Terms must be filed within one (1) year after such claim arose or be forever barred.</strong></p>
@@ -176,8 +176,11 @@ export function TermsOfService({ onAccepted }: { onAccepted: () => void }) {
           <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">27. Entire Agreement</h3>
           <p className="mb-2">These Terms constitute the entire agreement between you and Sovereign Tax regarding the Software and supersede all prior agreements, understandings, or communications, whether written or oral.</p>
 
+          <h3 className="font-semibold text-base mt-5 mb-2 text-orange-600">28. Contact Information</h3>
+          <p className="mb-2">For questions about these Terms, refund requests, or to send a Notice of Dispute, contact us at <strong>support@sovereigntax.io</strong>. Sovereign Tax Solutions LLC is organized under the laws of the State of Wyoming, United States.</p>
+
           <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400">
-            © 2026 Sovereign Tax. All rights reserved.
+            © 2026 Sovereign Tax Solutions LLC. All rights reserved.
           </div>
         </div>
 
