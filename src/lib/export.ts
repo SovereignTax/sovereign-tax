@@ -68,11 +68,15 @@ function sanitizeUserString(value: string | undefined | null): string {
  *  CSV-safe: wraps in quotes and escapes internal quotes so commas/quotes in exchange names don't break CSV parsing.
  *  Wallet name is sanitized to strip line endings (would break CSV) — formula triggers can't reach cell-start
  *  here because the cell always begins with the BTC digit string. */
+function propertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
+  const walletName = sanitizeUserString(detail.wallet || detail.exchange);
+  return walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
+}
+
 function formatPropertyDescription(amountBTC: number, detail: { wallet?: string; exchange: string }): string {
-  const walletNameRaw = detail.wallet || detail.exchange;
-  const walletName = sanitizeUserString(walletNameRaw);
-  const desc = walletName ? `${formatBTC(amountBTC)} BTC (${walletName})` : `${formatBTC(amountBTC)} BTC`;
-  return `"${desc.replace(/"/g, '""')}"`;
+  // CSV-quoted/escaped variant for comma-delimited exports. Line-based formats
+  // (TXF) must use propertyDescription() instead — see D6.
+  return `"${propertyDescription(amountBTC, detail).replace(/"/g, '""')}"`;
 }
 
 /** Export Form 8949 compatible CSV — splits lot details by term, not sales */
@@ -282,7 +286,7 @@ export function exportTurboTaxTXF(sales: SaleRecord[], year: number, walletMisma
       lines.push(`N${typeCode}`);
       lines.push(`C1`);
       lines.push(`L1`);
-      lines.push(`P${formatPropertyDescription(detail.amountBTC, detail)}`);
+      lines.push(`P${propertyDescription(detail.amountBTC, detail)}`);
       lines.push(`D${formatDate(detail.purchaseDate)}`);
       lines.push(`D${formatDate(sale.saleDate)}`);
       lines.push(`$${formatCSVDecimal(detail.totalCost)}`);

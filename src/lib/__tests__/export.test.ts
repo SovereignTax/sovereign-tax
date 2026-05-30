@@ -609,3 +609,12 @@ describe("D3+D7 — donation summary matches raw donations by date AND amount", 
     expect(summary[0].notes).toBe("rounded");
   });
 });
+
+describe("D6 — TXF property description is not CSV-quoted", () => {
+  it("emits the P field without surrounding double quotes", () => {
+    const txf = exportTurboTaxTXF([makeSaleRecord()], 2024);
+    const pLine = txf.split("\n").find((l) => l.startsWith("P"))!;
+    expect(pLine).toBe("P0.50000000 BTC (Coinbase)");
+    expect(pLine).not.toContain('"');
+  });
+});
