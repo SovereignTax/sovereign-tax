@@ -1714,3 +1714,43 @@ describe("D1 — same-date acquisition/disposition ordering", () => {
     expect(result.warnings.find((w) => /no lots available/i.test(w.message))).toBeUndefined();
   });
 });
+
+describe("D4 — legacy lot match handles fee-bearing Buys", () => {
+  it("matches a legacy Specific ID election to a fee-bearing lot via fee-inclusive basis", () => {
+    // Production-style fee-bearing buy: pricePerBTC is the RAW price, totalUSD includes the fee
+    const b = createTransaction({
+      date: new Date("2024-01-01T12:00:00").toISOString(),
+      transactionType: TransactionType.Buy,
+      amountBTC: 1,
+      pricePerBTC: 50000, // raw price (fee-exclusive)
+      totalUSD: 50500, // includes $500 fee
+      fee: 500,
+      exchange: "Coinbase",
+      wallet: "Coinbase",
+      notes: "",
+    });
+    const s = sell("2024-06-01", 1, 70000);
+
+    // Legacy SaleRecord (no lotId, no sourceTransactionId) — fee-INCLUSIVE basis as processSale records it
+    const legacy: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s.date,
+      amountSold: 1,
+      salePricePerBTC: 70000,
+      totalProceeds: 70000,
+      costBasis: 50500,
+      gainLoss: 19500,
+      lotDetails: [{ id: crypto.randomUUID(), purchaseDate: b.date, amountBTC: 1, costBasisPerBTC: 50500, totalCost: 50500, daysHeld: 152, exchange: "Coinbase", isLongTerm: false }],
+      holdingPeriodDays: 152,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+    };
+
+    const result = calculate([b, s], AccountingMethod.FIFO, [legacy]);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.sales[0].costBasis).toBeCloseTo(50500, 2);
+    expect(result.warnings.find((w) => /could not be applied/i.test(w.message))).toBeUndefined();
+  });
+});

@@ -370,7 +370,10 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
         (lot) =>
           !usedLotIds.has(lot.id) &&
           lot.purchaseDate === d.purchaseDate &&
-          Math.abs(lot.pricePerBTC - d.costBasisPerBTC) < 0.005 &&
+          // Compare fee-INCLUSIVE basis (totalCost/amountBTC) — matches how
+          // processSale records costBasisPerBTC. Using raw pricePerBTC here
+          // failed to match legacy elections against fee-bearing Buys.
+          Math.abs(lot.totalCost / lot.amountBTC - d.costBasisPerBTC) < 0.005 &&
           lot.exchange === d.exchange
       );
       if (match) {
