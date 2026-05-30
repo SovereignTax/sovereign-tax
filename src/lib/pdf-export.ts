@@ -232,7 +232,7 @@ function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][]
       const gainLoss = proceeds - detail.totalCost;
       let lotFee = 0;
       if (feeShare > 0) {
-        lotFee = di < termDetails.length - 1 ? Math.round((feeShare / termDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        lotFee = di < termDetails.length - 1 ? Math.round((feeShare * (detail.amountBTC / termBTC)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
         feeRemaining -= lotFee;
       }
       rows.push([

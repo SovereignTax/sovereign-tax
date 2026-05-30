@@ -126,7 +126,7 @@ export function exportForm8949CSV(
       // Assign fee per lot; last lot gets remainder to avoid rounding loss
       let lotFee = 0;
       if (feeShare > 0) {
-        lotFee = di < stDetails.length - 1 ? Math.round((feeShare / stDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        lotFee = di < stDetails.length - 1 ? Math.round((feeShare * (detail.amountBTC / stBTCTotal)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
         feeRemaining -= lotFee;
       }
       const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
@@ -161,7 +161,7 @@ export function exportForm8949CSV(
       const gainLoss = proceeds - detail.totalCost;
       let lotFee = 0;
       if (feeShare > 0) {
-        lotFee = di < ltDetails.length - 1 ? Math.round((feeShare / ltDetails.length) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        lotFee = di < ltDetails.length - 1 ? Math.round((feeShare * (detail.amountBTC / ltBTCTotal)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
         feeRemaining -= lotFee;
       }
       const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";

@@ -558,3 +558,31 @@ describe("CSV formula injection defense", () => {
     expect(pLine).not.toMatch(/\(=cmd/);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// BATCH D — export refinements
+// ═══════════════════════════════════════════════════════
+
+describe("D2 — Form 8949 fee apportioned by BTC weight", () => {
+  it("splits the sale fee across same-term lots proportional to BTC, not equally", () => {
+    const sale = makeSaleRecord({
+      amountSold: 1.0,
+      salePricePerBTC: 60000,
+      totalProceeds: 60000,
+      fee: 100,
+      lotDetails: [
+        makeLotDetail({ lotId: "big", amountBTC: 0.9, totalCost: 36000, isLongTerm: false }),
+        makeLotDetail({ lotId: "small", amountBTC: 0.1, totalCost: 4000, isLongTerm: false }),
+      ],
+    });
+    const csv = exportForm8949CSV([sale], 2024, AccountingMethod.FIFO);
+    const dataLines = csv.split("\n").filter((l) => /BTC \(/.test(l) && !/TOTAL/.test(l));
+    expect(dataLines).toHaveLength(2);
+    const feeOf = (line: string) => parseFloat(line.split(",")[5]);
+    const big = dataLines.find((l) => l.includes("0.90000000 BTC"))!;
+    const small = dataLines.find((l) => l.includes("0.10000000 BTC"))!;
+    // BTC-weighted: 0.9 → $90, 0.1 → $10 (not 50/50). Total fee unchanged.
+    expect(feeOf(big)).toBeCloseTo(90, 2);
+    expect(feeOf(small)).toBeCloseTo(10, 2);
+  });
+});
