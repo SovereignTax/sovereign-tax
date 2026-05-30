@@ -41,3 +41,17 @@ export function createAuditEntry(action: AuditAction, details: string): AuditEnt
     details,
   };
 }
+
+/** Maximum audit-log entries retained. Older entries are rotated out. */
+export const AUDIT_LOG_MAX = 5000;
+
+/**
+ * Cap the audit log to the most recent `max` entries, dropping the oldest.
+ * Returns the same array reference when already within the cap (no copy).
+ * Centralizes rotation so every append/persist site stays bounded — the
+ * high-frequency AppUnlocked entry previously bypassed an inline cap and
+ * could grow the log without limit.
+ */
+export function capAuditLog(entries: AuditEntry[], max: number = AUDIT_LOG_MAX): AuditEntry[] {
+  return entries.length > max ? entries.slice(entries.length - max) : entries;
+}

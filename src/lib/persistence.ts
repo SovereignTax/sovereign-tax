@@ -1,7 +1,7 @@
 import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences } from "./models";
 import { AccountingMethod } from "./types";
 import { encryptData, decryptData, isEncryptedData } from "./crypto";
-import { AuditEntry } from "./audit";
+import { AuditEntry, capAuditLog } from "./audit";
 import {
   readTextFile,
   writeTextFile,
@@ -483,15 +483,16 @@ export async function loadAuditLogAsync(): Promise<AuditEntry[]> {
 
 /** Save audit log — awaits encryption to ensure data is written before returning */
 export async function saveAuditLog(entries: AuditEntry[]): Promise<void> {
+  const capped = capAuditLog(entries); // final safety net — bound the persisted log
   if (_encryptionKey) {
-    await saveEncrypted(KEYS.auditLog, entries);
+    await saveEncrypted(KEYS.auditLog, capped);
   } else {
-    saveJSON(KEYS.auditLog, entries);
+    saveJSON(KEYS.auditLog, capped);
   }
 }
 
 export async function saveAuditLogAsync(entries: AuditEntry[]): Promise<void> {
-  await saveEncrypted(KEYS.auditLog, entries);
+  await saveEncrypted(KEYS.auditLog, capAuditLog(entries));
 }
 
 // ======================================================================

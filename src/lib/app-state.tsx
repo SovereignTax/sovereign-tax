@@ -7,7 +7,7 @@ import { transactionNaturalKey } from "./utils";
 import * as persistence from "./persistence";
 import { computeHash } from "./csv-import";
 import { deriveEncryptionKey, generateSalt, hashPINWithPBKDF2 } from "./crypto";
-import { AuditEntry, AuditAction, createAuditEntry } from "./audit";
+import { AuditEntry, AuditAction, createAuditEntry, capAuditLog } from "./audit";
 import { createBackupBundle, parseBackupBundle, saveBackupToAppData } from "./backup";
 
 interface PriceState {
@@ -270,13 +270,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Audit log helper — appends and persists (awaits encryption).
   // Rotates at 5000 entries to prevent unbounded growth.
-  const AUDIT_LOG_MAX = 5000;
   const appendAuditLog = useCallback(async (action: AuditAction, details: string) => {
     const entry = createAuditEntry(action, details);
-    let next = [...auditLogRef.current, entry];
-    if (next.length > AUDIT_LOG_MAX) {
-      next = next.slice(next.length - AUDIT_LOG_MAX);
-    }
+    const next = capAuditLog([...auditLogRef.current, entry]);
     setAuditLog(next);
     await guardedSave(() => persistence.saveAuditLog(next));
   }, []);
@@ -337,7 +333,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     // Log unlock (after state is set)
     const entry = createAuditEntry(AuditAction.AppUnlocked, "App unlocked");
-    const updatedAudit = [...audit, entry];
+    const updatedAudit = capAuditLog([...audit, entry]);
     setAuditLog(updatedAudit);
     await guardedSave(() => persistence.saveAuditLog(updatedAudit));
   }, []);
@@ -381,7 +377,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     // 6. Log PIN change and save audit with new key
     const entry = createAuditEntry(AuditAction.PINChanged, "PIN changed — data re-encrypted");
-    const updatedAudit = [...audit, entry];
+    const updatedAudit = capAuditLog([...audit, entry]);
     await persistence.saveAuditLogAsync(updatedAudit);
     setAuditLog(updatedAudit);
 
