@@ -42,6 +42,36 @@ function formatDateShort(isoDate: string): string {
 // LotSelection is now defined in models.ts and re-exported above
 
 /**
+ * Same-date processing order (D1): on an identical timestamp, acquisitions
+ * (Buy, then TransferIn) are processed before dispositions (TransferOut, Sell,
+ * Donation) so a same-day buy-then-sell has lots available for FIFO / Specific ID.
+ * Without this tiebreaker the engine's output would depend on the input array
+ * order, causing spurious "no lots" warnings or global-pool fallback.
+ * Sell and Donation share a rank so their relative order stays input-stable.
+ */
+function processingRank(type: TransactionType): number {
+  switch (type) {
+    case TransactionType.Buy: return 0;
+    case TransactionType.TransferIn: return 1;
+    case TransactionType.TransferOut: return 2;
+    case TransactionType.Sell: return 3;
+    case TransactionType.Donation: return 3;
+    default: return 4;
+  }
+}
+
+/**
+ * Stable chronological comparator used by every engine processing pass so that
+ * resolveRecordedSales(), calculate(), calculateUpTo(), and batchOptimizeSpecificId()
+ * all iterate transactions in exactly the same order.
+ */
+function compareForProcessing(a: Transaction, b: Transaction): number {
+  const dt = new Date(a.date).getTime() - new Date(b.date).getTime();
+  if (dt !== 0) return dt;
+  return processingRank(a.transactionType) - processingRank(b.transactionType);
+}
+
+/**
  * Shared resolver: maps each disposition transaction to its recorded Specific ID SaleRecord.
  * Returns Map<transactionId, SaleRecord> with deterministic one-to-one matching.
  *
@@ -77,9 +107,7 @@ export function resolveRecordedSales(
   }
 
   // 3. Sort transactions chronologically (matches engine processing order)
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  const sorted = [...transactions].sort(compareForProcessing);
 
   // 4. For each disposition not already matched, consume one legacy record via shift()
   for (const txn of sorted) {
@@ -123,9 +151,7 @@ export function calculate(
   const resolved = recordedSales ? resolveRecordedSales(transactions, recordedSales) : new Map<string, SaleRecord>();
 
   // Sort by date
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  const sorted = [...transactions].sort(compareForProcessing);
 
   for (const trans of sorted) {
     switch (trans.transactionType) {
@@ -388,9 +414,7 @@ export function calculateUpTo(
   excludeSaleRecordId?: string
 ): CalculationResult {
   // Sort chronologically (same as calculate())
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  const sorted = [...transactions].sort(compareForProcessing);
 
   // Find the index of the target transaction
   const stopIdx = sorted.findIndex((t) => t.id === stopBeforeTransactionId);
@@ -471,9 +495,7 @@ export function batchOptimizeSpecificId(
   includeExisting = false
 ): { records: SaleRecord[]; skipped: number; failed: string[]; walletMismatches: string[] } {
   const resolved = resolveRecordedSales(transactions, recordedSales);
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  const sorted = [...transactions].sort(compareForProcessing);
 
   const dispositions = sorted.filter((t) => {
     if (t.transactionType !== TransactionType.Sell && t.transactionType !== TransactionType.Donation) return false;

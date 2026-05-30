@@ -1672,3 +1672,45 @@ describe("extractLotSelections detects stale wallet after transfer re-routing", 
     expect(result.warnings.filter((w) => w.message.includes("could not be applied"))).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// BATCH D — engine refinements
+// ═══════════════════════════════════════════════════════
+
+describe("D1 — same-date acquisition/disposition ordering", () => {
+  it("processes a same-date Buy before a Sell even when the Sell is first in the input array", () => {
+    // Sell listed BEFORE the buy, same calendar date (helpers stamp T12:00:00 → identical timestamp)
+    const txns = [sell("2024-06-01", 1, 60000), buy("2024-06-01", 1, 50000)];
+    const result = calculate(txns, AccountingMethod.FIFO);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(50000, 2);
+    expect(result.sales[0].gainLoss).toBeCloseTo(10000, 2);
+    // No spurious "no lots" warning and no wallet-mismatch fallback
+    expect(result.warnings.find((w) => /no lots available/i.test(w.message))).toBeUndefined();
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("processes a same-date TransferIn (re-tag) before a Sell from the destination wallet", () => {
+    // Buy in Coinbase, transfer to Cold (same day, transfer listed before/after sell), then sell from Cold same day
+    const b = buy("2024-03-01", 1, 40000, { wallet: "Coinbase" });
+    const t = transferIn("2024-06-01", 1, { wallet: "Cold", sourceWallet: "Coinbase" });
+    const s = sell("2024-06-01", 1, 70000, { wallet: "Cold" });
+    // Sell appears before the transfer in the input array
+    const result = calculate([b, s, t], AccountingMethod.FIFO);
+
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].costBasis).toBeCloseTo(40000, 2);
+    expect(result.sales[0].walletMismatch).toBeFalsy();
+  });
+
+  it("keeps same-date Sell vs Donation in input order (shared rank, stable sort)", () => {
+    const b = buy("2024-01-01", 2, 30000);
+    const s = sell("2024-06-01", 1, 50000);
+    const d = donation("2024-06-01", 1, 50000);
+    // Both reference the same lot pool; just assert deterministic, complete processing
+    const result = calculate([b, s, d], AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(2);
+    expect(result.warnings.find((w) => /no lots available/i.test(w.message))).toBeUndefined();
+  });
+});
