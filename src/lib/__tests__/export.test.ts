@@ -618,3 +618,27 @@ describe("D6 — TXF property description is not CSV-quoted", () => {
     expect(pLine).not.toContain('"');
   });
 });
+
+describe("D7 follow-up — partial/underfilled donation keeps Form 8283 provenance", () => {
+  it("recovers exchange/notes for a donation whose recorded amount is less than the raw transaction", () => {
+    // Underfilled donation: donated 0.5 but only 0.4 of lots available → amountSold 0.4 < raw 0.5
+    const sale = makeDonationRecord({
+      amountSold: 0.4,
+      lotDetails: [makeLotDetail({ amountBTC: 0.4, exchange: "Unknown" })],
+    });
+    const raw: Transaction = { id: "raw-p", date: sale.saleDate, transactionType: TransactionType.Donation, amountBTC: 0.5, pricePerBTC: 65000, totalUSD: 32500, exchange: "Kraken", notes: "partial donation" };
+    const summary = buildDonationSummary([sale], [raw], 2024);
+    expect(summary[0].exchange).toBe("Kraken");
+    expect(summary[0].notes).toBe("partial donation");
+  });
+
+  it("still does NOT mis-attribute when an exact same-date match exists (pool consumed first)", () => {
+    const exactRaw: Transaction = { id: "raw-x", date: "2024-06-15T12:00:00.000Z", transactionType: TransactionType.Donation, amountBTC: 0.3, pricePerBTC: 60000, totalUSD: 18000, exchange: "River", notes: "exact" };
+    const otherRaw: Transaction = { id: "raw-o", date: "2024-06-15T12:00:00.000Z", transactionType: TransactionType.Donation, amountBTC: 0.9, pricePerBTC: 60000, totalUSD: 54000, exchange: "Swan", notes: "other" };
+    const sale = makeDonationRecord({ amountSold: 0.3, lotDetails: [makeLotDetail({ amountBTC: 0.3, exchange: "Unknown" })] });
+    const summary = buildDonationSummary([sale], [otherRaw, exactRaw], 2024);
+    // Must pick the exact 0.3 match (River), not the first-by-date 0.9 (Swan)
+    expect(summary[0].exchange).toBe("River");
+    expect(summary[0].notes).toBe("exact");
+  });
+});

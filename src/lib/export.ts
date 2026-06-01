@@ -368,11 +368,21 @@ export function buildDonationSummary(
     // mis-match (D7), and ensures exchange/notes come from the same-amount transaction
     // rather than whichever donation happened to share the date. The 1e-8 epsilon (D3)
     // tolerates sub-satoshi rounding between the recorded amount and the raw amount.
-    const rawMatch = rawDonations.find(
+    // Primary: precise date+amount match — consume the pool exactly once so two
+    // same-date donations of different amounts can't be mis-attributed (D7).
+    let rawMatch = rawDonations.find(
       (t) => !usedIds.has(t.id) && t.date === sale.saleDate && Math.abs(t.amountBTC - sale.amountSold) < 1e-8
     );
     if (rawMatch) {
       usedIds.add(rawMatch.id);
+    } else {
+      // Provenance fallback: a same-date donation, WITHOUT consuming the pool.
+      // Handles underfilled donations (amountSold < raw amount when lots ran short)
+      // so Form 8283 exchange/notes aren't lost. Not consuming the pool means it
+      // can't steal a distinct donation's exact match.
+      rawMatch = rawDonations.find((t) => !usedIds.has(t.id) && t.date === sale.saleDate);
+    }
+    if (rawMatch) {
       exchange = rawMatch.exchange;
       notes = rawMatch.notes;
       if (!fmvPerBTC) {
