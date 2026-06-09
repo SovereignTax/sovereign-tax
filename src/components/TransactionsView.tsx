@@ -1166,13 +1166,22 @@ function EditLotsModal({
         sourceTransactionId: txn.id,
       };
       await onSave(record);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save lot selections. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
+  // Backdrop dirty guard — an unsaved preview or in-progress save must not be
+  // discarded by a stray click (EditModal and SourceWalletModal both guard this).
+  const handleBackdrop = () => {
+    if (saving || preview) return;
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={handleBackdrop}>
       <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -1189,7 +1198,13 @@ function EditLotsModal({
               <span className="text-xs text-blue-500">Currently using Specific ID</span>
               <button
                 className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400"
-                onClick={async () => { await onRevert(); }}
+                onClick={async () => {
+                  try {
+                    await onRevert();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Failed to revert to FIFO. Please try again.");
+                  }
+                }}
                 title="Remove Specific ID election — sale will use your default method (FIFO)"
               >
                 Revert to FIFO
@@ -1386,6 +1401,18 @@ function SourceWalletModal({
     JSON.stringify(lotSelections) !== JSON.stringify(txn.transferLotSelections));
   const hasPendingChanges = hasUnsavedLots || hasChangedLots;
 
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // Escape mirrors the backdrop-click guard: confirmed-but-unsaved lot selections
+  // must not be silently discarded by a stray keypress.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !hasPendingChanges) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [hasPendingChanges, onClose]);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { if (!hasPendingChanges) onClose(); }}>
       <div className={`bg-white dark:bg-zinc-900 rounded-xl p-6 ${showLotPicker && lotsForPicker.length > 0 ? "max-w-3xl" : "max-w-md"} w-full shadow-2xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
@@ -1511,11 +1538,14 @@ function SourceWalletModal({
           </div>
         )}
 
+        {modalError && (
+          <div className="bg-red-50 dark:bg-red-900/20 text-red-500 text-xs p-2 rounded-lg mt-3">⚠️ {modalError}</div>
+        )}
         <div className="flex gap-3 justify-end mt-3">
           {txn.sourceWallet && (
             <button
               className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400"
-              onClick={async () => { setSaving(true); try { await onClear(); } finally { setSaving(false); } }}
+              onClick={async () => { setSaving(true); setModalError(null); try { await onClear(); } catch (err) { setModalError(err instanceof Error ? err.message : "Failed to clear assignment."); } finally { setSaving(false); } }}
               disabled={saving}
             >
               Clear Assignment
@@ -1528,8 +1558,11 @@ function SourceWalletModal({
             disabled={!effectiveValue || saving}
             onClick={async () => {
               setSaving(true);
+              setModalError(null);
               try {
                 await onSave(effectiveValue, lotSelections?.length ? lotSelections : undefined);
+              } catch (err) {
+                setModalError(err instanceof Error ? err.message : "Failed to save source wallet.");
               } finally { setSaving(false); }
             }}
           >

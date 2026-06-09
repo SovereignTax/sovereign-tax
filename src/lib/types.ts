@@ -151,12 +151,14 @@ export function parseTransactionType(input: string): TransactionType | null {
       return TransactionType.Donation;
   }
 
-  // Substring fallbacks
+  // Substring fallbacks. Transfer words are checked BEFORE reward/income/earn:
+  // compound types like "Reward Withdrawal" or "Earn Deposit" describe BTC movement,
+  // not new income — classifying them as Buy created a duplicate zero-history lot.
   if (lower.includes("buy") || lower.includes("purchase")) return TransactionType.Buy;
   if (lower.includes("sell") || lower.includes("sale") || lower.includes("spend")) return TransactionType.Sell;
-  if (lower.includes("reward") || lower.includes("income") || lower.includes("earn")) return TransactionType.Buy;
   if (lower.includes("withdrawal") || lower.includes("withdraw")) return TransactionType.TransferOut;
   if (lower.includes("deposit") || lower.includes("receive") || lower.includes("migration")) return TransactionType.TransferIn;
+  if (lower.includes("reward") || lower.includes("income") || lower.includes("earn")) return TransactionType.Buy;
   if (lower.includes("donation") || lower.includes("donat") || lower.includes("charit") || lower.includes("gift")) return TransactionType.Donation;
 
   return null;

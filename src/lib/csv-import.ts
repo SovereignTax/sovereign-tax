@@ -582,7 +582,17 @@ export function parseCSVContent(
   mapping: ColumnMapping
 ): CSVImportResult {
   const cleaned = content.startsWith("\uFEFF") ? content.slice(1) : content;
-  const lines = splitCSVRecords(cleaned).filter((l) => l.trim());
+  // Track original 1-based line numbers BEFORE filtering blank lines, so skip-reason
+  // row numbers point at the actual line in the user's file.
+  const allRecords = splitCSVRecords(cleaned);
+  const lines: string[] = [];
+  const lineNumbers: number[] = [];
+  for (let i = 0; i < allRecords.length; i++) {
+    if (allRecords[i].trim()) {
+      lines.push(allRecords[i]);
+      lineNumbers.push(i + 1);
+    }
+  }
 
   if (lines.length <= 1) {
     return { transactions: [], skippedRows: [], detectedMapping: mapping, headers: [] };
@@ -597,7 +607,7 @@ export function parseCSVContent(
   const statusCol = findStatusColumn(headers);
 
   for (let lineIdx = 0; lineIdx < dataLines.length; lineIdx++) {
-    const rowNum = headerIdx + lineIdx + 2;
+    const rowNum = lineNumbers[headerIdx + 1 + lineIdx];
     const fields = parseCSVLine(dataLines[lineIdx]);
 
     if (fields.length < 1) {
@@ -614,7 +624,11 @@ export function parseCSVContent(
     // Asset filtering
     if (assetCol && row[assetCol]) {
       const assetUpper = row[assetCol].toUpperCase().trim();
-      if (assetUpper && !assetUpper.includes("BTC") && !assetUpper.includes("XBT")) {
+      // "BTC" must not be immediately preceded by a letter — includes("BTC") admitted
+      // wrapped/derivative tokens (WBTC, TBTC, SBTC, CBBTC) into a Bitcoin-only ledger.
+      // Trading-pair formats still pass: "BTC-USD", "BTCUSD" (BTC at start), "XXBTZUSD" (XBT).
+      const isBTC = /(?:^|[^A-Z])BTC/.test(assetUpper) || assetUpper.includes("XBT");
+      if (assetUpper && !isBTC) {
         skippedRows.push({ row: rowNum, reason: `Non-BTC asset: ${row[assetCol]}` });
         continue;
       }
@@ -623,7 +637,8 @@ export function parseCSVContent(
     // Status filtering
     if (statusCol && row[statusCol]) {
       const statusLower = row[statusCol].toLowerCase().trim();
-      if (statusLower && statusLower !== "completed" && statusLower !== "complete" && statusLower !== "success" && statusLower !== "settled") {
+      const completedStatuses = ["completed", "complete", "success", "successful", "settled", "filled", "done", "closed", "confirmed", "executed"];
+      if (statusLower && !completedStatuses.includes(statusLower)) {
         skippedRows.push({ row: rowNum, reason: `Status: ${row[statusCol]}` });
         continue;
       }
