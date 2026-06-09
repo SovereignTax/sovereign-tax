@@ -68,7 +68,9 @@ export function ReconciliationView() {
     () => calcResult.sales.filter((s) => s.isDonation && new Date(s.saleDate).getFullYear() === selectedYear),
     [calcResult.sales, selectedYear]
   );
-  const [expandedSaleIdx, setExpandedSaleIdx] = useState<number | null>(null);
+  // Keyed by sale.id — an array index survives year switches and would silently
+  // expand an unrelated row in the new year's list.
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
   // Split auto-matched pairs by confidence
   const confidentPairs = result.matchedTransfers.filter((p) => p.confidence === MatchConfidence.Confident);
@@ -238,13 +240,18 @@ export function ReconciliationView() {
       {allConfirmedPairs.length > 0 && (
         <div className="card mb-6">
           <h3 className="font-semibold mb-3">Matched Transfer Pairs ({allConfirmedPairs.length})</h3>
-          {allConfirmedPairs.map((pair, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 text-sm border-b border-gray-100 dark:border-gray-800">
+          {allConfirmedPairs.map((pair) => {
+            const isManual = manualTransferMatches.some(
+              (m) => m.outId === pair.transferOut.id && m.inId === pair.transferIn.id
+            );
+            return (
+            <div key={`${pair.transferOut.id}|${pair.transferIn.id}`} className="flex items-center gap-3 py-2 text-sm border-b border-gray-100 dark:border-gray-800">
               <span className="text-green-500">✓</span>
               <span>{formatDate(pair.transferOut.date)}</span>
               <span className="font-medium">{pair.transferOut.exchange}</span>
               <span className="text-gray-400">→</span>
               <span className="font-medium">{pair.transferIn.exchange}</span>
+              {isManual && <span className="badge badge-blue text-[10px]">Manual</span>}
               <span className="flex-1" />
               <span className="tabular-nums">{formatBTC(pair.amountBTC)} BTC</span>
               {pair.impliedFeeBTC > 0.00000001 && (
@@ -253,8 +260,18 @@ export function ReconciliationView() {
                 </span>
               )}
               <span className="text-xs text-gray-400">{pair.daysBetween}d</span>
+              {isManual && (
+                <button
+                  className="text-xs text-red-400 hover:text-red-600"
+                  title="Remove this manual match — both transfers return to the unmatched list"
+                  onClick={() => removeManualTransferMatch(pair.transferOut.id, pair.transferIn.id)}
+                >
+                  Unmatch
+                </button>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -380,13 +397,13 @@ export function ReconciliationView() {
             {[...salesForYear, ...donationsForYear].map((sale, idx) => {
               const txn = sale.sourceTransactionId ? txnById.get(sale.sourceTransactionId) : undefined;
               const saleWallet = txn?.wallet || txn?.exchange || "";
-              const isExpanded = expandedSaleIdx === idx;
+              const isExpanded = expandedSaleId === sale.id;
               return (
                 <div key={sale.id || idx}>
                   {/* Sale summary row */}
                   <div
                     className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-x-3 py-2.5 px-2 text-sm cursor-pointer rounded transition-colors ${isExpanded ? "bg-orange-50 dark:bg-orange-900/10" : "hover:bg-gray-50 dark:hover:bg-zinc-800/50"} border-b border-gray-100 dark:border-gray-800`}
-                    onClick={() => setExpandedSaleIdx(isExpanded ? null : idx)}
+                    onClick={() => setExpandedSaleId(isExpanded ? null : sale.id)}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`text-xs transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>

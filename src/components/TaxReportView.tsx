@@ -72,7 +72,10 @@ export function TaxReportView() {
   }, [batchOptimizeResult, state.recordSalesBatch]);
 
   // Count assigned Specific ID elections for the year (for clear all)
-  const assignedCount = useMemo(() => getAssignedSells(allTransactions, recordedByTxnId, selectedYear, result.fallbackTxnIds).length, [allTransactions, selectedYear, recordedByTxnId, result.fallbackTxnIds]);
+  // No fallbackTxnIds here: this count drives "Remove All (N)", whose deletion loop
+  // removes EVERY recorded election in the year — including stale ones that fell back
+  // to FIFO. Excluding fallbacks made the button delete more records than it claimed.
+  const assignedCount = useMemo(() => getAssignedSells(allTransactions, recordedByTxnId, selectedYear).length, [allTransactions, selectedYear, recordedByTxnId]);
 
   const handleClearAll = useCallback(async () => {
     setClearing(true);

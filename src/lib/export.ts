@@ -114,6 +114,11 @@ export function exportForm8949CSV(
   }
 
   lines.push("");
+  // Proceeds in this report are NET of selling fees (matching the in-app numbers and
+  // 1099-B net-proceeds convention). The Fees column is informational only — applying
+  // it again as a Form 8949 column (g) adjustment would deduct each fee twice.
+  lines.push("NOTE: Proceeds are net of selling fees. The Fees column is informational — do NOT subtract it again as a Form 8949 adjustment.");
+  lines.push("");
 
   // Collect all lot details split by term across ALL sales (handles mixed-term sales)
   let stProceeds = 0, stBasis = 0, stGainLoss = 0, stFees = 0;
@@ -121,7 +126,7 @@ export function exportForm8949CSV(
 
   // Part I — Short-Term
   lines.push("PART I — SHORT-TERM CAPITAL GAINS AND LOSSES (held one year or less)");
-  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Adjustments (Fees),Gain or (Loss)");
+  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Fees (included in Proceeds),Gain or (Loss)");
 
   for (const sale of sales) {
     const stDetails = sale.lotDetails.filter((d) => !d.isLongTerm);
@@ -157,7 +162,7 @@ export function exportForm8949CSV(
 
   // Part II — Long-Term
   lines.push("PART II — LONG-TERM CAPITAL GAINS AND LOSSES (held more than one year)");
-  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Adjustments (Fees),Gain or (Loss)");
+  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Fees (included in Proceeds),Gain or (Loss)");
 
   for (const sale of sales) {
     const ltDetails = sale.lotDetails.filter((d) => d.isLongTerm);
@@ -215,9 +220,13 @@ export function exportLegacyCSV(sales: SaleRecord[], walletMismatchCount?: numbe
   ];
 
   for (const sale of sales) {
+    // Apportion the sale fee across lot rows by BTC weight — repeating the full fee
+    // on every row overstated total fees by (lots − 1) × fee per multi-lot sale.
+    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
     for (const detail of sale.lotDetails) {
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
       const gainLoss = proceeds - detail.totalCost;
+      const lotFee = sale.fee && saleBTCTotal > 0 ? sale.fee * (detail.amountBTC / saleBTCTotal) : 0;
       lines.push(
         [
           formatDate(sale.saleDate),
@@ -225,7 +234,7 @@ export function exportLegacyCSV(sales: SaleRecord[], walletMismatchCount?: numbe
           `${formatPropertyDescription(detail.amountBTC, detail)}`,
           formatCSVDecimal(proceeds),
           formatCSVDecimal(detail.totalCost),
-          sale.fee ? formatCSVDecimal(sale.fee) : "0.00",
+          formatCSVDecimal(lotFee),
           formatCSVDecimal(gainLoss),
           String(detail.daysHeld),
           detail.isLongTerm ? "Long-term" : "Short-term",
@@ -270,7 +279,7 @@ export function exportIncomeCSV(transactions: Transaction[], year: number): stri
   }
 
   lines.push("");
-  lines.push(`TOTAL ORDINARY INCOME,,,,${formatCSVDecimal(totalIncome)}`);
+  lines.push(`TOTAL ORDINARY INCOME,,,${formatCSVDecimal(totalIncome)},`);
 
   return lines.join("\n");
 }
@@ -447,8 +456,10 @@ export function exportForm8283CSV(
   let totalFMV = 0;
   let totalCostBasis = 0;
   let totalBTC = 0;
+  let hasOver5k = false;
 
   for (const donation of donationSummary) {
+    if (donation.totalFMV > 5000) hasOver5k = true;
     // If a donation drew from multiple lots, show per-lot detail
     for (const lot of donation.lotDetails) {
       const lotFMV = lot.amountBTC * donation.fmvPerBTC;
@@ -465,10 +476,17 @@ export function exportForm8283CSV(
           csvCell(donation.notes),
         ].join(",")
       );
+      // Sum the SAME per-lot figures printed above so the TOTALS row reconciles with
+      // the column — donation.totalFMV can differ for underfilled donations.
+      totalFMV += lotFMV;
+      totalCostBasis += lot.costBasis;
+      totalBTC += lot.amountBTC;
     }
-    totalFMV += donation.totalFMV;
-    totalCostBasis += donation.costBasis;
-    totalBTC += donation.amountBTC;
+  }
+
+  if (hasOver5k) {
+    lines.push("");
+    lines.push("WARNING: One or more donations exceed $5,000 FMV — those belong in Form 8283 SECTION B and require a qualified appraisal (see notes below).");
   }
 
   lines.push("");

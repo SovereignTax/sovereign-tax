@@ -107,7 +107,7 @@ export function exportForm8949PDF(
   } else {
     autoTable(doc, {
       startY: yPos,
-      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Adj. (Fees)", "Gain/(Loss)"]],
+      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Fees (in Proceeds)", "Gain/(Loss)"]],
       body: stRows,
       foot: [buildTotalRowFromDetails("Total Short-Term", stProceeds, stBasis, stGL, stFees)],
       theme: "striped",
@@ -140,7 +140,7 @@ export function exportForm8949PDF(
   } else {
     autoTable(doc, {
       startY: yPos,
-      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Adj. (Fees)", "Gain/(Loss)"]],
+      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Fees (in Proceeds)", "Gain/(Loss)"]],
       body: ltRows,
       foot: [buildTotalRowFromDetails("Total Long-Term", ltProceeds, ltBasis, ltGL, ltFees)],
       theme: "striped",

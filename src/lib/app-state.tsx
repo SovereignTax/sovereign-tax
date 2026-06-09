@@ -120,7 +120,6 @@ interface AppStateContextType {
   addTransaction: (txn: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Omit<Transaction, "id">>) => Promise<void>;
-  updateTransactionPrice: (id: string, price: number) => Promise<void>;
   recordSale: (sale: SaleRecord) => Promise<void>;
   deleteSaleRecordBySourceTxnId: (sourceTransactionId: string) => Promise<void>;
   replaceSaleRecordBySourceTxnId: (sourceTransactionId: string, newRecord: SaleRecord) => Promise<void>;
@@ -163,7 +162,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [importHistory, setImportHistory] = useState<Record<string, ImportRecord>>({});
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
-  const prefs = persistence.loadPreferences();
+  const [prefs] = useState(() => persistence.loadPreferences());
   const [selectedNav, setSelectedNav] = useState("holdings");
   const [selectedYear, setSelectedYear] = useState(prefs.selectedYear);
   const [selectedMethod, setSelectedMethod] = useState<AccountingMethod>(prefs.selectedMethod);
@@ -220,7 +219,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Save preferences when they change
   useEffect(() => {
-    persistence.savePreferences({
+    try {
+      persistence.savePreferences({
       selectedYear,
       selectedMethod,
       appearanceMode,
@@ -233,7 +233,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       txnSortAsc,
       reconciliationDecisions,
       manualTransferMatches,
-    });
+      });
+    } catch (e) {
+      // Quota errors from a passive effect would otherwise unmount the whole tree
+      setSaveError("Failed to save preferences — storage may be full.");
+      console.error("Preferences save failed:", e);
+    }
   }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches]);
 
   // Apply appearance mode — default to dark when System is selected
@@ -697,17 +702,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [appendAuditLog]);
 
-  const updateTransactionPrice = useCallback(async (id: string, price: number) => {
-    const next = transactionsRef.current.map((t) => {
-      if (t.id !== id) return t;
-      const totalUSD = t.amountBTC * price;
-      return { ...t, pricePerBTC: price, totalUSD };
-    });
-    setTransactions(next);
-    transactionsRef.current = next;
-    await guardedSave(() => persistence.saveTransactions(next));
-  }, []);
-
   const recordSaleAction = useCallback(async (sale: SaleRecord) => {
     const prev = recordedSalesRef.current;
     // Dedup: if a record with the same sourceTransactionId already exists, replace it instead of appending
@@ -920,8 +914,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
       if (p.txnSortField !== undefined) setTxnSortField(p.txnSortField);
       if (p.txnSortAsc !== undefined) setTxnSortAsc(p.txnSortAsc);
-      if (p.reconciliationDecisions !== undefined) setReconciliationDecisionsState(p.reconciliationDecisions);
-      if (p.manualTransferMatches !== undefined) setManualTransferMatchesState(p.manualTransferMatches);
+      // Dataset-coupled fields: when ABSENT from the backup (pre-v1.4.8), reset to
+      // defaults instead of keeping the session's values — they reference transaction
+      // IDs from the pre-restore dataset and would be re-persisted by the
+      // savePreferences effect, overwriting what restoreAllData just wrote.
+      setReconciliationDecisionsState(p.reconciliationDecisions ?? {});
+      setManualTransferMatchesState(p.manualTransferMatches ?? []);
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -977,7 +975,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     addTransaction,
     deleteTransaction,
     updateTransaction,
-    updateTransactionPrice,
     recordSale: recordSaleAction,
     deleteSaleRecordBySourceTxnId: deleteSaleRecordBySourceTxnIdAction,
     replaceSaleRecordBySourceTxnId: replaceSaleRecordBySourceTxnIdAction,

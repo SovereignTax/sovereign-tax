@@ -184,7 +184,7 @@ export function SimulationView() {
             <Row label="Total Proceeds" value={formatUSD(result.totalProceeds)} />
             <Row label="Cost Basis" value={formatUSD(result.costBasis)} />
             <Row label="Estimated Gain/Loss" value={`${result.gainLoss >= 0 ? "+" : ""}${formatUSD(result.gainLoss)}`} className={`text-lg font-bold ${result.gainLoss >= 0 ? "text-green-600" : "text-red-500"}`} />
-            <Row label="Holding Period" value={<>{result.holdingPeriodDays} days <span className={`badge ${result.isLongTerm ? "badge-green" : "badge-orange"} ml-2`}>{result.isLongTerm ? "Long-term" : "Short-term"}</span></>} />
+            <Row label="Holding Period" value={<>{result.holdingPeriodDays} days <span className={`badge ${result.isLongTerm ? "badge-green" : result.isMixedTerm ? "badge-blue" : "badge-orange"} ml-2`}>{result.isMixedTerm ? "Mixed" : result.isLongTerm ? "Long-term" : "Short-term"}</span></>} />
           </div>
 
           {result.lotDetails.length > 0 && (
@@ -209,7 +209,7 @@ export function SimulationView() {
           {lastSelections && isSpecificID && (
             <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm p-3 rounded-lg mt-3 flex items-center gap-2">
               <span>✅</span>
-              <span>Lot selections saved — go to <strong>Record Sale</strong> or <strong>Add Transaction</strong> with Specific ID and they'll be pre-filled automatically.</span>
+              <span>Lot selections saved — go to <strong>Add Transaction</strong> with Specific ID and they'll be pre-filled automatically.</span>
             </div>
           )}
         </div>

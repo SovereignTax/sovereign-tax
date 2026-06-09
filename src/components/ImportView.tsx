@@ -37,6 +37,7 @@ export function ImportView() {
   const processFile = useCallback(async (content: string, fileName: string) => {
     setPendingContent(content);
     setPendingFileName(fileName);
+    setDupeWarning(null); // stale warning would reference the previous file's parse
 
     // Check for duplicate import
     const hash = await computeHash(content);
@@ -101,7 +102,7 @@ export function ImportView() {
         .then((content) => processFile(content, file.name))
         .catch((err) => {
           console.error("CSV decode failed:", err);
-          // processFile sets its own status; surface a generic error via the import status path
+          setImportStatus({ type: "error", message: `Could not read "${file.name}": ${err instanceof Error ? err.message : "file could not be decoded"}` });
         });
     }
   }, [processFile]);
@@ -117,6 +118,7 @@ export function ImportView() {
           .then((content) => processFile(content, file.name))
           .catch((err) => {
             console.error("CSV decode failed:", err);
+            setImportStatus({ type: "error", message: `Could not read "${file.name}": ${err instanceof Error ? err.message : "file could not be decoded"}` });
           });
       }
     };
@@ -191,6 +193,9 @@ export function ImportView() {
 
   const updateMapping = (key: keyof ColumnMapping, value: string | null) => {
     setMapping((m) => ({ ...m, [key]: value || undefined }));
+    // A pending duplicate warning holds transactions parsed with the OLD mapping —
+    // importing them after a mapping edit would silently ignore the edit.
+    setDupeWarning(null);
   };
 
   return (
@@ -249,7 +254,7 @@ export function ImportView() {
           className="input w-64"
           placeholder="e.g., Coinbase, Swan, Strike"
           value={exchangeName}
-          onChange={(e) => setExchangeName(e.target.value)}
+          onChange={(e) => { setExchangeName(e.target.value); setDupeWarning(null); }}
         />
       </div>
       <div className="ml-[calc(0.75rem+theme(spacing.3))] mb-6">

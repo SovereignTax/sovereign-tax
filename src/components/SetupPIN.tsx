@@ -73,6 +73,12 @@ export function SetupPIN({ isInitialSetup, onDone }: { isInitialSetup: boolean; 
         await changePIN(pin);
       }
       onDone?.();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to set PIN. Please try again.");
+      setShowError(true);
+      setPin("");
+      setConfirmPin("");
+      setIsConfirming(false);
     } finally {
       setIsHashing(false);
     }

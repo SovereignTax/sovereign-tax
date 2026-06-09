@@ -213,9 +213,11 @@ export function TransactionsView() {
     setClearingAssignments(true);
     setErrorMessage(null);
     try {
-      const yearStr = String(state.selectedYear);
+      // Same year source as getAssignedTransferCount (local getFullYear) — a UTC string
+      // prefix match diverges for year-boundary timestamps, making "Clear All (N)" clear
+      // a different number of transfers than it claims.
       const transferIns = transactions.filter(
-        (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet && t.date.startsWith(yearStr)
+        (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet && new Date(t.date).getFullYear() === state.selectedYear
       );
       for (const t of transferIns) {
         await state.updateTransaction(t.id, { sourceWallet: undefined });

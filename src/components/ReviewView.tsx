@@ -49,6 +49,9 @@ export function ReviewView() {
   const walletMismatchSales = useMemo(() => getWalletMismatchSales(calcResult.sales, selectedYear), [calcResult.sales, selectedYear]);
   const optimizableSells = useMemo(() => getOptimizableSells(transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds), [transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds]);
   const assignedSells = useMemo(() => getAssignedSells(transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds), [transactions, recordedByTxnId, selectedYear, calcResult.fallbackTxnIds]);
+  // For "Revert to FIFO (N)": the deletion loop removes EVERY recorded election in the
+  // year — including stale fallback ones — so this count must not exclude fallbacks.
+  const removableCount = useMemo(() => getAssignedSells(transactions, recordedByTxnId, selectedYear).length, [transactions, recordedByTxnId, selectedYear]);
   const engineWarnings = useMemo(
     () => calcResult.warnings.filter((w) => w.message.length > 0 && (!w.txnDate || new Date(w.txnDate).getFullYear() === selectedYear)),
     [calcResult.warnings, selectedYear]
@@ -333,12 +336,12 @@ export function ReviewView() {
           ) : (
             <span className="text-sm px-4 py-1.5 btn-secondary opacity-50 cursor-default">All Optimized</span>
           )}
-          {assignedSells.length > 0 && (
+          {removableCount > 0 && (
             <button
               className="btn-secondary text-sm text-red-500 hover:text-red-600"
               onClick={() => setShowClearConfirm(true)}
             >
-              Revert to FIFO ({assignedSells.length})
+              Revert to FIFO ({removableCount})
             </button>
           )}
         </div>
@@ -471,9 +474,9 @@ export function ReviewView() {
                   const isPositive = savings > 0;
                   return (
                     <div className="flex justify-between text-sm mt-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                      <span className="text-gray-500 font-medium">{isPositive ? "Estimated savings:" : "Additional tax liability:"}</span>
+                      <span className="text-gray-500 font-medium">Change in taxable gains:</span>
                       <span className={`font-bold tabular-nums ${isPositive ? "text-green-600" : "text-red-500"}`}>
-                        {isPositive ? formatUSD(savings) : `+${formatUSD(Math.abs(savings))}`}
+                        {isPositive ? `−${formatUSD(savings)}` : `+${formatUSD(Math.abs(savings))}`}
                       </span>
                     </div>
                   );
@@ -504,12 +507,12 @@ export function ReviewView() {
           <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-3">Revert to FIFO — {selectedYear}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              This will remove all {assignedSells.length} Specific ID lot election{assignedSells.length === 1 ? "" : "s"} for {selectedYear}. All sells and donations will fall back to the default FIFO method. You can re-optimize at any time.
+              This will remove all {removableCount} Specific ID lot election{removableCount === 1 ? "" : "s"} for {selectedYear}. All sells and donations will fall back to the default FIFO method. You can re-optimize at any time.
             </p>
             <div className="flex gap-3 justify-end">
               <button className="btn-secondary text-sm" onClick={() => setShowClearConfirm(false)}>Cancel</button>
               <button className="text-sm px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg" disabled={clearing} onClick={async () => { await handleClearAll(); }}>
-                {clearing ? "Clearing..." : `Remove All (${assignedSells.length})`}
+                {clearing ? "Clearing..." : `Remove All (${removableCount})`}
               </button>
             </div>
           </div>
