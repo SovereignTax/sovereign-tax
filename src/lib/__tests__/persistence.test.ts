@@ -645,3 +645,117 @@ describe("changePIN crash-safety", () => {
     expect(loaded).toEqual([{ id: "important-data" }]);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Group 9: E5 — Change PIN two-phase commit (crash-safe re-encryption)
+// ═══════════════════════════════════════════════════════
+
+describe("E5 — PIN change two-phase commit", () => {
+  beforeEach(() => {
+    clearLsStore();
+    disableTauri();
+    persistence.setEncryptionKey(null);
+  });
+
+  async function setupOldData() {
+    const saltA = generateSalt();
+    const keyA = await deriveEncryptionKey("1234", saltA);
+    persistence.saveEncryptionSalt(saltA);
+    persistence.savePINHash("old-hash");
+    persistence.savePINSalt("old-pin-salt");
+    persistence.setEncryptionKey(keyA);
+    await persistence.saveTransactions([{ id: "real-data" }] as any);
+    return { saltA, keyA };
+  }
+
+  it("happy path: stage → commit → promote re-encrypts under the new key", async () => {
+    await setupOldData();
+
+    // Stage with new key
+    const saltB = generateSalt();
+    const keyB = await deriveEncryptionKey("5678", saltB);
+    persistence.setEncryptionKey(keyB);
+    await persistence.stageAllDataForPinChange({
+      transactions: [{ id: "real-data" }] as any,
+      recordedSales: [],
+      mappings: {},
+      importHistory: {},
+      auditLog: [],
+    });
+    persistence.savePinChangeCommit({ encSalt: saltB, pinHash: "new-hash", pinSalt: "new-pin-salt" });
+    persistence.saveEncryptionSalt(saltB);
+    persistence.savePINHash("new-hash");
+    persistence.savePINSalt("new-pin-salt");
+    await persistence.promoteStagedFiles();
+    persistence.clearPinChangeCommit();
+
+    // New key decrypts the real file
+    const loaded = await persistence.loadTransactionsAsync();
+    expect(loaded).toEqual([{ id: "real-data" }]);
+    expect(persistence.loadPinChangeCommit()).toBeNull();
+  });
+
+  it("crash BEFORE commit: recovery discards staging, old PIN + old key still work", async () => {
+    const { keyA } = await setupOldData();
+
+    // Stage with new key, then crash (no commit written)
+    const saltB = generateSalt();
+    const keyB = await deriveEncryptionKey("5678", saltB);
+    persistence.setEncryptionKey(keyB);
+    await persistence.stageAllDataForPinChange({
+      transactions: [{ id: "real-data" }] as any,
+      recordedSales: [],
+      mappings: {},
+      importHistory: {},
+      auditLog: [],
+    });
+
+    // Next launch: recovery runs before key derivation
+    await persistence.finishPinChangeRecovery();
+
+    // Credentials unchanged — old PIN hash still authoritative
+    expect(persistence.loadPINHash()).toBe("old-hash");
+    // Old key still decrypts the (untouched) real file
+    persistence.setEncryptionKey(keyA);
+    const loaded = await persistence.loadTransactionsAsync();
+    expect(loaded).toEqual([{ id: "real-data" }]);
+  });
+
+  it("crash AFTER commit, before promote: recovery applies new credentials and finishes", async () => {
+    await setupOldData();
+
+    // Stage + commit with new key, then crash before applying credentials/promote
+    const saltB = generateSalt();
+    const keyB = await deriveEncryptionKey("5678", saltB);
+    persistence.setEncryptionKey(keyB);
+    await persistence.stageAllDataForPinChange({
+      transactions: [{ id: "real-data" }] as any,
+      recordedSales: [],
+      mappings: {},
+      importHistory: {},
+      auditLog: [],
+    });
+    persistence.savePinChangeCommit({ encSalt: saltB, pinHash: "new-hash", pinSalt: "new-pin-salt" });
+
+    // Next launch: recovery finishes the job
+    await persistence.finishPinChangeRecovery();
+
+    // New credentials applied
+    expect(persistence.loadPINHash()).toBe("new-hash");
+    expect(persistence.loadPINSalt()).toBe("new-pin-salt");
+    expect(persistence.loadEncryptionSalt()).toBe(saltB);
+    expect(persistence.loadPinChangeCommit()).toBeNull();
+
+    // The new PIN's key decrypts the promoted real file
+    persistence.setEncryptionKey(keyB);
+    const loaded = await persistence.loadTransactionsAsync();
+    expect(loaded).toEqual([{ id: "real-data" }]);
+  });
+
+  it("recovery is idempotent — running twice is harmless", async () => {
+    await setupOldData();
+    await persistence.finishPinChangeRecovery();
+    await persistence.finishPinChangeRecovery();
+    expect(persistence.loadPINHash()).toBe("old-hash");
+  });
+});

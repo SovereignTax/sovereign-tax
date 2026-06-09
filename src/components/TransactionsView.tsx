@@ -6,6 +6,7 @@ import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
 import { getUnassignedTransfers, getAssignedTransferCount, getWalletMismatchSales, getWalletMismatchIds, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
 import { saveTextFile } from "../lib/file-save";
+import { confirmDialog } from "../lib/dialog";
 import { suggestSourceWallet } from "../lib/reconciliation";
 import { LotPicker } from "./LotPicker";
 import { HelpPanel } from "./HelpPanel";
@@ -841,9 +842,11 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
     onClose();
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (isSaving) return;
-    if (isDirty && !window.confirm("Discard your unsaved changes?")) return;
+    // window.confirm is a no-op on macOS WKWebView — it would return false instantly,
+    // leaving a dirty modal impossible to dismiss. confirmDialog uses the Tauri plugin.
+    if (isDirty && !(await confirmDialog("Discard your unsaved changes?"))) return;
     onClose();
   };
 

@@ -274,6 +274,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const entry = createAuditEntry(action, details);
     const next = capAuditLog([...auditLogRef.current, entry]);
     setAuditLog(next);
+    // Sync the ref immediately — actions that append twice in one call (e.g. delete
+    // with cascade) would otherwise build the second entry from the stale ref and
+    // clobber the first, both in state and in the persisted log.
+    auditLogRef.current = next;
     await guardedSave(() => persistence.saveAuditLog(next));
   }, []);
 
@@ -282,6 +286,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
    * Called from LockScreen and SetupPIN after PIN is verified/set.
    */
   const unlockWithPIN = useCallback(async (pin: string) => {
+    // Finish any interrupted PIN change (re-apply committed credentials, promote
+    // staged files, or discard pre-commit staging). Must run before key derivation.
+    await persistence.finishPinChangeRecovery();
+    // Clean up the legacy pre-staged-flow breadcrumb — its salt-only rollback could
+    // never recover an actual PIN change and a stale value would corrupt the salt.
+    persistence.clearPrevEncryptionSalt();
+
     // Get or create encryption salt (separate from PIN hash salt)
     let encSalt = persistence.loadEncryptionSalt();
     if (!encSalt) {
@@ -290,28 +301,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Derive AES-256-GCM key from PIN
-    let key = await deriveEncryptionKey(pin, encSalt);
+    const key = await deriveEncryptionKey(pin, encSalt);
     persistence.setEncryptionKey(key);
-
-    // Try loading data — if decrypt fails, check for previous salt (changePIN crash recovery)
-    try {
-      await persistence.loadTransactionsAsync();
-    } catch (e) {
-      if (e instanceof persistence.DecryptionError) {
-        const prevSalt = persistence.loadPrevEncryptionSalt();
-        if (prevSalt) {
-          // Crash during changePIN — roll back to previous encryption salt
-          persistence.saveEncryptionSalt(prevSalt);
-          persistence.clearPrevEncryptionSalt();
-          key = await deriveEncryptionKey(pin, prevSalt);
-          persistence.setEncryptionKey(key);
-        } else {
-          throw e;
-        }
-      } else {
-        throw e;
-      }
-    }
 
     // Migrate any plaintext data to encrypted format
     await persistence.migrateToEncrypted();
@@ -329,60 +320,75 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setRecordedSales(sales);
     setImportHistory(history);
     setAuditLog(audit);
+    auditLogRef.current = audit;
     setIsUnlocked(true);
 
     // Log unlock (after state is set)
     const entry = createAuditEntry(AuditAction.AppUnlocked, "App unlocked");
     const updatedAudit = capAuditLog([...audit, entry]);
     setAuditLog(updatedAudit);
+    auditLogRef.current = updatedAudit;
     await guardedSave(() => persistence.saveAuditLog(updatedAudit));
   }, []);
 
   /**
-   * Change PIN: decrypt all data with the old key, generate new encryption salt,
-   * derive a new encryption key from the new PIN, and re-encrypt all data.
+   * Change PIN — crash-safe two-phase commit (see persistence.ts):
+   * stage everything re-encrypted with the new key, commit the new credentials in
+   * one atomic write, then promote the staged files. A crash before the commit
+   * leaves the old PIN fully working; a crash after it is finished by recovery on
+   * the next launch. The old flow flipped the PIN hash before re-encrypting, so a
+   * crash in the multi-second re-encryption window meant permanent lockout.
    * Must only be called while the app is unlocked (old key in memory).
    */
   const changePIN = useCallback(async (newPin: string) => {
-    // 1. Read ALL decrypted data while old key is still active
+    // 1. Read ALL decrypted data while the old key is still active
     const txns = await persistence.loadTransactionsAsync();
     const sales = await persistence.loadRecordedSalesAsync();
     const mappings = await persistence.loadMappingsAsync();
     const history = await persistence.loadImportHistoryAsync();
     const audit = await persistence.loadAuditLogAsync();
 
-    // 2. Save old encryption salt as backup (crash-safety: allows rollback if re-encrypt fails mid-way)
-    const oldEncSalt = persistence.loadEncryptionSalt();
-    if (oldEncSalt) {
-      persistence.savePrevEncryptionSalt(oldEncSalt);
-    }
-
-    // 3. Save new PIN hash/salt (for authentication)
-    const pinSalt = generateSalt();
-    const pinHash = await hashPINWithPBKDF2(newPin, pinSalt);
-    persistence.savePINSalt(pinSalt);
-    persistence.savePINHash(pinHash);
-
-    // 4. Generate new encryption salt and derive new encryption key
-    const newEncSalt = generateSalt();
-    persistence.saveEncryptionSalt(newEncSalt);
-    const newKey = await deriveEncryptionKey(newPin, newEncSalt);
-    persistence.setEncryptionKey(newKey);
-
-    // 5. Re-encrypt ALL data with the new key
-    await persistence.saveTransactionsAsync(txns);
-    await persistence.saveRecordedSalesAsync(sales);
-    await persistence.saveMappingsAsync(mappings);
-    await persistence.saveImportHistoryAsync(history);
-
-    // 6. Log PIN change and save audit with new key
     const entry = createAuditEntry(AuditAction.PINChanged, "PIN changed — data re-encrypted");
     const updatedAudit = capAuditLog([...audit, entry]);
-    await persistence.saveAuditLogAsync(updatedAudit);
-    setAuditLog(updatedAudit);
 
-    // 7. Clear backup salt — re-encryption succeeded
-    persistence.clearPrevEncryptionSalt();
+    // 2. Derive all new credentials up front — nothing persisted yet
+    const oldKey = persistence.getEncryptionKey();
+    const newEncSalt = generateSalt();
+    const newKey = await deriveEncryptionKey(newPin, newEncSalt);
+    const pinSalt = generateSalt();
+    const pinHash = await hashPINWithPBKDF2(newPin, pinSalt);
+
+    // 3. STAGE: write everything re-encrypted with the new key to staged locations.
+    //    Real files and credentials untouched — failure here is fully recoverable.
+    persistence.setEncryptionKey(newKey);
+    try {
+      await persistence.stageAllDataForPinChange({
+        transactions: txns,
+        recordedSales: sales,
+        mappings,
+        importHistory: history,
+        auditLog: updatedAudit,
+      });
+    } catch (e) {
+      // Restore the old key and discard staging — old PIN still fully valid
+      persistence.setEncryptionKey(oldKey);
+      await persistence.discardStagedFiles();
+      throw e;
+    }
+
+    // 4. COMMIT: single atomic write — the new PIN is authoritative from here on
+    persistence.savePinChangeCommit({ encSalt: newEncSalt, pinHash, pinSalt });
+
+    // 5. PROMOTE: apply credentials and copy staged ciphertext over the real files.
+    //    A crash anywhere in this step is finished by finishPinChangeRecovery().
+    persistence.saveEncryptionSalt(newEncSalt);
+    persistence.savePINHash(pinHash);
+    persistence.savePINSalt(pinSalt);
+    await persistence.promoteStagedFiles();
+    persistence.clearPinChangeCommit();
+
+    setAuditLog(updatedAudit);
+    auditLogRef.current = updatedAudit;
   }, []);
 
   const fetchPrice = useCallback(async () => {
@@ -800,6 +806,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setImportHistory({});
     importHistoryRef.current = {};
     setSavedLotSelections(null);
+    // Reset dataset-coupled preference state. persistence.clearAllData() resets the
+    // preferences on DISK, but without this the in-memory values survive — and the
+    // savePreferences effect writes the "deleted" carryforward amounts, reconciliation
+    // decisions, and manual matches right back to disk on the next preference change.
+    setPriorCarryforwardST(0);
+    setPriorCarryforwardLT(0);
+    setReconciliationDecisionsState({});
+    setManualTransferMatchesState([]);
+    setSelectedWallet(null);
     await guardedSave(() => persistence.clearAllData());
   }, [appendAuditLog]);
 

@@ -31,6 +31,7 @@ const KEYS = {
   pinLockoutUntil: "sovereign-tax-pin-lockout-until",
   encryptionSalt: "sovereign-tax-encryption-salt",
   prevEncryptionSalt: "sovereign-tax-prev-encryption-salt",
+  pinChangeCommit: "sovereign-tax-pin-change-commit",
   auditLog: "sovereign-tax-audit-log",
   priceCache: "sovereign-tax-price-cache",
   tosAccepted: "sovereign-tax-tos-accepted",
@@ -435,7 +436,8 @@ export function saveEncryptionSalt(salt: string): void {
   localStorage.setItem(KEYS.encryptionSalt, salt);
 }
 
-// Previous encryption salt — saved during changePIN for crash-safety rollback
+// Previous encryption salt — legacy crash-safety breadcrumb from the pre-staged
+// changePIN flow. No longer written; kept so stale values can be cleaned up.
 export function loadPrevEncryptionSalt(): string | null {
   return localStorage.getItem(KEYS.prevEncryptionSalt);
 }
@@ -446,6 +448,165 @@ export function savePrevEncryptionSalt(salt: string): void {
 
 export function clearPrevEncryptionSalt(): void {
   localStorage.removeItem(KEYS.prevEncryptionSalt);
+}
+
+// ======================================================================
+// Change PIN — two-phase commit (crash-safe re-encryption)
+//
+// The old flow saved the new PIN hash BEFORE re-encrypting any data, so a crash
+// mid-re-encryption left data under the old key with only the new PIN accepted —
+// permanent lockout (the salt-only rollback could never work: the key is
+// PBKDF2(pin, salt) and the old PIN hash was already gone).
+//
+// New flow:
+//   1. STAGE   — write every data file re-encrypted with the NEW key to a staged
+//                location. Real files and credentials untouched; a crash here is
+//                harmless (old PIN works, stale staging discarded on next unlock).
+//   2. COMMIT  — one atomic localStorage write of {encSalt, pinHash, pinSalt}.
+//                From this point the new PIN is authoritative.
+//   3. PROMOTE — apply credentials, copy staged ciphertext over the real files,
+//                clear the marker. A crash anywhere in step 3 is finished by
+//                recovery on the next launch (idempotent re-apply + promote).
+// ======================================================================
+
+export interface PinChangeCommit {
+  encSalt: string;
+  pinHash: string;
+  pinSalt: string;
+}
+
+function stagedLocalStorageKey(key: string): string {
+  return key + "-staged";
+}
+
+function stagedFsFilename(filename: string): string {
+  return filename + ".staged";
+}
+
+export function loadPinChangeCommit(): PinChangeCommit | null {
+  try {
+    const raw = localStorage.getItem(KEYS.pinChangeCommit);
+    if (!raw) return null;
+    const commit = JSON.parse(raw) as PinChangeCommit;
+    if (!commit || !commit.encSalt || !commit.pinHash || !commit.pinSalt) return null;
+    return commit;
+  } catch {
+    return null;
+  }
+}
+
+export function savePinChangeCommit(commit: PinChangeCommit): void {
+  // Single synchronous write — this IS the commit point.
+  localStorage.setItem(KEYS.pinChangeCommit, JSON.stringify(commit));
+}
+
+export function clearPinChangeCommit(): void {
+  localStorage.removeItem(KEYS.pinChangeCommit);
+}
+
+/** Stage every data file re-encrypted with the CURRENT in-memory key (the caller
+ *  sets the NEW key first). Real data files are not touched. */
+export async function stageAllDataForPinChange(data: {
+  transactions: Transaction[];
+  recordedSales: SaleRecord[];
+  mappings: Record<string, ColumnMapping>;
+  importHistory: Record<string, ImportRecord>;
+  auditLog: AuditEntry[];
+}): Promise<void> {
+  await saveEncryptedStaged(KEYS.transactions, data.transactions);
+  await saveEncryptedStaged(KEYS.recordedSales, data.recordedSales);
+  await saveEncryptedStaged(KEYS.exchangeMappings, data.mappings);
+  await saveEncryptedStaged(KEYS.importHistory, data.importHistory);
+  await saveEncryptedStaged(KEYS.auditLog, capAuditLog(data.auditLog));
+}
+
+/** Encrypt (with the CURRENT in-memory key — caller sets the new key first) and
+ *  write to the staged location. Real data files are not touched. */
+async function saveEncryptedStaged<T>(key: string, value: T): Promise<void> {
+  const json = JSON.stringify(value);
+  const data = _encryptionKey ? await encryptData(json, _encryptionKey) : json;
+  if (isTauri() && FS_FILENAMES[key]) {
+    await fsWrite(stagedFsFilename(FS_FILENAMES[key]), data);
+    return;
+  }
+  try {
+    localStorage.setItem(stagedLocalStorageKey(key), data);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      throw new StorageQuotaError(`Storage quota exceeded saving ${key}`);
+    }
+    throw e;
+  }
+}
+
+/** Copy every staged ciphertext over its real location, then remove the staged copy.
+ *  Raw copy — no decryption involved, so this is safe to run before unlock. */
+export async function promoteStagedFiles(): Promise<void> {
+  for (const key of ENCRYPTED_KEYS) {
+    const filename = FS_FILENAMES[key];
+    if (isTauri() && filename) {
+      const staged = await fsRead(stagedFsFilename(filename));
+      if (staged !== null) {
+        await fsWrite(filename, staged);
+        await fsRemove(stagedFsFilename(filename));
+      }
+      continue;
+    }
+    const staged = localStorage.getItem(stagedLocalStorageKey(key));
+    if (staged !== null) {
+      localStorage.setItem(key, staged);
+      localStorage.removeItem(stagedLocalStorageKey(key));
+    }
+  }
+}
+
+/** Remove all staged copies (crash before commit — staging is garbage). */
+export async function discardStagedFiles(): Promise<void> {
+  for (const key of ENCRYPTED_KEYS) {
+    const filename = FS_FILENAMES[key];
+    if (isTauri() && filename) {
+      await fsRemove(stagedFsFilename(filename));
+    }
+    localStorage.removeItem(stagedLocalStorageKey(key));
+  }
+}
+
+/** Finish an interrupted PIN change. Called on every unlock, before key derivation:
+ *  - commit marker present → re-apply committed credentials (idempotent) and promote
+ *    the staged files, then clear the marker.
+ *  - no marker → discard any stale staged files (crash happened before commit). */
+export async function finishPinChangeRecovery(): Promise<void> {
+  const commit = loadPinChangeCommit();
+  if (commit) {
+    saveEncryptionSalt(commit.encSalt);
+    savePINHash(commit.pinHash);
+    savePINSalt(commit.pinSalt);
+    await promoteStagedFiles();
+    clearPinChangeCommit();
+  } else {
+    await discardStagedFiles();
+  }
+}
+
+/** Synchronous credential-only recovery, run at module load so the lock screen
+ *  verifies the typed PIN against the COMMITTED hash (not a stale pre-crash one).
+ *  The staged-file promote happens in finishPinChangeRecovery() during unlock. */
+function recoverPinChangeCredentialsSync(): void {
+  try {
+    const commit = loadPinChangeCommit();
+    if (commit) {
+      localStorage.setItem(KEYS.encryptionSalt, commit.encSalt);
+      localStorage.setItem(KEYS.pinHash, commit.pinHash);
+      localStorage.setItem(KEYS.pinSalt, commit.pinSalt);
+      // Marker intentionally NOT cleared here — promote still has to run at unlock.
+    }
+  } catch {
+    // Best-effort: finishPinChangeRecovery() retries during unlock.
+  }
+}
+
+if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+  recoverPinChangeCredentialsSync();
 }
 
 // ======================================================================

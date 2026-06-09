@@ -4,6 +4,7 @@ import { readHeaders, detectColumns, parseCSVContent, parseCSVLine, computeHash,
 import { ColumnMapping, isMappingValid, requiredFieldsMissing, isDualColumn } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames } from "../lib/types";
 import { saveTextFile } from "../lib/file-save";
+import { confirmDialog } from "../lib/dialog";
 import { partitionLooseDuplicates } from "../lib/utils";
 import { Transaction } from "../lib/models";
 import { HelpPanel } from "./HelpPanel";
@@ -26,6 +27,12 @@ export function ImportView() {
     allTxns: Transaction[]; nonMatching: Transaction[];
     skippedRows: number;
   } | null>(null);
+  // Clear All is as destructive as Settings → Clear All Data, so it requires the
+  // same typed-DELETE confirmation (window.confirm is also a no-op on macOS).
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState("");
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   const processFile = useCallback(async (content: string, fileName: string) => {
     setPendingContent(content);
@@ -35,7 +42,7 @@ export function ImportView() {
     const hash = await computeHash(content);
     const existing = state.checkImportHistory(hash);
     if (existing) {
-      const proceed = confirm(
+      const proceed = await confirmDialog(
         `This file (${existing.fileName}) was previously imported on ${new Date(existing.importDate).toLocaleString()} with ${existing.transactionCount} transactions.\n\nDuplicate transactions will be automatically skipped. Import anyway?`
       );
       if (!proceed) {
@@ -484,12 +491,76 @@ export function ImportView() {
       {state.transactions.length > 0 && (
         <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
           <span className="text-gray-500 text-sm">📄 {state.transactions.length} transactions loaded</span>
-          <button className="btn-danger text-sm" onClick={async () => {
-            if (!window.confirm(`Are you sure you want to clear all ${state.transactions.length} transactions and related data? This cannot be undone.`)) return;
-            await state.clearAllData(); setImportStatus(null);
-          }}>
+          <button className="btn-danger text-sm" onClick={() => { setClearConfirmText(""); setClearError(null); setShowClearConfirm(true); }}>
             Clear All
           </button>
+        </div>
+      )}
+
+      {/* Clear All confirmation modal — requires typing DELETE, same as Settings */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div
+            className="card max-w-md w-full mx-4 p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-clear-data-title"
+          >
+            <h3 id="import-clear-data-title" className="font-semibold text-lg mb-3 text-red-500">⚠️ Permanently Delete All Data</h3>
+            <p className="text-sm mb-3">
+              This will erase all {state.transactions.length} transaction{state.transactions.length === 1 ? "" : "s"} and related data
+              (recorded sales, import history) from this device. <strong>This cannot be undone.</strong>
+            </p>
+            <p className="text-sm mb-2">
+              If you haven&apos;t already, create a backup first (Cancel, then use Settings → Backup &amp; Restore).
+            </p>
+            <label className="block text-sm font-medium mt-4 mb-1">
+              Type <code className="bg-gray-200 dark:bg-gray-800 px-1 rounded">DELETE</code> to confirm:
+            </label>
+            <input
+              type="text"
+              className="input w-full"
+              value={clearConfirmText}
+              onChange={(e) => setClearConfirmText(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              disabled={isClearing}
+            />
+            {clearError && (
+              <p className="text-sm text-red-500 mt-2">{clearError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => setShowClearConfirm(false)}
+                disabled={isClearing}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-danger text-sm"
+                disabled={clearConfirmText !== "DELETE" || isClearing}
+                onClick={async () => {
+                  setClearError(null);
+                  setIsClearing(true);
+                  try {
+                    await state.clearAllData();
+                    setShowClearConfirm(false);
+                    setClearConfirmText("");
+                    setImportStatus(null);
+                  } catch (err) {
+                    setClearError(err instanceof Error ? err.message : "Failed to clear data. Please try again.");
+                  } finally {
+                    setIsClearing(false);
+                  }
+                }}
+              >
+                {isClearing ? "Deleting…" : "Permanently Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

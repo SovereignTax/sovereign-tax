@@ -10,10 +10,16 @@ import { sanitizeCarryforward } from "../lib/utils";
 const APP_VERSION = __APP_VERSION__;
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
 
-/** Compare two semver strings. Returns -1 if a < b, 0 if equal, 1 if a > b. */
+/** Compare two semver strings. Returns -1 if a < b, 0 if equal, 1 if a > b.
+ *  parseInt tolerates pre-release suffixes ("1.5.0-beta" → 1.5.0) — Number() would
+ *  produce NaN, making every comparison false and reporting "up to date". */
 function compareSemver(a: string, b: string): number {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
+  const parse = (v: string) => v.split(".").map((p) => {
+    const n = parseInt(p, 10);
+    return isNaN(n) ? 0 : n;
+  });
+  const pa = parse(a);
+  const pb = parse(b);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const na = pa[i] ?? 0;
     const nb = pb[i] ?? 0;
@@ -221,8 +227,9 @@ export function SettingsView() {
           >
             <h3 id="clear-data-title" className="font-semibold text-lg mb-3 text-red-500">⚠️ Permanently Delete All Data</h3>
             <p className="text-sm mb-3">
-              This will erase every transaction, recorded sale, audit log entry,
-              column mapping, and import history from this device. <strong>This cannot be undone.</strong>
+              This will erase every transaction, recorded sale, column mapping, import history,
+              and saved carryforward/reconciliation settings from this device. The audit log is
+              retained as a record of changes. <strong>This cannot be undone.</strong>
             </p>
             <p className="text-sm mb-3 text-gray-500">
               {state.transactions.length} transaction{state.transactions.length === 1 ? "" : "s"} and {state.recordedSales.length} recorded sale{state.recordedSales.length === 1 ? "" : "s"} will be lost.
@@ -572,13 +579,16 @@ export function SettingsView() {
                                   try {
                                     const content = await readSavedBackup(b.filename);
                                     const file = new File([content], b.filename, { type: "application/json" });
-                                    setRestoringBackupFilename(null);
                                     setRestoreStatus("Restoring...");
                                     await state.restoreBackup(file, savedRestorePassword);
+                                    setRestoringBackupFilename(null);
                                     setRestoreStatus("Backup restored successfully!");
                                     setSavedRestorePassword("");
                                     setTimeout(() => setRestoreStatus(null), 3000);
                                   } catch (err: any) {
+                                    // Keep the password row open so the error sits next to the
+                                    // input, and clear the stuck "Restoring..." status.
+                                    setRestoreStatus(null);
                                     setSavedRestoreError(err.message);
                                   }
                                 }
@@ -596,13 +606,14 @@ export function SettingsView() {
                                 try {
                                   const content = await readSavedBackup(b.filename);
                                   const file = new File([content], b.filename, { type: "application/json" });
-                                  setRestoringBackupFilename(null);
                                   setRestoreStatus("Restoring...");
                                   await state.restoreBackup(file, savedRestorePassword);
+                                  setRestoringBackupFilename(null);
                                   setRestoreStatus("Backup restored successfully!");
                                   setSavedRestorePassword("");
                                   setTimeout(() => setRestoreStatus(null), 3000);
                                 } catch (err: any) {
+                                  setRestoreStatus(null);
                                   setSavedRestoreError(err.message);
                                 }
                               }}
