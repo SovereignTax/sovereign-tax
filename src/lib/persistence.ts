@@ -8,6 +8,7 @@ import {
   exists,
   mkdir,
   remove,
+  rename,
   BaseDirectory,
 } from "@tauri-apps/plugin-fs";
 
@@ -97,21 +98,28 @@ async function ensureDataDir(): Promise<void> {
   }
 }
 
-/** Write data to a file in $APPDATA/ */
+/** Write data to a file in $APPDATA/ — atomically, via temp file + rename.
+ *  Writing in place meant a crash/power loss mid-write left a truncated file
+ *  that failed decryption and bricked unlock entirely. */
 async function fsWrite(filename: string, data: string): Promise<void> {
   await ensureDataDir();
-  await writeTextFile(filename, data, { baseDir: BaseDirectory.AppData });
+  const tmp = filename + ".tmp";
+  await writeTextFile(tmp, data, { baseDir: BaseDirectory.AppData });
+  await rename(tmp, filename, {
+    oldPathBaseDir: BaseDirectory.AppData,
+    newPathBaseDir: BaseDirectory.AppData,
+  });
 }
 
-/** Read data from a file in $APPDATA/. Returns null if file doesn't exist. */
+/** Read data from a file in $APPDATA/. Returns null ONLY if the file doesn't exist.
+ *  Read failures (permissions, disk errors) propagate — swallowing them as "file
+ *  absent" made unlock silently succeed with an EMPTY dataset, and the next save
+ *  then overwrote the real data file. A loud unlock failure is recoverable;
+ *  a silent overwrite is not. */
 async function fsRead(filename: string): Promise<string | null> {
-  try {
-    const fileExists = await exists(filename, { baseDir: BaseDirectory.AppData });
-    if (!fileExists) return null;
-    return await readTextFile(filename, { baseDir: BaseDirectory.AppData });
-  } catch {
-    return null;
-  }
+  const fileExists = await exists(filename, { baseDir: BaseDirectory.AppData });
+  if (!fileExists) return null;
+  return await readTextFile(filename, { baseDir: BaseDirectory.AppData });
 }
 
 /** Remove a file from $APPDATA/. Silent on failure. */

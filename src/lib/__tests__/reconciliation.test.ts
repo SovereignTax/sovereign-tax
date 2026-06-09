@@ -186,3 +186,55 @@ describe("reconcileTransfers: exchange balance normalization", () => {
     expect(result.exchangeBalances).toHaveLength(3);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// E14 — proportional fee guards (Batch E audit 2026-06-09)
+// ═══════════════════════════════════════════════════════
+
+describe("E14 — proportional fee tolerance", () => {
+  it("does NOT match when implied fee eats most of a small transfer", () => {
+    // out 0.0006 → in 0.0002: 67% "fee" — absolute threshold alone called this Confident
+    const out = transferOut("2024-03-01", 0.0006, { exchange: "Coinbase" });
+    const inp = transferIn("2024-03-01", 0.0002, { exchange: "Kraken" });
+    const result = reconcileTransfers([out, inp]);
+    expect(result.matchedTransfers).toHaveLength(0);
+    expect(result.unmatchedTransferOuts).toHaveLength(1);
+    expect(result.unmatchedTransferIns).toHaveLength(1);
+  });
+
+  it("does NOT match an 80% 'fee' on a 0.005 transfer", () => {
+    const out = transferOut("2024-03-01", 0.005, { exchange: "Coinbase" });
+    const inp = transferIn("2024-03-01", 0.001, { exchange: "Kraken" });
+    const result = reconcileTransfers([out, inp]);
+    expect(result.matchedTransfers).toHaveLength(0);
+  });
+
+  it("still matches a realistic miner fee on a small transfer (Flagged, not Confident)", () => {
+    // out 0.002 → in 0.0018: 10% fee — plausible on-chain, but too large a share for Confident
+    const out = transferOut("2024-03-01", 0.002, { exchange: "Coinbase" });
+    const inp = transferIn("2024-03-01", 0.0018, { exchange: "Kraken" });
+    const result = reconcileTransfers([out, inp]);
+    expect(result.matchedTransfers).toHaveLength(1);
+    expect(result.matchedTransfers[0].confidence).toBe(MatchConfidence.Flagged);
+  });
+
+  it("normal large transfer with small absolute fee stays Confident", () => {
+    const out = transferOut("2024-03-01", 1.0, { exchange: "Coinbase" });
+    const inp = transferIn("2024-03-01", 0.9998, { exchange: "Kraken" });
+    const result = reconcileTransfers([out, inp]);
+    expect(result.matchedTransfers).toHaveLength(1);
+    expect(result.matchedTransfers[0].confidence).toBe(MatchConfidence.Confident);
+  });
+
+  it("matches chronologically: earlier out claims the in it precedes", () => {
+    // Two outs could claim the same in; the chronologically sensible pairing wins
+    // regardless of array order.
+    const outLater = transferOut("2024-03-05", 0.5, { exchange: "Coinbase" });
+    const outEarlier = transferOut("2024-03-01", 0.5, { exchange: "Coinbase" });
+    const inp = transferIn("2024-03-01", 0.4999, { exchange: "Kraken" });
+    // Later out listed FIRST in the array — without sorting it would claim the in
+    const result = reconcileTransfers([outLater, outEarlier, inp]);
+    expect(result.matchedTransfers).toHaveLength(1);
+    expect(result.matchedTransfers[0].transferOut.id).toBe(outEarlier.id);
+  });
+});

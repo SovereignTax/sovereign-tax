@@ -24,6 +24,10 @@ export function AddTransactionView() {
   const [fmvLoading, setFmvLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Double-submit lock: addTransaction awaits PBKDF2/AES encryption (slow on large
+  // datasets) — without this, two rapid clicks both pass the duplicate check against
+  // pre-commit state and commit the transaction twice.
+  const [isAdding, setIsAdding] = useState(false);
 
   // Duplicate warning state
   const [pendingTxn, setPendingTxn] = useState<Transaction | null>(null);
@@ -146,7 +150,14 @@ export function AddTransactionView() {
     const isDonation = type === TransactionType.Donation;
     const price = isDonation ? 0 : (useLive ? state.priceState.currentPrice! : Number(priceStr));
     const sim = simulateSale(amount, price, currentLots, AccountingMethod.SpecificID, selections, walletFilter, dateISO);
-    if (!sim) { setError("Not enough BTC from selected lots"); return; }
+    if (!sim) {
+      // Clear the selections too — leaving them set would enable "Add Transaction"
+      // (gated on lotSelections) while no preview exists, so the transaction would
+      // commit WITHOUT its Specific ID election and silently calculate as FIFO.
+      setLotSelections(null);
+      setError("Not enough BTC from selected lots");
+      return;
+    }
     setDispositionPreview(sim);
   };
 
@@ -158,30 +169,38 @@ export function AddTransactionView() {
     await state.addTransaction(txn);
 
     // For Specific ID dispositions (Sell or Donation), save the SaleRecord as a permanent lot election
-    if (dispositionMethod === AccountingMethod.SpecificID && dispositionPreview && lotSelections) {
-      if (txn.transactionType === TransactionType.Donation) {
-        const price = useLive ? state.priceState.currentPrice! : Number(priceStr);
-        const saleRecord: SaleRecord = {
-          ...dispositionPreview,
-          id: crypto.randomUUID(),
-          saleDate: txn.date,
-          isDonation: true,
-          donationFmvPerBTC: price,
-          donationFmvTotal: dispositionPreview.amountSold * price,
-          method: AccountingMethod.SpecificID,
-          sourceTransactionId: txn.id,
-        };
-        await state.recordSale(saleRecord);
-      } else if (txn.transactionType === TransactionType.Sell) {
-        const saleRecord: SaleRecord = {
-          ...dispositionPreview,
-          id: crypto.randomUUID(),
-          saleDate: txn.date,
-          method: AccountingMethod.SpecificID,
-          sourceTransactionId: txn.id,
-        };
-        await state.recordSale(saleRecord);
+    try {
+      if (dispositionMethod === AccountingMethod.SpecificID && dispositionPreview && lotSelections) {
+        if (txn.transactionType === TransactionType.Donation) {
+          const price = useLive ? state.priceState.currentPrice! : Number(priceStr);
+          const saleRecord: SaleRecord = {
+            ...dispositionPreview,
+            id: crypto.randomUUID(),
+            saleDate: txn.date,
+            isDonation: true,
+            donationFmvPerBTC: price,
+            donationFmvTotal: dispositionPreview.amountSold * price,
+            method: AccountingMethod.SpecificID,
+            sourceTransactionId: txn.id,
+          };
+          await state.recordSale(saleRecord);
+        } else if (txn.transactionType === TransactionType.Sell) {
+          const saleRecord: SaleRecord = {
+            ...dispositionPreview,
+            id: crypto.randomUUID(),
+            saleDate: txn.date,
+            method: AccountingMethod.SpecificID,
+            sourceTransactionId: txn.id,
+          };
+          await state.recordSale(saleRecord);
+        }
       }
+    } catch {
+      // The transaction itself is committed at this point — be precise about what failed
+      throw new Error(
+        "The transaction was added, but saving its Specific ID lot election failed. " +
+        "It will calculate as FIFO until you re-assign lots via Edit Lots in the Transactions view."
+      );
     }
 
     // Clear saved lot selections after any disposition — lots may have been consumed by FIFO or Specific ID
@@ -199,6 +218,7 @@ export function AddTransactionView() {
   };
 
   const handleAdd = async () => {
+    if (isAdding) return;
     setError(null); setSuccess(null);
     const amount = Number(amountStr);
     if (!amount || amount <= 0) { setError("Enter a valid BTC amount"); return; }
@@ -243,7 +263,14 @@ export function AddTransactionView() {
       return;
     }
 
-    await commitTransaction(txn);
+    setIsAdding(true);
+    try {
+      await commitTransaction(txn);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add transaction. Please try again.");
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   return (
@@ -349,14 +376,14 @@ export function AddTransactionView() {
         {/* Total */}
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Total USD:</span>
-          <input className="input w-48" placeholder="Auto-calculated" value={totalStr} onChange={(e) => setTotalStr(e.target.value)} />
+          <input className="input w-48" placeholder="Auto-calculated" value={totalStr} onChange={(e) => { setTotalStr(e.target.value); setDispositionPreview(null); setLotSelections(null); }} />
           <span className="text-xs text-gray-400">(optional)</span>
         </div>
 
         {/* Fee */}
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Fee USD:</span>
-          <input className="input w-48" placeholder="0.00" value={feeStr} onChange={(e) => setFeeStr(e.target.value)} />
+          <input className="input w-48" placeholder="0.00" value={feeStr} onChange={(e) => { setFeeStr(e.target.value); setDispositionPreview(null); setLotSelections(null); }} />
           <span className="text-xs text-gray-400">(optional — {type === TransactionType.Donation ? "on-chain/network fee. Enter total BTC sent (including fee) as the amount above so balances stay accurate" : "added to cost basis for buys, subtracted from proceeds for sells"})</span>
         </div>
 
@@ -406,10 +433,10 @@ export function AddTransactionView() {
         <div className="flex gap-3 pt-2">
           <button
             className="btn-primary"
-            disabled={isSpecificID && !lotSelections}
+            disabled={isAdding || (isSpecificID && (!lotSelections || !dispositionPreview))}
             title={isSpecificID && !lotSelections ? "Select lots first using the button to the right" : undefined}
             onClick={async () => { await handleAdd(); }}
-          >➕ Add Transaction</button>
+          >{isAdding ? "Adding…" : "➕ Add Transaction"}</button>
           {isDisposition && (
             <button className="btn-secondary" onClick={previewDispositionLots}>
               {isSpecificID ? "🔍 Select Lots" : "🔍 Preview Lot Consumption"}
@@ -562,10 +589,23 @@ export function AddTransactionView() {
             <div className="flex gap-3 justify-end">
               <button className="btn-secondary text-sm" onClick={() => { setPendingTxn(null); setDuplicateMatches([]); }}>Cancel</button>
               <button
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                onClick={async () => { await commitTransaction(pendingTxn); }}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                disabled={isAdding}
+                onClick={async () => {
+                  if (isAdding) return;
+                  setIsAdding(true);
+                  try {
+                    await commitTransaction(pendingTxn);
+                  } catch (err) {
+                    setPendingTxn(null);
+                    setDuplicateMatches([]);
+                    setError(err instanceof Error ? err.message : "Failed to add transaction. Please try again.");
+                  } finally {
+                    setIsAdding(false);
+                  }
+                }}
               >
-                Add Anyway
+                {isAdding ? "Adding…" : "Add Anyway"}
               </button>
             </div>
           </div>

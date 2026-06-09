@@ -61,9 +61,12 @@ let lastHistoricalCall = 0;
  * Rate limited to 1 call per 2 seconds.
  */
 export async function fetchHistoricalPrice(date: Date): Promise<number | null> {
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = date.getFullYear();
+  // UTC components: callers pass `new Date("YYYY-MM-DD")` from a date picker, which
+  // parses as UTC midnight. Local getters would return the PREVIOUS day in any
+  // negative-offset timezone — querying CoinGecko for the wrong day's price.
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = date.getUTCFullYear();
   const dateKey = `${yyyy}-${mm}-${dd}`;
 
   // Check cache first
@@ -91,9 +94,11 @@ export async function fetchHistoricalPrice(date: Date): Promise<number | null> {
     const price = data.market_data?.current_price?.usd;
     if (!price) return null;
 
-    // Cache the result
-    cache[dateKey] = price;
-    savePriceCache(cache);
+    // Cache the result — re-load first so a concurrent fetch's entry isn't dropped
+    // (both calls load the cache before the rate-limit wait)
+    const freshCache = loadPriceCache();
+    freshCache[dateKey] = price;
+    savePriceCache(freshCache);
 
     return price;
   } catch (err) {

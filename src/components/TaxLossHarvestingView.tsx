@@ -54,7 +54,10 @@ export function TaxLossHarvestingView() {
   // Without this filter, "Net After Harvesting" mixed per-wallet harvestable losses
   // with all-wallet realized gains, encouraging exactly the universal-pooling
   // that Treasury Reg. §1.1012-1(j) (2025+) prohibits. See BUG-FIX-PLAN.md B4.
-  const salesThisYear = result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
+  // Exclude donations: gainLoss is already 0 on donation records, but the per-wallet
+  // branch below recomputes per-lot proceeds from salePricePerBTC (0 for donations),
+  // which would count each donation's full cost basis as a phantom realized loss.
+  const salesThisYear = result.sales.filter((s) => !s.isDonation && new Date(s.saleDate).getFullYear() === selectedYear);
   const realizedGains = (() => {
     if (!selectedWallet) {
       return salesThisYear.reduce((a, s) => a + s.gainLoss, 0);

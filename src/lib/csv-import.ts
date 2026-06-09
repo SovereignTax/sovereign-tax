@@ -537,9 +537,39 @@ function findStatusColumn(headers: string[]): string | null {
 }
 
 /** Read headers from CSV content */
+/** Split CSV content into records, respecting quoted fields (RFC 4180).
+ *  A newline inside a quoted field (e.g. a multi-line Coinbase note) is part of the
+ *  field, NOT a record boundary — a naive split(/\r?\n/) tears such rows apart,
+ *  importing a truncated fragment and skipping the rest. Embedded newlines are
+ *  collapsed to spaces so downstream single-line parsing stays valid. */
+export function splitCSVRecords(content: string): string[] {
+  const records: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === '"') {
+      // Toggling handles escaped quotes ("") too — they toggle twice, net unchanged
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if (!inQuotes && (ch === "\n" || ch === "\r")) {
+      if (ch === "\r" && content[i + 1] === "\n") i++;
+      records.push(current);
+      current = "";
+    } else if (inQuotes && (ch === "\n" || ch === "\r")) {
+      if (ch === "\r" && content[i + 1] === "\n") i++;
+      current += " ";
+    } else {
+      current += ch;
+    }
+  }
+  records.push(current);
+  return records;
+}
+
 export function readHeaders(content: string): string[] | null {
   const cleaned = content.startsWith("\uFEFF") ? content.slice(1) : content;
-  const lines = cleaned.split(/\r?\n/).filter((l) => l.trim());
+  const lines = splitCSVRecords(cleaned).filter((l) => l.trim());
   if (lines.length === 0) return null;
   const headerIdx = findHeaderLineIndex(lines);
   return parseCSVLine(lines[headerIdx]);
@@ -552,7 +582,7 @@ export function parseCSVContent(
   mapping: ColumnMapping
 ): CSVImportResult {
   const cleaned = content.startsWith("\uFEFF") ? content.slice(1) : content;
-  const lines = cleaned.split(/\r?\n/).filter((l) => l.trim());
+  const lines = splitCSVRecords(cleaned).filter((l) => l.trim());
 
   if (lines.length <= 1) {
     return { transactions: [], skippedRows: [], detectedMapping: mapping, headers: [] };

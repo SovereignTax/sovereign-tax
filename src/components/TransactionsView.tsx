@@ -888,11 +888,14 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
     if (amount !== txn.amountBTC) updates.amountBTC = amount;
 
     // Price/total: compare against initial display strings to avoid fee back-out/reapply drift.
-    // Only include if the user actually changed the input value.
-    if (priceStr !== initPriceStr || feeStr !== initFeeStr || amountStr !== txn.amountBTC.toFixed(8)) {
+    // Only include if the user actually changed the input value — OR changed the transaction
+    // type: fee semantics are type-directional (Buy stores total+fee, Sell stores total−fee),
+    // so a Buy→Sell flip with an unchanged fee still changes the stored totals.
+    const typeChanged = type !== txn.transactionType;
+    if (typeChanged || priceStr !== initPriceStr || feeStr !== initFeeStr || amountStr !== txn.amountBTC.toFixed(8)) {
       if (adjustedPrice !== txn.pricePerBTC) updates.pricePerBTC = adjustedPrice;
     }
-    if (totalStr !== initTotalStr || feeStr !== initFeeStr || amountStr !== txn.amountBTC.toFixed(8)) {
+    if (typeChanged || totalStr !== initTotalStr || feeStr !== initFeeStr || amountStr !== txn.amountBTC.toFixed(8)) {
       if (adjustedTotal !== txn.totalUSD) updates.totalUSD = adjustedTotal;
     }
 

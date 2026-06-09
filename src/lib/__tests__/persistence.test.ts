@@ -11,6 +11,7 @@ const mockReadTextFile = vi.fn();
 const mockExists = vi.fn();
 const mockMkdir = vi.fn();
 const mockRemove = vi.fn();
+const mockRename = vi.fn();
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: (...args: any[]) => mockReadTextFile(...args),
@@ -18,6 +19,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   exists: (...args: any[]) => mockExists(...args),
   mkdir: (...args: any[]) => mockMkdir(...args),
   remove: (...args: any[]) => mockRemove(...args),
+  rename: (...args: any[]) => mockRename(...args),
   BaseDirectory: { AppData: 24 },
 }));
 
@@ -69,6 +71,7 @@ beforeEach(() => {
   disableTauri();
   mockWriteTextFile.mockReset();
   mockReadTextFile.mockReset();
+  mockRename.mockReset().mockResolvedValue(undefined);
   mockExists.mockReset().mockResolvedValue(false);
   mockMkdir.mockReset();
   mockRemove.mockReset();
@@ -320,10 +323,11 @@ describe("Tauri filesystem routing", () => {
 
     await persistence.saveTransactionsAsync([{ id: "t1" }] as any);
 
-    // Should have written to filesystem
+    // Should have written to filesystem — atomically: temp file, then rename over
     expect(mockWriteTextFile).toHaveBeenCalled();
     const [filename] = mockWriteTextFile.mock.calls[0];
-    expect(filename).toBe("data/transactions.dat");
+    expect(filename).toBe("data/transactions.dat.tmp");
+    expect(mockRename).toHaveBeenCalledWith("data/transactions.dat.tmp", "data/transactions.dat", expect.anything());
 
     // localStorage should NOT have the transactions key
     expect(lsStore["sovereign-tax-transactions"]).toBeUndefined();
@@ -385,7 +389,7 @@ describe("Tauri filesystem routing", () => {
     // Should have written to filesystem
     expect(mockWriteTextFile).toHaveBeenCalled();
     const writtenFilename = mockWriteTextFile.mock.calls.find(
-      (c: any[]) => c[0] === "data/transactions.dat"
+      (c: any[]) => c[0] === "data/transactions.dat.tmp"
     );
     expect(writtenFilename).toBeDefined();
 
@@ -407,7 +411,7 @@ describe("Tauri filesystem routing", () => {
 
     // Should NOT have written to filesystem (data already there)
     const txnWrite = mockWriteTextFile.mock.calls.find(
-      (c: any[]) => c[0] === "data/transactions.dat"
+      (c: any[]) => c[0] === "data/transactions.dat.tmp"
     );
     expect(txnWrite).toBeUndefined();
 

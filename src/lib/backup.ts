@@ -193,13 +193,28 @@ async function parseLegacyBackup(bundle: LegacyBackupBundle): Promise<BackupPars
   };
 }
 
-/** Validate that backup data has required fields */
+/** Validate that backup data has required fields and default the optional sections.
+ *  Defaulting matters: restoring a payload with `importHistory: undefined` would
+ *  encrypt the string "undefined"/"" into storage, and JSON.parse on the next unlock
+ *  throws inside loadEncrypted — bricking every subsequent unlock. */
 function validateBackupData(data: BackupData): void {
   if (!Array.isArray(data.transactions)) {
     throw new Error("Invalid backup: missing transactions array");
   }
   if (!Array.isArray(data.recordedSales)) {
     throw new Error("Invalid backup: missing recorded sales array");
+  }
+  if (!data.mappings || typeof data.mappings !== "object" || Array.isArray(data.mappings)) {
+    data.mappings = {};
+  }
+  if (!data.importHistory || typeof data.importHistory !== "object" || Array.isArray(data.importHistory)) {
+    data.importHistory = {};
+  }
+  if (!Array.isArray(data.auditLog)) {
+    data.auditLog = [];
+  }
+  if (!data.preferences || typeof data.preferences !== "object") {
+    data.preferences = {} as Preferences;
   }
 }
 

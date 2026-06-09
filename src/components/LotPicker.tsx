@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Lot, LotSelection } from "../lib/models";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { daysBetween, isMoreThanOneYear, optimizeLotSelections } from "../lib/cost-basis";
@@ -52,6 +52,23 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
+  // Prune selections when the lots prop shrinks (e.g. "Show lots from all wallets"
+  // toggled off). Without this, hidden lots stay silently selected — no checkbox
+  // remains to remove them, yet Confirm would pass them into the saved election.
+  const lotIdKey = useMemo(() => availableLots.map((l) => l.id).sort().join("|"), [availableLots]);
+  useEffect(() => {
+    const ids = new Set(lotIdKey.split("|"));
+    const prune = <T,>(prev: Record<string, T>): Record<string, T> => {
+      const stale = Object.keys(prev).filter((id) => !ids.has(id));
+      if (stale.length === 0) return prev;
+      const copy = { ...prev };
+      for (const id of stale) delete copy[id];
+      return copy;
+    };
+    setSelections(prune);
+    setInputTexts(prune);
+  }, [lotIdKey]);
+
   const totalSelected = Object.values(selections).reduce((a, b) => a + b, 0);
   const remaining = targetAmount - totalSelected;
   const isValid = allowPartial
@@ -76,14 +93,18 @@ export function LotPicker({ lots, targetAmount, saleDate, salePrice, isDonation,
   };
 
   const updateAmount = (lotId: string, value: string, maxAvailable: number) => {
-    // Always update the display string so the user can type freely
-    setInputTexts((prev) => ({ ...prev, [lotId]: value }));
     // Parse and commit to numeric selections when valid
     const num = Number(value);
     if (!isNaN(num) && num >= 0) {
       const clamped = Math.min(num, maxAvailable);
       setSelections((prev) => ({ ...prev, [lotId]: clamped }));
+      // When the typed value exceeds the lot's available BTC, show the clamped value —
+      // otherwise the box displays an amount larger than what will actually be used.
+      setInputTexts((prev) => ({ ...prev, [lotId]: clamped < num ? clamped.toFixed(8) : value }));
+      return;
     }
+    // Invalid/intermediate input ("0.", "") — keep the display string so typing flows
+    setInputTexts((prev) => ({ ...prev, [lotId]: value }));
   };
 
   const handleAmountBlur = (lotId: string) => {

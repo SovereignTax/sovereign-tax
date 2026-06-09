@@ -43,6 +43,12 @@ export interface ReconciliationResult {
  */
 const FEE_AUTO_THRESHOLD = 0.0005; // ~$50 at $100k/BTC — normal miner fee range
 const FEE_MAX_CEILING = 0.01;      // ~$1000 at $100k/BTC — above this is likely not the same transfer
+// Proportional guards: miner fees are absolute, but when the implied "fee" eats a large
+// fraction of the sent amount, the two transactions are almost certainly NOT the same
+// transfer. Without these, out 0.0006 → in 0.0002 (a 67% "fee") matched as Confident
+// and suggestSourceWallet propagated the wrong source wallet into engine re-tagging.
+const FEE_MAX_FRACTION = 0.25;       // any match: implied fee must be ≤ 25% of amount sent
+const FEE_CONFIDENT_FRACTION = 0.05; // Confident: implied fee must be ≤ 5% of amount sent
 const NEGATIVE_FEE_TOLERANCE = 0.00000001; // 1 sat — allow for rounding in "in > out" edge cases
 const MAX_DAYS_WINDOW = 7;
 
@@ -53,12 +59,17 @@ export function daysBetweenDates(d1: string, d2: string): number {
 }
 
 export function reconcileTransfers(transactions: Transaction[]): ReconciliationResult {
+  // Sort chronologically: matching is greedy per transfer-out, so iteration order
+  // decides who claims a contested transfer-in. Array order (import order) is
+  // arbitrary — date order makes matching deterministic and sensible.
   const transferOuts = transactions
     .filter((t) => t.transactionType === TransactionType.TransferOut)
-    .map((t) => ({ ...t }));
+    .map((t) => ({ ...t }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const transferIns = transactions
     .filter((t) => t.transactionType === TransactionType.TransferIn)
-    .map((t) => ({ ...t }));
+    .map((t) => ({ ...t }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const matchedTransfers: TransferPair[] = [];
   const usedOuts = new Set<string>();
@@ -83,8 +94,9 @@ export function reconcileTransfers(transactions: Transaction[]): ReconciliationR
       // Reject if "in" is more than "out" (beyond rounding tolerance)
       if (impliedFee < -NEGATIVE_FEE_TOLERANCE) continue;
 
-      // Reject if implied fee exceeds ceiling
+      // Reject if implied fee exceeds the absolute ceiling or the proportional cap
       if (impliedFee > FEE_MAX_CEILING) continue;
+      if (out.amountBTC > 0 && impliedFee > out.amountBTC * FEE_MAX_FRACTION) continue;
 
       const days = daysBetweenDates(out.date, inp.date);
       if (days > MAX_DAYS_WINDOW) continue;
@@ -103,9 +115,10 @@ export function reconcileTransfers(transactions: Transaction[]): ReconciliationR
 
     if (bestMatch) {
       const impliedFee = Math.max(0, out.amountBTC - bestMatch.amountBTC);
-      const confidence = impliedFee < FEE_AUTO_THRESHOLD
-        ? MatchConfidence.Confident
-        : MatchConfidence.Flagged;
+      const confidence =
+        impliedFee < FEE_AUTO_THRESHOLD && impliedFee <= out.amountBTC * FEE_CONFIDENT_FRACTION
+          ? MatchConfidence.Confident
+          : MatchConfidence.Flagged;
 
       usedOuts.add(out.id);
       usedIns.add(bestMatch.id);
