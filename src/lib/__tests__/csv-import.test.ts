@@ -1043,3 +1043,65 @@ describe("decodeCSVBuffer", () => {
     expect(result.encoding).toBe("utf-8");
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// BATCH E FIXES (full-codebase audit 2026-06-09)
+// ═══════════════════════════════════════════════════════
+
+describe("E3 — date-only values parse as LOCAL midnight (tax-year correctness)", () => {
+  it("date-only ISO lands on the local calendar day", () => {
+    const d = parseDate("2025-01-01");
+    expect(d).not.toBeNull();
+    // Local components — in any timezone this must be Jan 1 2025 locally,
+    // so local-getFullYear() year filters put it in tax year 2025.
+    expect(d!.getFullYear()).toBe(2025);
+    expect(d!.getMonth()).toBe(0);
+    expect(d!.getDate()).toBe(1);
+  });
+
+  it("date-only ISO and slash format agree on the same calendar day", () => {
+    const iso = parseDate("2025-01-01");
+    const slash = parseDate("01/01/2025");
+    expect(iso!.getTime()).toBe(slash!.getTime());
+  });
+
+  it("full ISO timestamps still parse exactly (UTC)", () => {
+    const d = parseDate("2024-06-15T10:30:45.123Z");
+    expect(d!.toISOString()).toBe("2024-06-15T10:30:45.123Z");
+  });
+
+  it("slash format with time component parses as local time", () => {
+    const d = parseDate("03/15/2025 14:30:00");
+    expect(d!.getFullYear()).toBe(2025);
+    expect(d!.getMonth()).toBe(2);
+    expect(d!.getDate()).toBe(15);
+    expect(d!.getHours()).toBe(14);
+  });
+});
+
+describe("E13a — European decimal commas parse correctly (no 10–100× corruption)", () => {
+  it("single decimal comma", () => {
+    expect(parseDecimal("0,5")).toBe(0.5);
+    expect(parseDecimal("1234,56")).toBe(1234.56);
+    expect(parseDecimal("0,00012345")).toBe(0.00012345);
+  });
+
+  it("European thousands-dot with decimal comma", () => {
+    expect(parseDecimal("1.234,56")).toBe(1234.56);
+    expect(parseDecimal("1.234.567,89")).toBe(1234567.89);
+  });
+
+  it("US formats unchanged", () => {
+    expect(parseDecimal("1,234.56")).toBe(1234.56);
+    expect(parseDecimal("1,000,000")).toBe(1000000);
+    expect(parseDecimal("1,234")).toBe(1234); // ambiguous → US thousands default
+  });
+
+  it("negative decimal-comma values", () => {
+    expect(parseDecimal("-42,5")).toBe(-42.5);
+  });
+
+  it("malformed comma patterns rejected", () => {
+    expect(parseDecimal("1,23,45")).toBeNull();
+  });
+});

@@ -262,6 +262,16 @@ export function parseDate(dateStr: string): Date | null {
     }
   }
 
+  // Date-only ISO (e.g. "2025-01-01"): the JS spec parses this as UTC midnight, which is
+  // the previous LOCAL day in any negative-offset timezone — a Jan 1 sale would land in the
+  // prior tax year (all year filters use local getFullYear). Parse as LOCAL midnight instead,
+  // consistent with how slash-format dates ("01/01/2025") have always parsed.
+  const dateOnlyIso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (dateOnlyIso) {
+    const localDate = new Date(Number(dateOnlyIso[1]), Number(dateOnlyIso[2]) - 1, Number(dateOnlyIso[3]));
+    if (!isNaN(localDate.getTime())) return localDate;
+  }
+
   // Try ISO 8601 first (most common)
   const isoDate = new Date(trimmed);
   if (!isNaN(isoDate.getTime())) return isoDate;
@@ -287,7 +297,9 @@ export function parseDate(dateStr: string): Date | null {
   const mdyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(.*)$/);
   if (mdyMatch) {
     const [, month, day, year, rest] = mdyMatch;
-    const isoStr = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}${rest.trim() ? "T" + rest.trim() : ""}`;
+    // Always include a time component so the string never parses as date-only ISO
+    // (which would be UTC midnight — see the local-midnight comment above).
+    const isoStr = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${rest.trim() || "00:00:00"}`;
     const mdyDate = new Date(isoStr);
     if (!isNaN(mdyDate.getTime())) return mdyDate;
   }
@@ -295,15 +307,40 @@ export function parseDate(dateStr: string): Date | null {
   return null;
 }
 
-/** Parse a decimal number from string, handling $, commas, unit suffixes, etc */
+/** Parse a decimal number from string, handling $, commas, unit suffixes, etc.
+ *  Distinguishes US thousands grouping ("1,234.56") from European decimal commas
+ *  ("1234,56" / "1.234,56") — stripping all commas unconditionally turned "0,5" BTC
+ *  into 5 BTC (a silent 10–100× corruption). */
 export function parseDecimal(str: string): number | null {
-  const cleaned = str
+  let cleaned = str
     .trim()
     .replace(/\$/g, "")
-    .replace(/,/g, "")
     .replace(/\s*(BTC|XBT|USD|USDT|USDC|SAT|SATS)\s*$/i, "")
     .replace(/\s/g, "");
   if (!cleaned) return null;
+
+  const hasComma = cleaned.includes(",");
+  const hasDot = cleaned.includes(".");
+  if (hasComma && hasDot) {
+    // Both separators present: the rightmost one is the decimal point.
+    if (cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")) {
+      cleaned = cleaned.replace(/\./g, "").replace(",", "."); // European: 1.234,56
+    } else {
+      cleaned = cleaned.replace(/,/g, ""); // US: 1,234.56
+    }
+  } else if (hasComma) {
+    // Comma only. Groups of exactly 3 digits after each comma = thousands grouping
+    // ("1,234" / "1,000,000"). Anything else ("0,5" / "1234,56" / "0,00012345") is a
+    // decimal comma. Ambiguous values like "1,234" default to thousands (US exports).
+    if (/^\d{1,3}(,\d{3})+$/.test(cleaned.replace(/^[-+]/, ""))) {
+      cleaned = cleaned.replace(/,/g, "");
+    } else if ((cleaned.match(/,/g) || []).length === 1) {
+      cleaned = cleaned.replace(",", ".");
+    } else {
+      return null; // multiple commas not in 3-digit groups — malformed
+    }
+  }
+
   const num = Number(cleaned);
   return isNaN(num) ? null : num;
 }

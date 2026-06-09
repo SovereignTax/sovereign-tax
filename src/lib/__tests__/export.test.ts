@@ -174,25 +174,39 @@ describe("exportTurboTaxTXF", () => {
     expect(txf).toContain("ASovereign Tax");
   });
 
-  it("uses code 323 for short-term", () => {
+  // TXF v042 reference codes: 321 = ST gain/loss, 323 = LT gain/loss (324 is "LT — other").
+  // A previous version emitted 323/324, which made TurboTax import every ST sale as LT.
+  it("uses code 321 for short-term", () => {
     const txf = exportTurboTaxTXF([makeSaleRecord()], 2024);
-    expect(txf).toContain("N323");
+    expect(txf).toContain("N321");
+    expect(txf).not.toContain("N323");
   });
 
-  it("uses code 324 for long-term", () => {
+  it("uses code 323 for long-term", () => {
     const sale = makeSaleRecord({
       isLongTerm: true,
       lotDetails: [makeLotDetail({ isLongTerm: true })],
     });
     const txf = exportTurboTaxTXF([sale], 2024);
-    expect(txf).toContain("N324");
+    expect(txf).toContain("N323");
+    expect(txf).not.toContain("N321");
+    expect(txf).not.toContain("N324");
+  });
+
+  it("formats all dates as mm/dd/yyyy per TXF spec", () => {
+    const txf = exportTurboTaxTXF([makeSaleRecord()], 2024);
+    const dateLines = txf.split("\n").filter((l) => l.startsWith("D"));
+    expect(dateLines.length).toBeGreaterThan(0);
+    for (const line of dateLines) {
+      expect(line).toMatch(/^D\d{2}\/\d{2}\/\d{4}$/);
+    }
   });
 
   it("excludes donations", () => {
     const txf = exportTurboTaxTXF([makeDonationRecord()], 2024);
     // Should only have the header, no data records
+    expect(txf).not.toContain("N321");
     expect(txf).not.toContain("N323");
-    expect(txf).not.toContain("N324");
   });
 });
 

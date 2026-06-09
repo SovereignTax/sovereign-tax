@@ -192,6 +192,13 @@ export function calculate(
         const sale = processSale(trans, lots, effectiveMethod, lotSelections ?? undefined, warnings);
         if (sale) {
           sales.push(sale);
+          if (sale.amountSold < trans.amountBTC - 1e-8) {
+            warnings.push({
+              message: `Sale on ${formatDateShort(trans.date)}: only ${sale.amountSold.toFixed(8)} of ${trans.amountBTC.toFixed(8)} BTC could be matched to available lots. ` +
+                `Proceeds and gains for the unmatched portion are NOT included in this report. To fix: import the missing acquisition history (buys or transfers in) that covers this sale.`,
+              txnDate: trans.date,
+            });
+          }
         } else {
           warnings.push({ message: `No lots available for sale on ${formatDateShort(trans.date)}`, txnDate: trans.date });
         }
@@ -220,6 +227,13 @@ export function calculate(
         const donationResult = processSale(trans, lots, effectiveMethod, lotSelections ?? undefined, warnings, "donation", trans.pricePerBTC);
         if (donationResult) {
           sales.push(donationResult);
+          if (donationResult.amountSold < trans.amountBTC - 1e-8) {
+            warnings.push({
+              message: `Donation on ${formatDateShort(trans.date)}: only ${donationResult.amountSold.toFixed(8)} of ${trans.amountBTC.toFixed(8)} BTC could be matched to available lots. ` +
+                `Cost basis and FMV for the unmatched portion are NOT included in this report. To fix: import the missing acquisition history (buys or transfers in) that covers this donation.`,
+              txnDate: trans.date,
+            });
+          }
         } else {
           warnings.push({ message: `No lots available for donation on ${formatDateShort(trans.date)}`, txnDate: trans.date });
         }
@@ -246,18 +260,34 @@ export function calculate(
               if (lots[idx].remainingBTC > 0 && lots[idx].remainingBTC < 1e-8) {
                 lots[idx].remainingBTC = 0;
               }
-              const retagged = createLot({
-                id: lots[idx].id + "-xfer-" + trans.id.slice(0, 8),
-                purchaseDate: lots[idx].purchaseDate,
-                amountBTC: take,
-                pricePerBTC: lots[idx].pricePerBTC,
-                totalCost: (lots[idx].totalCost / lots[idx].amountBTC) * take,
-                fee: lots[idx].fee ? (lots[idx].fee! / lots[idx].amountBTC) * take : undefined,
-                exchange: lots[idx].exchange,
-                wallet: destWallet,
-                remainingBTC: take,
-              });
-              lots.push(retagged);
+              const splitId = lots[idx].id + "-xfer-" + trans.id.slice(0, 8);
+              const existingIdx = lots.findIndex((l) => l.id === splitId);
+              if (existingIdx !== -1) {
+                // Same source lot split twice by this transfer (Specific ID selection +
+                // FIFO remainder, or a selection listing the lot twice). Extend the
+                // existing split instead of creating a second lot with a duplicate ID —
+                // duplicate IDs break every ID-based lookup (elections, Edit Lots, keys).
+                // Per-BTC basis is identical, so merging is exact.
+                lots[existingIdx].amountBTC += take;
+                lots[existingIdx].remainingBTC += take;
+                lots[existingIdx].totalCost += (lots[idx].totalCost / lots[idx].amountBTC) * take;
+                if (lots[idx].fee) {
+                  lots[existingIdx].fee = (lots[existingIdx].fee ?? 0) + (lots[idx].fee! / lots[idx].amountBTC) * take;
+                }
+              } else {
+                const retagged = createLot({
+                  id: splitId,
+                  purchaseDate: lots[idx].purchaseDate,
+                  amountBTC: take,
+                  pricePerBTC: lots[idx].pricePerBTC,
+                  totalCost: (lots[idx].totalCost / lots[idx].amountBTC) * take,
+                  fee: lots[idx].fee ? (lots[idx].fee! / lots[idx].amountBTC) * take : undefined,
+                  exchange: lots[idx].exchange,
+                  wallet: destWallet,
+                  remainingBTC: take,
+                });
+                lots.push(retagged);
+              }
             }
             remaining -= take;
           };
@@ -331,6 +361,10 @@ export function calculate(
 function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSelection[] | null {
   const selections: LotSelection[] = [];
   const usedLotIds = new Set<string>();
+  // Cumulative BTC claimed per lot across details — two details referencing the same
+  // lot must be checked against remainingBTC as a SUM, not individually, or both pass
+  // and processSale silently caps the second (partial Specific ID fill).
+  const claimedByLot = new Map<string, number>();
   let unmatchedCount = 0;
   const norm = (s: string | undefined) => (s || "").trim().toLowerCase();
 
@@ -338,10 +372,11 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
     if (d.lotId) {
       // New-style: has deterministic lotId — verify lot still exists in current pool
       const lot = currentLots?.find((l) => l.id === d.lotId);
+      const alreadyClaimed = claimedByLot.get(d.lotId) ?? 0;
       if (currentLots && !lot) {
         // Lot no longer exists (deleted Buy, changed transfer routing, etc.)
         unmatchedCount++;
-      } else if (lot && lot.remainingBTC < d.amountBTC - 1e-8) {
+      } else if (lot && lot.remainingBTC < alreadyClaimed + d.amountBTC - 1e-8) {
         // Lot exists but doesn't have enough remaining BTC for this election.
         // This can happen when a TransferIn amount is reduced (lot was split smaller)
         // or a prior sale consumed more than expected. Without this check,
@@ -362,6 +397,7 @@ function extractLotSelections(recorded: SaleRecord, currentLots?: Lot[]): LotSel
       } else {
         selections.push({ lotId: d.lotId, amountBTC: d.amountBTC });
         usedLotIds.add(d.lotId);
+        claimedByLot.set(d.lotId, alreadyClaimed + d.amountBTC);
       }
     } else if (currentLots) {
       // Legacy migration: match by purchaseDate + costBasisPerBTC + exchange
@@ -666,12 +702,19 @@ function processSale(
       .map(({ idx }) => idx);
 
     if (availableIndices.length > 0) {
-      walletMismatch = true;
-      if (warnings) {
-        warnings.push({
-          message: `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`,
-          txnDate: sale.date,
-        });
+      // An explicit Specific ID election is honored exactly from the full pool below —
+      // nothing "falls back", so the global-pool warning would be false. The Specific ID
+      // branch still tags walletMismatch per cross-wallet lot for UI surfacing.
+      const hasExplicitSelections =
+        method === AccountingMethod.SpecificID && lotSelections && lotSelections.length > 0;
+      if (!hasExplicitSelections) {
+        walletMismatch = true;
+        if (warnings) {
+          warnings.push({
+            message: `No lots found in wallet "${saleWallet}" for sale on ${formatDateShort(sale.date)}. Fell back to global lot pool.`,
+            txnDate: sale.date,
+          });
+        }
       }
     }
   }
@@ -767,6 +810,13 @@ function processSale(
     }
   }
 
+  // Epsilon snap: multi-lot fills accumulate IEEE 754 residue (e.g. 0.01 + 0.09 filling a
+  // 0.10 sell leaves ~1e-17 in remainingToSell). Without this snap, a fully-filled sale
+  // takes the partial-proceeds branch below — discarding the user's totalUSD (net of fee)
+  // and overstating the gain by exactly the sale fee.
+  if (remainingToSell > 0 && remainingToSell < 1e-8) {
+    remainingToSell = 0;
+  }
   const amountSold = amountToSell - remainingToSell;
   const isDonation = dispositionType === "donation";
 

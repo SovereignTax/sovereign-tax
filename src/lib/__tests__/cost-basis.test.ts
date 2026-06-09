@@ -201,6 +201,8 @@ describe("FIFO — basic scenarios", () => {
     expect(result.sales[0].amountSold).toBeCloseTo(0.5, 8); // Partial fill
     // Proceeds should be pro-rated: 0.5 * 60000 = 30000
     expect(result.sales[0].totalProceeds).toBeCloseTo(30000, 2);
+    // Partial fills MUST warn — the unmatched portion is missing from the report (E2)
+    expect(result.warnings.some((w) => w.message.includes("could be matched to available lots"))).toBe(true);
   });
 
   it("no lots available → warning, no sale", () => {
@@ -1752,5 +1754,198 @@ describe("D4 — legacy lot match handles fee-bearing Buys", () => {
     expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
     expect(result.sales[0].costBasis).toBeCloseTo(50500, 2);
     expect(result.warnings.find((w) => /could not be applied/i.test(w.message))).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// BATCH E ENGINE FIXES (full-codebase audit 2026-06-09)
+// E2: epsilon snap on remainingToSell — float residue must not flip a full fill
+//     into the partial-proceeds branch (which discards totalUSD and drops the fee)
+// E11: one TransferIn splitting the same lot twice must not create duplicate lot IDs
+// E28: extractLotSelections checks remaining BTC cumulatively across details
+// E29: honored cross-wallet elections must not emit a false "fell back" warning
+// ═══════════════════════════════════════════════════════
+
+describe("E2 — multi-lot full fill keeps net proceeds (fee not dropped)", () => {
+  it("0.01 + 0.09 lots filling a 0.10 sell with fee uses totalUSD (net of fee)", () => {
+    const txns = [
+      buy("2024-01-01", 0.01, 40000),
+      buy("2024-02-01", 0.09, 40000),
+      sell("2024-06-01", 0.1, 60000, { fee: 50 }), // totalUSD = 6000 - 50 = 5950
+    ];
+    const result = calculate(txns, AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].amountSold).toBeCloseTo(0.1, 10);
+    // Net proceeds (5950), NOT gross (6000) — float residue must not trigger pro-rating
+    expect(result.sales[0].totalProceeds).toBeCloseTo(5950, 2);
+    expect(result.sales[0].fee).toBe(50);
+    // And no spurious partial-fill warning
+    expect(result.warnings.some((w) => w.message.includes("could be matched"))).toBe(false);
+  });
+});
+
+describe("E11 — TransferIn never creates duplicate split-lot IDs", () => {
+  it("selection + FIFO remainder splitting the same lot merge into one split lot", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const t1 = {
+      ...transferIn("2024-03-01", 0.8, { wallet: "Ledger", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b1.id, amountBTC: 0.5 }], // FIFO fills remaining 0.3
+    };
+    const result = calculate([b1, t1], AccountingMethod.FIFO);
+
+    const ids = result.lots.map((l) => l.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicate IDs
+
+    const ledgerLots = result.lots.filter((l) => l.wallet === "Ledger" && l.remainingBTC > 0);
+    expect(ledgerLots).toHaveLength(1); // merged, not duplicated
+    expect(ledgerLots[0].remainingBTC).toBeCloseTo(0.8, 8);
+    // Basis carried proportionally: 0.8 of a $30k/BTC lot
+    expect(ledgerLots[0].totalCost).toBeCloseTo(24000, 2);
+    expect(ledgerLots[0].totalCost / ledgerLots[0].amountBTC).toBeCloseTo(30000, 2);
+
+    const coinbaseLot = result.lots.find((l) => l.id === b1.id);
+    expect(coinbaseLot!.remainingBTC).toBeCloseTo(0.2, 8);
+  });
+
+  it("a later election for the full merged split lot resolves correctly", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const t1 = {
+      ...transferIn("2024-03-01", 0.8, { wallet: "Ledger", sourceWallet: "Coinbase" }),
+      transferLotSelections: [{ lotId: b1.id, amountBTC: 0.5 }],
+    };
+    const s1 = sell("2024-06-15", 0.8, 60000, { wallet: "Ledger" });
+    const splitLotId = b1.id + "-xfer-" + t1.id.slice(0, 8);
+
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.8,
+      salePricePerBTC: 60000,
+      totalProceeds: 48000,
+      costBasis: 24000,
+      gainLoss: 24000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: splitLotId,
+        purchaseDate: b1.date,
+        amountBTC: 0.8, // full merged amount — pre-fix the first duplicate only held 0.5
+        costBasisPerBTC: 30000,
+        totalCost: 24000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Ledger",
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, t1, s1], AccountingMethod.FIFO, [record]);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.sales[0].amountSold).toBeCloseTo(0.8, 8);
+    expect(result.sales[0].costBasis).toBeCloseTo(24000, 2);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied"))).toBe(false);
+  });
+});
+
+describe("E28 — extractLotSelections checks remaining BTC cumulatively", () => {
+  it("two details on the same lot whose SUM exceeds remaining trigger FIFO fallback", () => {
+    const b1 = buy("2024-01-01", 0.6, 30000, { wallet: "Coinbase" });
+    const b2 = buy("2024-02-01", 1.0, 50000, { wallet: "Coinbase" });
+    const s1 = sell("2024-06-15", 0.8, 60000, { wallet: "Coinbase" });
+
+    // Each detail (0.4) individually fits b1's 0.6 remaining, but the sum (0.8) does not
+    const detail = {
+      purchaseDate: b1.date,
+      amountBTC: 0.4,
+      costBasisPerBTC: 30000,
+      totalCost: 12000,
+      daysHeld: 166,
+      exchange: "Coinbase",
+      wallet: "Coinbase",
+      isLongTerm: false,
+    };
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.8,
+      salePricePerBTC: 60000,
+      totalProceeds: 48000,
+      costBasis: 24000,
+      gainLoss: 24000,
+      lotDetails: [
+        { ...detail, id: crypto.randomUUID(), lotId: b1.id },
+        { ...detail, id: crypto.randomUUID(), lotId: b1.id },
+      ],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, b2, s1], AccountingMethod.FIFO, [record]);
+    expect(result.sales).toHaveLength(1);
+    // Must fall back to FIFO for the full 0.8 (0.6 from b1 + 0.2 from b2), not silently cap at 0.6
+    expect(result.sales[0].amountSold).toBeCloseTo(0.8, 8);
+    expect(result.sales[0].costBasis).toBeCloseTo(0.6 * 30000 + 0.2 * 50000, 2);
+    expect(result.warnings.some((w) => w.message.includes("could not be applied"))).toBe(true);
+  });
+});
+
+describe("E29 — honored cross-wallet election does not emit false fallback warning", () => {
+  it("sale wallet with zero lots + explicit election → no 'fell back to global lot pool'", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    // Sale from a wallet with NO lots at all; user explicitly elected the Coinbase lot
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Ledger" });
+
+    const record: SaleRecord = {
+      id: crypto.randomUUID(),
+      saleDate: s1.date,
+      amountSold: 0.5,
+      salePricePerBTC: 60000,
+      totalProceeds: 30000,
+      costBasis: 15000,
+      gainLoss: 15000,
+      lotDetails: [{
+        id: crypto.randomUUID(),
+        lotId: b1.id,
+        purchaseDate: b1.date,
+        amountBTC: 0.5,
+        costBasisPerBTC: 30000,
+        totalCost: 15000,
+        daysHeld: 166,
+        exchange: "Coinbase",
+        wallet: "Coinbase", // lot's actual wallet — unchanged, intentional cross-wallet pick
+        isLongTerm: false,
+      }],
+      holdingPeriodDays: 166,
+      isLongTerm: false,
+      isMixedTerm: false,
+      method: AccountingMethod.SpecificID,
+      sourceTransactionId: s1.id,
+    };
+
+    const result = calculate([b1, s1], AccountingMethod.FIFO, [record]);
+    expect(result.sales).toHaveLength(1);
+    expect(result.sales[0].method).toBe(AccountingMethod.SpecificID);
+    expect(result.sales[0].costBasis).toBeCloseTo(15000, 2);
+    // The election was honored exactly — nothing fell back
+    expect(result.warnings.some((w) => w.message.includes("Fell back to global lot pool"))).toBe(false);
+    // But the cross-wallet tag IS still set for UI surfacing
+    expect(result.sales[0].walletMismatch).toBe(true);
+  });
+
+  it("FIFO sale (no election) from empty wallet still warns about global pool fallback", () => {
+    const b1 = buy("2024-01-01", 1.0, 30000, { wallet: "Coinbase" });
+    const s1 = sell("2024-06-15", 0.5, 60000, { wallet: "Ledger" });
+    const result = calculate([b1, s1], AccountingMethod.FIFO);
+    expect(result.sales).toHaveLength(1);
+    expect(result.warnings.some((w) => w.message.includes("Fell back to global lot pool"))).toBe(true);
+    expect(result.sales[0].walletMismatch).toBe(true);
   });
 });

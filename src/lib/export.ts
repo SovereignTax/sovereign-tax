@@ -7,6 +7,14 @@ function formatDate(isoDate: string): string {
   return d.toISOString().split("T")[0]; // yyyy-MM-dd
 }
 
+// TXF v042 spec requires mm/dd/yyyy for the header D record and all record dates
+function formatTXFDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return "UNKNOWN";
+  const [y, m, day] = d.toISOString().split("T")[0].split("-");
+  return `${m}/${day}/${y}`;
+}
+
 function formatBTC(value: number): string {
   return value.toFixed(8);
 }
@@ -274,21 +282,22 @@ export function exportTurboTaxTXF(sales: SaleRecord[], year: number, walletMisma
   const lines: string[] = [];
   lines.push("V042");
   lines.push("ASovereign Tax");
-  lines.push(`D${formatDate(new Date().toISOString())}`);
+  lines.push(`D${formatTXFDate(new Date().toISOString())}`);
   lines.push("^");
 
   for (const sale of sales) {
     for (const detail of sale.lotDetails) {
       const proceeds = detail.amountBTC * sale.salePricePerBTC;
-      // TXF type: 323 = short-term, 324 = long-term
-      const typeCode = detail.isLongTerm ? "324" : "323";
+      // TXF v042 reference codes: 321 = ST gain/loss (8949 Copy A), 323 = LT gain/loss (8949 Copy A).
+      // Do NOT swap these — 324 is "LT — other"; emitting 323 for short-term imports as long-term in TurboTax.
+      const typeCode = detail.isLongTerm ? "323" : "321";
       lines.push(`TD`);
       lines.push(`N${typeCode}`);
       lines.push(`C1`);
       lines.push(`L1`);
       lines.push(`P${propertyDescription(detail.amountBTC, detail)}`);
-      lines.push(`D${formatDate(detail.purchaseDate)}`);
-      lines.push(`D${formatDate(sale.saleDate)}`);
+      lines.push(`D${formatTXFDate(detail.purchaseDate)}`);
+      lines.push(`D${formatTXFDate(sale.saleDate)}`);
       lines.push(`$${formatCSVDecimal(detail.totalCost)}`);
       lines.push(`$${formatCSVDecimal(proceeds)}`);
       lines.push("^");
