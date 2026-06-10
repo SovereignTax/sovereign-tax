@@ -1,6 +1,6 @@
 {
   "name": "sovereign-tax-desktop",
-  "version": "1.4.9",
+  "version": "1.5.0",
   "private": true,
   "description": "A privacy-focused Bitcoin tax calculator",
   "scripts": {
