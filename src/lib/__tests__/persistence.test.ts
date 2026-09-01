@@ -763,3 +763,130 @@ describe("E5 — PIN change two-phase commit", () => {
     expect(persistence.loadPINHash()).toBe("old-hash");
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Group: Atomic backup restore (staged side-key swap)
+// ═══════════════════════════════════════════════════════
+
+describe("Atomic backup restore", () => {
+  const oldData = [{ id: "old-txn" }] as any;
+  const newData = {
+    transactions: [{ id: "new-txn" }] as any,
+    recordedSales: [{ id: "new-sale" }] as any,
+    mappings: { NEW: { date: 0 } } as any,
+    importHistory: { nh: { fileHash: "nh", fileName: "n.csv", importDate: "2025-01-01", transactionCount: 3 } },
+    auditLog: [{ id: "new-audit" }] as any,
+    preferences: { selectedYear: 2023, selectedMethod: AccountingMethod.FIFO } as any,
+  };
+
+  async function setupExistingData() {
+    persistence.setEncryptionKey(testKey);
+    await persistence.saveTransactionsAsync(oldData);
+    persistence.savePreferences({ selectedYear: 2025, selectedMethod: AccountingMethod.FIFO });
+  }
+
+  it("happy path: real data replaced, prefs applied, no staged keys or marker left", async () => {
+    await setupExistingData();
+
+    await persistence.restoreAllData(newData);
+
+    expect(await persistence.loadTransactionsAsync()).toEqual(newData.transactions);
+    expect(await persistence.loadRecordedSalesAsync()).toEqual(newData.recordedSales);
+    expect(await persistence.loadMappingsAsync()).toEqual(newData.mappings);
+    expect(await persistence.loadImportHistoryAsync()).toEqual(newData.importHistory);
+    expect(await persistence.loadAuditLogAsync()).toEqual(newData.auditLog);
+    expect(persistence.loadPreferences().selectedYear).toBe(2023);
+    expect(persistence.loadRestoreCommit()).toBeNull();
+    expect(Object.keys(lsStore).filter((k) => k.endsWith("-staged"))).toEqual([]);
+  });
+
+  it("staging failure: throws RestoreStagingError, existing data untouched, staging discarded", async () => {
+    await setupExistingData();
+
+    // First setItem inside restoreAllData is the staged transactions write — fail it.
+    mockLocalStorage.setItem.mockImplementationOnce(() => {
+      throw new Error("disk full");
+    });
+
+    await expect(persistence.restoreAllData(newData)).rejects.toThrow(
+      persistence.RestoreStagingError
+    );
+
+    // Existing data is exactly as it was
+    expect(await persistence.loadTransactionsAsync()).toEqual(oldData);
+    expect(persistence.loadPreferences().selectedYear).toBe(2025);
+    // No marker, no staged leftovers
+    expect(persistence.loadRestoreCommit()).toBeNull();
+    expect(Object.keys(lsStore).filter((k) => k.endsWith("-staged"))).toEqual([]);
+  });
+
+  it("crash AFTER commit marker, before promote: unlock recovery finishes the restore", async () => {
+    await setupExistingData();
+
+    // Simulate the state at a crash between commit and promote: staged files
+    // written, marker present, real files still old.
+    await persistence.stageAllDataForPinChange({
+      transactions: newData.transactions,
+      recordedSales: newData.recordedSales,
+      mappings: newData.mappings,
+      importHistory: newData.importHistory,
+      auditLog: newData.auditLog,
+    });
+    persistence.saveRestoreCommit({ preferences: newData.preferences });
+
+    // Next launch: recovery runs during unlock
+    await persistence.finishPinChangeRecovery();
+
+    expect(await persistence.loadTransactionsAsync()).toEqual(newData.transactions);
+    expect(await persistence.loadRecordedSalesAsync()).toEqual(newData.recordedSales);
+    expect(persistence.loadPreferences().selectedYear).toBe(2023);
+    expect(persistence.loadRestoreCommit()).toBeNull();
+    expect(Object.keys(lsStore).filter((k) => k.endsWith("-staged"))).toEqual([]);
+  });
+
+  it("crash BEFORE commit marker: unlock recovery discards staging, old data authoritative", async () => {
+    await setupExistingData();
+
+    await persistence.stageAllDataForPinChange({
+      transactions: newData.transactions,
+      recordedSales: newData.recordedSales,
+      mappings: newData.mappings,
+      importHistory: newData.importHistory,
+      auditLog: newData.auditLog,
+    });
+    // No marker written — crash happened before the commit point.
+
+    await persistence.finishPinChangeRecovery();
+
+    expect(await persistence.loadTransactionsAsync()).toEqual(oldData);
+    expect(persistence.loadPreferences().selectedYear).toBe(2025);
+    expect(Object.keys(lsStore).filter((k) => k.endsWith("-staged"))).toEqual([]);
+  });
+
+  it("restore recovery is idempotent — running twice is harmless", async () => {
+    await setupExistingData();
+    await persistence.stageAllDataForPinChange({
+      transactions: newData.transactions,
+      recordedSales: newData.recordedSales,
+      mappings: newData.mappings,
+      importHistory: newData.importHistory,
+      auditLog: newData.auditLog,
+    });
+    persistence.saveRestoreCommit({ preferences: newData.preferences });
+
+    await persistence.finishPinChangeRecovery();
+    await persistence.finishPinChangeRecovery();
+
+    expect(await persistence.loadTransactionsAsync()).toEqual(newData.transactions);
+    expect(persistence.loadRestoreCommit()).toBeNull();
+  });
+
+  it("loadRestoreCommit rejects garbage", () => {
+    lsStore["sovereign-tax-restore-commit"] = "not json {{";
+    expect(persistence.loadRestoreCommit()).toBeNull();
+    lsStore["sovereign-tax-restore-commit"] = JSON.stringify({ nope: true });
+    expect(persistence.loadRestoreCommit()).toBeNull();
+    lsStore["sovereign-tax-restore-commit"] = JSON.stringify({ preferences: null });
+    expect(persistence.loadRestoreCommit()).toBeNull();
+  });
+});

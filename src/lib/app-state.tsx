@@ -880,7 +880,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const msg = e instanceof Error ? e.message : "Failed to save restored data";
       console.error("Restore save error:", e);
       setSaveError(msg);
-      throw new Error(`Backup restore failed: ${msg}. Some data may have been partially updated — create a fresh backup before retrying.`);
+      if (e instanceof persistence.RestoreStagingError) {
+        // Failed before the commit point — staging was discarded, nothing real
+        // was written. The user's existing data is exactly as it was.
+        throw new Error(`Backup restore failed: ${msg}. Your existing data is unchanged.`);
+      }
+      // Failed after the commit point (rare) — the restore is committed and
+      // will finish automatically on the next unlock.
+      throw new Error(`Backup restore hit an error after the point of no return: ${msg}. The restore will complete automatically the next time you unlock the app — restart and unlock to finish it.`);
     }
 
     // Reload state — sync refs immediately so appendAuditLog reads from restored data
