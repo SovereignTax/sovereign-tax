@@ -6,6 +6,7 @@ import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
 import { getUnassignedTransfers, getAssignedTransferCount, getWalletMismatchSales, getWalletMismatchIds, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
 import { saveTextFile } from "../lib/file-save";
+import { csvCell } from "../lib/export";
 import { confirmDialog } from "../lib/dialog";
 import { suggestSourceWallet } from "../lib/reconciliation";
 import { LotPicker } from "./LotPicker";
@@ -132,11 +133,10 @@ export function TransactionsView() {
     const rows = transactions.map((t) => {
       const dateStr = new Date(t.date).toISOString().split("T")[0];
       const typeStr = TransactionTypeDisplayNames[t.transactionType];
-      const notes = (t.notes || "").replace(/"/g, '""');
-      const exchangeEsc = (t.exchange || "").replace(/"/g, '""');
-      const walletEsc = (t.wallet || t.exchange || "").replace(/"/g, '""');
-      const sourceWalletEsc = (t.sourceWallet || "").replace(/"/g, '""');
-      return `${dateStr},${typeStr},${t.amountBTC.toFixed(8)},${t.pricePerBTC.toFixed(2)},${t.totalUSD.toFixed(2)},${t.fee ? t.fee.toFixed(2) : "0.00"},"${exchangeEsc}","${walletEsc}","${sourceWalletEsc}","${notes}"`;
+      // User-controlled fields go through csvCell — the same defense applied to every
+      // export path in export.ts (A1). Quote-escaping alone does NOT stop formula
+      // injection: Excel still evaluates a quoted cell that starts with = + - @.
+      return `${dateStr},${typeStr},${t.amountBTC.toFixed(8)},${t.pricePerBTC.toFixed(2)},${t.totalUSD.toFixed(2)},${t.fee ? t.fee.toFixed(2) : "0.00"},${csvCell(t.exchange)},${csvCell(t.wallet || t.exchange)},${csvCell(t.sourceWallet)},${csvCell(t.notes)}`;
     });
     const csv = [header, ...rows].join("\n");
     await saveTextFile(csv, {
