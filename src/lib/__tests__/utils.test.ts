@@ -10,6 +10,7 @@ import {
   transactionNaturalKey,
   hasCrossWalletLots,
   sanitizeCarryforward,
+  safeDownloadUrl,
   CARRYFORWARD_MAX,
 } from "../utils";
 
@@ -339,5 +340,62 @@ describe("sanitizeCarryforward", () => {
       expect(Number.isNaN(result)).toBe(false);
       expect(Number.isFinite(result)).toBe(true);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// safeDownloadUrl — update-prompt URL allowlist
+// The download URL arrives from a REMOTE version.json; a compromised repo must
+// not be able to point the "Download Update" button at an arbitrary host.
+// ═══════════════════════════════════════════════════════
+
+describe("safeDownloadUrl", () => {
+  const HOME = "https://sovereigntax.io";
+
+  it("allows our own release hosts", () => {
+    const allowed = [
+      "https://sovereigntax.io/downloads/abc.dmg",
+      "https://www.sovereigntax.io/downloads/abc.exe",
+      "https://github.com/SovereignTax/sovereign-tax/releases/download/v1.5.0/x.dmg",
+      "https://objects.githubusercontent.com/some/asset.dmg",
+    ];
+    for (const url of allowed) {
+      expect(safeDownloadUrl(url)).toBe(url);
+    }
+  });
+
+  it("rejects an arbitrary attacker host", () => {
+    expect(safeDownloadUrl("https://evil.com/malware.dmg")).toBe(HOME);
+  });
+
+  it("rejects a lookalike subdomain suffix attack", () => {
+    // A startsWith() check would have accepted this.
+    expect(safeDownloadUrl("https://sovereigntax.io.evil.com/malware.dmg")).toBe(HOME);
+  });
+
+  it("rejects an allowlisted host appearing only in the query string", () => {
+    expect(safeDownloadUrl("https://evil.com/x?ref=https://sovereigntax.io")).toBe(HOME);
+  });
+
+  it("rejects userinfo-prefix spoofing", () => {
+    // "https://sovereigntax.io@evil.com" — origin is evil.com.
+    expect(safeDownloadUrl("https://sovereigntax.io@evil.com/x.dmg")).toBe(HOME);
+  });
+
+  it("rejects non-https schemes", () => {
+    expect(safeDownloadUrl("http://sovereigntax.io/x.dmg")).toBe(HOME);
+    expect(safeDownloadUrl("file:///etc/passwd")).toBe(HOME);
+    expect(safeDownloadUrl("javascript:alert(1)")).toBe(HOME);
+    expect(safeDownloadUrl("data:text/html,<script>alert(1)</script>")).toBe(HOME);
+  });
+
+  it("falls back to the homepage for missing or malformed input", () => {
+    expect(safeDownloadUrl(undefined)).toBe(HOME);
+    expect(safeDownloadUrl(null)).toBe(HOME);
+    expect(safeDownloadUrl("")).toBe(HOME);
+    expect(safeDownloadUrl("not a url")).toBe(HOME);
+    expect(safeDownloadUrl("/relative/path.dmg")).toBe(HOME);
+    expect(safeDownloadUrl(42)).toBe(HOME);
+    expect(safeDownloadUrl({})).toBe(HOME);
   });
 });

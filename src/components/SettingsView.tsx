@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
 import { isEncryptedBackup, listSavedBackups, readSavedBackup, deleteSavedBackup, downloadBackup, SavedBackupInfo } from "../lib/backup";
-import { sanitizeCarryforward } from "../lib/utils";
+import { sanitizeCarryforward, safeDownloadUrl } from "../lib/utils";
 
 const APP_VERSION = __APP_VERSION__;
 const VERSION_CHECK_URL = "https://raw.githubusercontent.com/sovereigntax/sovereign-tax/main/version.json";
@@ -734,7 +734,7 @@ export function SettingsView() {
                   } else {
                     const notes = data.notes ? ` — ${data.notes}` : "";
                     const platform = navigator.userAgent.includes("Mac") ? "macos" : navigator.userAgent.includes("Linux") ? "linux" : "windows";
-                    const downloadUrl = data.downloads?.[platform] || data.url;
+                    const downloadUrl = safeDownloadUrl(data.downloads?.[platform] || data.url);
                     setUpdateStatus({
                       type: "available",
                       message: `v${latest} available${notes}`,
@@ -777,7 +777,7 @@ export function SettingsView() {
                 </div>
                 <button
                   className="btn-primary text-sm px-4 py-2"
-                  onClick={() => openUrl(updateStatus.downloadUrl || "https://sovereigntax.io")}
+                  onClick={() => openUrl(safeDownloadUrl(updateStatus.downloadUrl))}
                 >
                   Download Update
                 </button>

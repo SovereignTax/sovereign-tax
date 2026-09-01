@@ -36,10 +36,19 @@ function formatUSD(value: number): string {
  *  Apply ONLY to user-controlled strings, NEVER to pre-formatted numbers
  *  (e.g. negative dollar amounts must remain "-100.00" not "'-100.00").
  *  See https://owasp.org/www-community/attacks/CSV_Injection */
+const FORMULA_TRIGGERS = ["=", "+", "-", "@", "\t", "\r"];
+
 function defangFormula(value: string): string {
   if (!value) return value;
-  const c = value.charAt(0);
-  if (c === "=" || c === "+" || c === "-" || c === "@" || c === "\t" || c === "\r") {
+  // Check the raw first character AND the first non-whitespace character:
+  //  - raw catches a leading tab/CR, which are triggers in their own right
+  //    (and would be swallowed by trimStart, since both are whitespace);
+  //  - trimmed catches a trigger hiding behind leading spaces (" =cmd", or
+  //    "\r=cmd" once csvCell has collapsed the CR to a space), which importers
+  //    that strip leading whitespace would otherwise evaluate as a formula.
+  const first = value.charAt(0);
+  const firstVisible = value.trimStart().charAt(0);
+  if (FORMULA_TRIGGERS.includes(first) || FORMULA_TRIGGERS.includes(firstVisible)) {
     return "'" + value;
   }
   return value;
@@ -51,7 +60,7 @@ function defangFormula(value: string): string {
  *  - Wraps in double-quotes and escapes internal quotes if the value contains
  *    comma, quote, or any other character that would break CSV parsing.
  *  Apply to: wallet, exchange, notes, audit details, action — any user-typed field. */
-function csvCell(value: string | undefined | null): string {
+export function csvCell(value: string | undefined | null): string {
   if (value === undefined || value === null) return "";
   // Collapse any embedded CR/LF to a single space so notes with newlines don't split the row.
   let str = String(value).replace(/[\r\n]+/g, " ");

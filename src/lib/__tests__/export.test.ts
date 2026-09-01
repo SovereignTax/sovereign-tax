@@ -8,6 +8,7 @@ import {
   exportForm8283CSV,
   exportAuditLogCSV,
   buildDonationSummary,
+  csvCell,
 } from "../export";
 import { AccountingMethod, TransactionType, IncomeType } from "../types";
 import { SaleRecord, Transaction, LotDetail } from "../models";
@@ -654,5 +655,64 @@ describe("D7 follow-up — partial/underfilled donation keeps Form 8283 provenan
     // Must pick the exact 0.3 match (River), not the first-by-date 0.9 (Swan)
     expect(summary[0].exchange).toBe("River");
     expect(summary[0].notes).toBe("exact");
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// csvCell — shared cell formatter (exported for the transactions-list export
+// in TransactionsView, which previously only quote-escaped and so still
+// executed formulas in Excel).
+// ═══════════════════════════════════════════════════════
+
+describe("csvCell — exported for reuse by view-level CSV exports", () => {
+  it("defangs every Excel formula trigger character", () => {
+    // "=", "+", "-", "@", tab are defanged in place.
+    for (const trigger of ["=", "+", "-", "@", "\t"]) {
+      expect(csvCell(`${trigger}cmd`)).toBe(`'${trigger}cmd`);
+    }
+    // CR/LF are neutralized by removal (collapsed to a space) before the check,
+    // so there is no formula left to defang.
+    expect(csvCell("\rcmd")).toBe(" cmd");
+  });
+
+  it("defangs a trigger hiding behind leading whitespace", () => {
+    // Importers that trim leading whitespace would otherwise re-arm the formula.
+    expect(csvCell(" =cmd")).toBe("' =cmd");
+    // A CR before the trigger collapses to a space — must still be defanged.
+    expect(csvCell("\r=cmd")).toBe("' =cmd");
+  });
+
+  it("defangs AND quote-wraps when the value also contains a comma", () => {
+    // Quote-wrapping alone is NOT a defense — Excel evaluates quoted formulas too.
+    const out = csvCell('=HYPERLINK("http://evil","Click")');
+    expect(out.startsWith('"\'=')).toBe(true);
+    expect(out).not.toMatch(/^"?=/);
+  });
+
+  it("collapses embedded newlines so a note cannot split the CSV row", () => {
+    expect(csvCell("line one\nline two")).toBe("line one line two");
+    expect(csvCell("line one\r\nline two")).toBe("line one line two");
+  });
+
+  it("escapes internal double quotes by doubling them", () => {
+    expect(csvCell('say "hi", ok')).toBe('"say ""hi"", ok"');
+  });
+
+  it("passes benign values through untouched", () => {
+    expect(csvCell("Coinbase")).toBe("Coinbase");
+    expect(csvCell("Cold Storage 01")).toBe("Cold Storage 01");
+  });
+
+  it("returns empty string for null/undefined/empty", () => {
+    expect(csvCell(null)).toBe("");
+    expect(csvCell(undefined)).toBe("");
+    expect(csvCell("")).toBe("");
+  });
+
+  it("does not defang a negative number that is genuinely numeric text", () => {
+    // Documents current behavior: "-100.00" IS defanged because it starts with "-".
+    // This is why csvCell must only be applied to user-controlled STRINGS,
+    // never to pre-formatted numeric columns (amounts stay raw in every export).
+    expect(csvCell("-100.00")).toBe("'-100.00");
   });
 });

@@ -120,6 +120,36 @@ export function partitionLooseDuplicates<T extends { date: string; transactionTy
   return { matchCount, nonMatching };
 }
 
+/** Homepage — the safe fallback for any update URL we don't recognize. */
+export const HOMEPAGE_URL = "https://sovereigntax.io";
+
+/** Origins the in-app update prompt is allowed to open.
+ *  The download URL comes from a REMOTE version.json (fetched from GitHub raw).
+ *  If that file — or the repo hosting it — were ever compromised, an unvalidated
+ *  URL would send users who trust the update prompt to an attacker-controlled
+ *  download. Only our own release hosts are accepted. */
+export const ALLOWED_DOWNLOAD_ORIGINS = [
+  "https://sovereigntax.io",
+  "https://www.sovereigntax.io",
+  "https://github.com",
+  "https://objects.githubusercontent.com",
+];
+
+/** Return `raw` only if it is an https URL on an allowlisted origin, else the homepage.
+ *  Compares the parsed ORIGIN — a startsWith/substring check would wrongly accept
+ *  "https://sovereigntax.io.evil.com" and "https://evil.com/?x=sovereigntax.io". */
+export function safeDownloadUrl(raw: unknown): string {
+  if (typeof raw !== "string" || !raw) return HOMEPAGE_URL;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return HOMEPAGE_URL; // relative or malformed
+  }
+  if (parsed.protocol !== "https:") return HOMEPAGE_URL;
+  return ALLOWED_DOWNLOAD_ORIGINS.includes(parsed.origin) ? parsed.href : HOMEPAGE_URL;
+}
+
 /** Maximum carryforward value accepted in Settings ($100M).
  *  Realistic prior-year capital loss carryforwards never approach this.
  *  Cap prevents NaN/Infinity/scientific-notation inputs from polluting state. */
