@@ -33,6 +33,7 @@ const KEYS = {
   encryptionSalt: "sovereign-tax-encryption-salt",
   prevEncryptionSalt: "sovereign-tax-prev-encryption-salt",
   pinChangeCommit: "sovereign-tax-pin-change-commit",
+  restoreCommit: "sovereign-tax-restore-commit",
   auditLog: "sovereign-tax-audit-log",
   priceCache: "sovereign-tax-price-cache",
   tosAccepted: "sovereign-tax-tos-accepted",
@@ -60,6 +61,15 @@ export class StorageQuotaError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "StorageQuotaError";
+  }
+}
+
+/** Error thrown when a backup restore fails during the staging phase —
+ *  the user's existing data has NOT been touched. */
+export class RestoreStagingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RestoreStagingError";
   }
 }
 
@@ -579,10 +589,16 @@ export async function discardStagedFiles(): Promise<void> {
   }
 }
 
-/** Finish an interrupted PIN change. Called on every unlock, before key derivation:
- *  - commit marker present → re-apply committed credentials (idempotent) and promote
- *    the staged files, then clear the marker.
- *  - no marker → discard any stale staged files (crash happened before commit). */
+/** Finish an interrupted PIN change or backup restore. Called on every unlock,
+ *  before key derivation:
+ *  - PIN-change commit marker present → re-apply committed credentials
+ *    (idempotent) and promote the staged files, then clear the marker.
+ *  - restore commit marker present → promote the staged files and apply the
+ *    committed preferences, then clear the marker.
+ *  - no marker → discard any stale staged files (crash happened before commit,
+ *    so the staged copies are garbage and the real data is authoritative).
+ *  The two flows share the staged locations but can never be in flight at the
+ *  same time — both run from a modal UI inside an unlocked session. */
 export async function finishPinChangeRecovery(): Promise<void> {
   const commit = loadPinChangeCommit();
   if (commit) {
@@ -591,9 +607,47 @@ export async function finishPinChangeRecovery(): Promise<void> {
     savePINSalt(commit.pinSalt);
     await promoteStagedFiles();
     clearPinChangeCommit();
-  } else {
-    await discardStagedFiles();
+    return;
   }
+  const restore = loadRestoreCommit();
+  if (restore) {
+    await promoteStagedFiles();
+    savePreferences(restore.preferences);
+    clearRestoreCommit();
+    return;
+  }
+  await discardStagedFiles();
+}
+
+// ======================================================================
+// Backup restore commit marker (mirrors the PIN-change marker: the single
+// synchronous marker write is the commit point; staged data before the
+// marker is garbage, staged data after it is authoritative).
+// ======================================================================
+
+export interface RestoreCommit {
+  preferences: Preferences;
+}
+
+export function loadRestoreCommit(): RestoreCommit | null {
+  try {
+    const raw = localStorage.getItem(KEYS.restoreCommit);
+    if (!raw) return null;
+    const commit = JSON.parse(raw) as RestoreCommit;
+    if (!commit || typeof commit.preferences !== "object" || commit.preferences === null) return null;
+    return commit;
+  } catch {
+    return null;
+  }
+}
+
+export function saveRestoreCommit(commit: RestoreCommit): void {
+  // Single synchronous write — this IS the commit point.
+  localStorage.setItem(KEYS.restoreCommit, JSON.stringify(commit));
+}
+
+export function clearRestoreCommit(): void {
+  localStorage.removeItem(KEYS.restoreCommit);
 }
 
 /** Synchronous credential-only recovery, run at module load so the lock screen
@@ -705,16 +759,30 @@ export async function restoreAllData(data: {
   auditLog: AuditEntry[];
   preferences: Preferences;
 }): Promise<void> {
-  // All encrypted saves run in parallel — reduces the crash window
-  // and ensures preferences only save after ALL encrypted data succeeds.
-  await Promise.all([
-    saveTransactionsAsync(data.transactions),
-    saveRecordedSalesAsync(data.recordedSales),
-    saveMappingsAsync(data.mappings),
-    saveImportHistoryAsync(data.importHistory),
-    saveAuditLogAsync(data.auditLog),
-  ]);
+  // Atomic restore via the staged-write machinery (shared with PIN change):
+  // Phase 1 — stage every encrypted blob to the side location. Real data is
+  //           untouched; ANY failure here discards the staging and the user's
+  //           existing data is exactly as it was.
+  try {
+    await saveEncryptedStaged(KEYS.transactions, data.transactions);
+    await saveEncryptedStaged(KEYS.recordedSales, data.recordedSales);
+    await saveEncryptedStaged(KEYS.exchangeMappings, data.mappings);
+    await saveEncryptedStaged(KEYS.importHistory, data.importHistory);
+    await saveEncryptedStaged(KEYS.auditLog, capAuditLog(data.auditLog));
+  } catch (e) {
+    await discardStagedFiles().catch(() => {});
+    const msg = e instanceof Error ? e.message : "staging failed";
+    throw new RestoreStagingError(msg);
+  }
+  // Phase 2 — commit point: one synchronous marker write. From here the
+  //           restore WILL complete — a crash mid-promote is finished by
+  //           finishPinChangeRecovery() on the next unlock.
+  saveRestoreCommit({ preferences: data.preferences });
+  // Phase 3 — promote staged ciphertexts over the real files, apply the
+  //           plaintext preferences, clear the marker.
+  await promoteStagedFiles();
   savePreferences(data.preferences);
+  clearRestoreCommit();
 }
 
 // ======================================================================
