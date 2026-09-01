@@ -1,12 +1,12 @@
 {
-  "latest": "1.4.9",
+  "latest": "1.5.0",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-05-29",
-  "notes": "Security hardening and correctness fixes: CSV formula-injection defense in exports, typed confirmation for Clear All Data, fee-inclusive cost basis display, and improvements to simulation, tax-loss harvesting, and CSV import.",
+  "releaseDate": "2026-09-01",
+  "notes": "Major correctness and reliability release: fixed TurboTax TXF export term codes, tax-year assignment for date-only CSV imports, partial-sale warnings, crash-safe PIN changes, atomic data writes, European number formats, and dozens of import, export, and UI fixes. 623 automated tests.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/753e1f0f-0c78-4681-9f4b-06e1cb0d6873.dmg",
-    "windows": "https://sovereigntax.io/downloads/a5e2383e-66cf-466e-be7f-8ed7b53d9a2d.exe",
-    "linux": "https://sovereigntax.io/downloads/fafc719a-58e2-412f-9788-d4c8c42f2f2d.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/56282e6e-c631-42f1-875b-c187f447b351.rpm"
+    "macos": "https://sovereigntax.io/downloads/3cfa4382-0cdf-4f1a-a178-13c72465614c.dmg",
+    "windows": "https://sovereigntax.io/downloads/845a1af7-336e-4e4b-953e-bb7043dd7fe0.exe",
+    "linux": "https://sovereigntax.io/downloads/fc4c6361-d64f-4266-a88c-9ac5f779677a.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/dd13834c-ce8c-44fa-a6e1-c12254e70d04.rpm"
   }
 }
