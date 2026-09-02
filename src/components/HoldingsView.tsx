@@ -104,7 +104,7 @@ export function HoldingsView() {
               <div>Date</div>
               <div className="text-right">Amount BTC</div>
               <div className="text-right">Remaining</div>
-              <div className="text-right">Price/BTC</div>
+              <div className="text-right" title="Cost basis per BTC, including any purchase fees. This is what the tax engine uses — it differs from the raw market price whenever a fee was recorded.">Cost/BTC</div>
               <div className="text-right">Cost Basis</div>
               <div>Exchange</div>
             </div>

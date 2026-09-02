@@ -355,6 +355,37 @@ export function ImportView() {
             tooltip="Trading fees or commissions charged (optional — defaults to zero)"
             value={mapping.fee} field="fee" headers={detectedHeaders} onChange={updateMapping}
           />
+
+          {/* Fee-inclusive total override. Only relevant when both a fee and a total
+              (or dual-column amounts) are mapped — otherwise there is no double-count
+              to avoid. Auto-detected from the header; the user can correct it. */}
+          {mapping.fee && (mapping.total || isDualColumn(mapping)) && (
+            <div className="flex items-start gap-3 py-2 border-b border-gray-100 dark:border-gray-800">
+              <span className="w-24 flex-shrink-0" />
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!mapping.totalIncludesFee}
+                  onChange={(e) => {
+                    setMapping((m) => ({ ...m, totalIncludesFee: e.target.checked }));
+                    setDupeWarning(null);
+                  }}
+                />
+                <span>
+                  <span className="font-medium">The Total column already includes fees</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {mapping.totalIncludesFee
+                      ? "Fees will NOT be added again — the Total is used as-is for cost basis."
+                      : "Fees will be added to the Total for buys (and subtracted for sells)."}
+                    {" "}Tick this if your Total is what you actually paid or received
+                    (e.g. Coinbase's "Total (inclusive of fees and/or spread)"). Getting this
+                    wrong counts the fee twice.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
           {/* Wallet and Exchange columns removed — the user-entered exchange name
               above is always used as the canonical wallet/exchange for all imported
               transactions. This ensures consistent naming for IRS per-wallet tracking. */}

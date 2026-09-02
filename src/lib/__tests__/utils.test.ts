@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { TransactionType } from "../types";
 import {
   formatUSD,
   formatBTC,
@@ -11,6 +12,7 @@ import {
   hasCrossWalletLots,
   sanitizeCarryforward,
   safeDownloadUrl,
+  detectFeeDoubleCount,
   CARRYFORWARD_MAX,
 } from "../utils";
 
@@ -397,5 +399,84 @@ describe("safeDownloadUrl", () => {
     expect(safeDownloadUrl("/relative/path.dmg")).toBe(HOME);
     expect(safeDownloadUrl(42)).toBe(HOME);
     expect(safeDownloadUrl({})).toBe(HOME);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// detectFeeDoubleCount — entry-time guard for the gross-total mistake
+// Real customer report: buy of 0.01198350 BTC @ $7,260.82 with a $2.99 fee.
+// Total entered as $90.00 (what they paid) instead of $87.01 (pre-fee), so the
+// app added the fee again -> $92.99 stored -> Price/BTC displayed as $7,759.84.
+// ═══════════════════════════════════════════════════════
+
+describe("detectFeeDoubleCount", () => {
+  const BUY = TransactionType.Buy;
+  const SELL = TransactionType.Sell;
+
+  it("flags the reported customer case and suggests the pre-fee total", () => {
+    const r = detectFeeDoubleCount({
+      transactionType: BUY, amountBTC: 0.01198350, pricePerBTC: 7260.82,
+      totalUSD: 90.00, fee: 2.99,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.suggestedTotal).toBeCloseTo(87.01, 2);
+  });
+
+  it("stays silent when the total is already correct (pre-fee)", () => {
+    expect(detectFeeDoubleCount({
+      transactionType: BUY, amountBTC: 0.01198350, pricePerBTC: 7260.82,
+      totalUSD: 87.01, fee: 2.99,
+    })).toBeNull();
+  });
+
+  it("flags the sell-side equivalent (total already net of fee)", () => {
+    // 0.5 BTC @ $60,000 = $30,000 gross; user typed the $29,975 they received.
+    const r = detectFeeDoubleCount({
+      transactionType: SELL, amountBTC: 0.5, pricePerBTC: 60000,
+      totalUSD: 29975, fee: 25,
+    });
+    expect(r).not.toBeNull();
+    expect(r!.suggestedTotal).toBeCloseTo(30000, 2);
+  });
+
+  it("tolerates a 1-cent rounding difference in the typed price", () => {
+    // amount x price = 87.0086, +fee = 90.0 (rounds to the same cents as 89.9986)
+    expect(detectFeeDoubleCount({
+      transactionType: BUY, amountBTC: 0.0119835, pricePerBTC: 7260.75,
+      totalUSD: 89.99, fee: 2.99,
+    })).not.toBeNull();
+  });
+
+  it("stays silent when the total matches neither net nor gross", () => {
+    expect(detectFeeDoubleCount({
+      transactionType: BUY, amountBTC: 0.5, pricePerBTC: 60000,
+      totalUSD: 12345, fee: 25,
+    })).toBeNull();
+  });
+
+  it("ignores transfers and donations (their totals are never fee-adjusted)", () => {
+    for (const t of [TransactionType.TransferIn, TransactionType.TransferOut, TransactionType.Donation]) {
+      expect(detectFeeDoubleCount({
+        transactionType: t, amountBTC: 0.01198350, pricePerBTC: 7260.82,
+        totalUSD: 90.00, fee: 2.99,
+      })).toBeNull();
+    }
+  });
+
+  it("stays silent with no fee, zero/missing values, or non-finite input", () => {
+    const base = { transactionType: BUY, amountBTC: 0.5, pricePerBTC: 60000, totalUSD: 30025, fee: 25 };
+    expect(detectFeeDoubleCount({ ...base, fee: 0 })).toBeNull();
+    expect(detectFeeDoubleCount({ ...base, amountBTC: 0 })).toBeNull();
+    expect(detectFeeDoubleCount({ ...base, pricePerBTC: 0 })).toBeNull();
+    expect(detectFeeDoubleCount({ ...base, totalUSD: 0 })).toBeNull();
+    expect(detectFeeDoubleCount({ ...base, amountBTC: NaN })).toBeNull();
+    expect(detectFeeDoubleCount({ ...base, pricePerBTC: Infinity })).toBeNull();
+  });
+
+  it("stays silent when the fee rounds to under a cent (net ≈ gross)", () => {
+    expect(detectFeeDoubleCount({
+      transactionType: BUY, amountBTC: 0.5, pricePerBTC: 60000,
+      totalUSD: 30000, fee: 0.004,
+    })).toBeNull();
   });
 });
