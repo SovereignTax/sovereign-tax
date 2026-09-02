@@ -105,6 +105,14 @@ export interface ColumnMapping {
   sentQuantity?: string;
   sentCurrency?: string;
   defaultType?: TransactionType;
+  /** True when the mapped Total column ALREADY includes fees (e.g. Coinbase's
+   *  "Total (inclusive of fees and/or spread)"). The importer must then NOT
+   *  apply the fee again — doing so double-counts it, overstating cost basis
+   *  on buys and understating proceeds on sells. Auto-detected from the header
+   *  by detectColumns(); the user can override it in the mapping editor.
+   *  Undefined on mappings saved by older versions — resolveTotalIncludesFee()
+   *  falls back to header detection in that case. */
+  totalIncludesFee?: boolean;
 }
 
 export interface Preferences {

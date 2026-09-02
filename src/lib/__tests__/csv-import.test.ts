@@ -8,6 +8,8 @@ import {
   parseCSVContent,
   excelSerialToDate,
   decodeCSVBuffer,
+  headerIncludesFee,
+  resolveTotalIncludesFee,
 } from "../csv-import";
 import { TransactionType } from "../types";
 import { ColumnMapping } from "../models";
@@ -1103,5 +1105,94 @@ describe("E13a — European decimal commas parse correctly (no 10–100× corrup
 
   it("malformed comma patterns rejected", () => {
     expect(parseDecimal("1,23,45")).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// Fee-inclusive total columns must NOT have the fee applied again.
+// Coinbase's "Total (inclusive of fees and/or spread)" already contains the fee:
+// for a buy it is what you paid, for a sell what you received. Adding it again
+// silently overstated cost basis on every imported row.
+// ═══════════════════════════════════════════════════════
+
+describe("fee-inclusive total detection", () => {
+  it("recognizes the known fee-inclusive headers", () => {
+    expect(headerIncludesFee("Total (inclusive of fees and/or spread)")).toBe(true);
+    expect(headerIncludesFee("USD Total (inclusive of fees)")).toBe(true);
+    expect(headerIncludesFee("  TOTAL (INCLUSIVE OF FEES AND/OR SPREAD)  ")).toBe(true);
+  });
+
+  it("recognizes generic fee-inclusive wordings", () => {
+    expect(headerIncludesFee("Total incl. fees")).toBe(true);
+    expect(headerIncludesFee("Total including fees")).toBe(true);
+    expect(headerIncludesFee("Proceeds net of fees")).toBe(true);
+  });
+
+  it("does not flag ordinary total headers", () => {
+    for (const h of ["Total", "Subtotal", "Total USD", "USD Amount", "Proceeds", "Cost Basis"]) {
+      expect(headerIncludesFee(h)).toBe(false);
+    }
+    expect(headerIncludesFee(undefined)).toBe(false);
+  });
+
+  it("detectColumns flags a fee-inclusive total, and leaves a plain one unflagged", () => {
+    expect(detectColumns(["Date", "Amount", "Total (inclusive of fees and/or spread)", "Fees"]).totalIncludesFee).toBe(true);
+    expect(detectColumns(["Date", "Amount", "Total", "Fees"]).totalIncludesFee).toBe(false);
+  });
+
+  it("prefers Subtotal over the fee-inclusive column when a CSV has both", () => {
+    // Coinbase exports carry both; Subtotal is the pre-fee figure we want.
+    const m = detectColumns(["Timestamp", "Quantity Transacted", "Subtotal", "Total (inclusive of fees and/or spread)", "Fees and/or Spread"]);
+    expect(m.total).toBe("Subtotal");
+    expect(m.totalIncludesFee).toBe(false);
+  });
+
+  it("resolveTotalIncludesFee lets an explicit user choice override the header", () => {
+    expect(resolveTotalIncludesFee({ total: "Total", totalIncludesFee: true })).toBe(true);
+    expect(resolveTotalIncludesFee({ total: "Total (inclusive of fees and/or spread)", totalIncludesFee: false })).toBe(false);
+    // Undefined (mapping saved by an older version) falls back to header detection.
+    expect(resolveTotalIncludesFee({ total: "Total (inclusive of fees and/or spread)" })).toBe(true);
+    expect(resolveTotalIncludesFee({ total: "Total" })).toBe(false);
+  });
+});
+
+describe("fee application on import", () => {
+  const row = (total: string, header: string) =>
+    `Date,Type,Amount,${header},Fees\n2024-03-01,Buy,0.01198350,${total},2.99`;
+
+  it("BUY: adds the fee to a plain total (unchanged behavior)", () => {
+    const r = parseCSVContent(row("87.01", "Total"), "Coinbase", detectColumns(["Date", "Type", "Amount", "Total", "Fees"]));
+    expect(r.transactions).toHaveLength(1);
+    expect(r.transactions[0].totalUSD).toBeCloseTo(90.00, 2);   // 87.01 + 2.99
+    expect(r.transactions[0].pricePerBTC).toBeCloseTo(7510.33, 2);
+  });
+
+  it("BUY: does NOT add the fee to a fee-inclusive total (the bug)", () => {
+    const header = "Total (inclusive of fees and/or spread)";
+    const r = parseCSVContent(row("90.00", header), "Coinbase", detectColumns(["Date", "Type", "Amount", header, "Fees"]));
+    expect(r.transactions).toHaveLength(1);
+    expect(r.transactions[0].totalUSD).toBeCloseTo(90.00, 2);   // NOT 92.99
+    expect(r.transactions[0].pricePerBTC).toBeCloseTo(7510.33, 2); // NOT 7759.84
+  });
+
+  it("SELL: does NOT subtract the fee again from an already-net total", () => {
+    const header = "Total (inclusive of fees and/or spread)";
+    const csv = `Date,Type,Amount,${header},Fees\n2024-03-01,Sell,0.5,29975.00,25.00`;
+    const r = parseCSVContent(csv, "Kraken", detectColumns(["Date", "Type", "Amount", header, "Fees"]));
+    expect(r.transactions).toHaveLength(1);
+    expect(r.transactions[0].totalUSD).toBeCloseTo(29975.00, 2); // NOT 29950
+  });
+
+  it("honors an explicit override on a plain header", () => {
+    const mapping = { ...detectColumns(["Date", "Type", "Amount", "Total", "Fees"]), totalIncludesFee: true };
+    const r = parseCSVContent(row("90.00", "Total"), "Coinbase", mapping);
+    expect(r.transactions[0].totalUSD).toBeCloseTo(90.00, 2);   // fee not re-added
+  });
+
+  it("rows with no fee are unaffected either way", () => {
+    const csv = "Date,Type,Amount,Total\n2024-03-01,Buy,0.5,30000.00";
+    const r = parseCSVContent(csv, "Coinbase", detectColumns(["Date", "Type", "Amount", "Total"]));
+    expect(r.transactions[0].totalUSD).toBeCloseTo(30000, 2);
+    expect(r.transactions[0].pricePerBTC).toBeCloseTo(60000, 2);
   });
 });

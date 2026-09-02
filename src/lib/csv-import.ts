@@ -139,6 +139,34 @@ const columnVariations: Record<string, string[]> = {
   sentCurrency: ["sent currency"],
 };
 
+/** Total-column headers that ALREADY include fees in the amount.
+ *  Coinbase's "Total (inclusive of fees and/or spread)" is the common one: for a buy
+ *  it is what you PAID (fee included), and for a sell it is what you RECEIVED (fee
+ *  already deducted). Applying the fee again to these corrupts the numbers in both
+ *  directions — cost basis is overstated on buys, proceeds understated on sells. */
+const FEE_INCLUSIVE_TOTAL_HEADERS = [
+  "total (inclusive of fees and/or spread)",
+  "usd total (inclusive of fees)",
+];
+
+/** Does this header name indicate a fee-inclusive total? */
+export function headerIncludesFee(header: string | undefined): boolean {
+  if (!header) return false;
+  const h = header.toLowerCase().trim();
+  if (FEE_INCLUSIVE_TOTAL_HEADERS.includes(h)) return true;
+  // Generic catch for wordings not in the list: "incl fees", "including fees",
+  // "inclusive of fees", "net of fees" (sell-side phrasing for an already-netted total).
+  return /\b(incl\.?|including|inclusive|net)\b[^a-z]{0,8}(of\s+)?fee/.test(h);
+}
+
+/** Resolve whether the mapped total already includes fees.
+ *  An explicit user choice (set in the import mapping editor) always wins; otherwise
+ *  fall back to header detection so mappings saved by older versions still behave. */
+export function resolveTotalIncludesFee(mapping: ColumnMapping): boolean {
+  if (mapping.totalIncludesFee !== undefined) return mapping.totalIncludesFee;
+  return headerIncludesFee(mapping.total);
+}
+
 // Keyword rules for fallback detection (Pass 5).
 // Each rule: field name → array of keyword patterns.
 // A pattern is { must: words the header must contain ALL of, not?: words it must NOT contain }.
@@ -491,6 +519,13 @@ export function detectColumns(headers: string[]): ColumnMapping {
     }
   }
 
+  // Flag fee-inclusive total columns so the importer does not apply the fee twice.
+  // Set explicitly (true or false) whenever a total is mapped, so the mapping editor
+  // has a concrete value to show and the user can override it.
+  if (mapping.total) {
+    mapping.totalIncludesFee = headerIncludesFee(mapping.total);
+  }
+
   return mapping;
 }
 
@@ -719,8 +754,11 @@ function parseDualColumnTransaction(
     totalUSD = Math.abs(rcvQty);
   }
 
-  // Apply fee: buys increase cost basis, sells reduce proceeds
-  if (fee > 0) {
+  // Apply fee: buys increase cost basis, sells reduce proceeds.
+  // Skipped when the user has flagged the amounts as already fee-inclusive
+  // (dual-column files have no single "total" header to auto-detect from, so this
+  // relies on the explicit override in the mapping editor).
+  if (fee > 0 && !resolveTotalIncludesFee(mapping)) {
     if (transType === TransactionType.Buy) {
       totalUSD = totalUSD + fee;
     } else if (transType === TransactionType.Sell) {
@@ -803,15 +841,22 @@ function parseStandardTransaction(
     price = total / Math.abs(amountBTC);
   }
 
-  // Apply fee to total: for buys, fee increases cost basis; for sells, fee reduces proceeds
+  // Apply fee to total: for buys, fee increases cost basis; for sells, fee reduces proceeds.
+  // SKIPPED when the mapped total column already includes fees (e.g. Coinbase's
+  // "Total (inclusive of fees and/or spread)") — the fee is already inside that number,
+  // and applying it again double-counts it on every imported row.
+  const totalAlreadyIncludesFee = resolveTotalIncludesFee(mapping);
   if (fee > 0) {
-    if (transType === TransactionType.Buy) {
-      total = total + fee;
-    } else if (transType === TransactionType.Sell) {
-      total = Math.max(0, total - fee);
+    if (!totalAlreadyIncludesFee) {
+      if (transType === TransactionType.Buy) {
+        total = total + fee;
+      } else if (transType === TransactionType.Sell) {
+        total = Math.max(0, total - fee);
+      }
     }
-    // Recalculate effective price per BTC after fee adjustment
-    if (Math.abs(amountBTC) > 0) {
+    // Recalculate effective price per BTC so it stays consistent with the total,
+    // whether the fee was just applied or was already baked in.
+    if (Math.abs(amountBTC) > 0 && total > 0) {
       price = total / Math.abs(amountBTC);
     }
   }

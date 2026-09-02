@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAppState } from "../lib/app-state";
-import { formatUSD, formatBTC, formatDateTime, formatDate, hasCrossWalletLots } from "../lib/utils";
+import { formatUSD, formatBTC, formatDateTime, formatDate, hasCrossWalletLots, detectFeeDoubleCount } from "../lib/utils";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames, AccountingMethod } from "../lib/types";
 import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
@@ -402,7 +402,7 @@ export function TransactionsView() {
             <SortHeader label="Date" field="date" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <div>Type</div>
             <SortHeader label="Amount BTC" field="amountBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
-            <SortHeader label="Price/BTC" field="pricePerBTC" current={sortField} asc={sortAsc} onClick={toggleSort} />
+            <SortHeader label="Price/BTC" field="pricePerBTC" current={sortField} asc={sortAsc} onClick={toggleSort} title="Effective price per BTC including fees — for buys this is your cost basis per BTC (fee added), for sells it is proceeds per BTC (fee deducted). It will differ from the raw market price whenever a fee is recorded." />
             <div>Fee</div>
             <SortHeader label="Total USD" field="totalUSD" current={sortField} asc={sortAsc} onClick={toggleSort} />
             <SortHeader label="Exchange" field="exchange" current={sortField} asc={sortAsc} onClick={toggleSort} />
@@ -822,6 +822,16 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Same fee double-count guard as the Add view — the Total field here is also
+  // pre-fee (the fee is re-applied on save), so a gross figure would double it.
+  const feeDoubleCount = detectFeeDoubleCount({
+    transactionType: type,
+    amountBTC: Number(amountStr),
+    pricePerBTC: Number(priceStr),
+    totalUSD: Number(totalStr),
+    fee: Number(feeStr) || 0,
+  });
+
   // Dirty detection — true when any input differs from its initial value.
   // Used to guard accidental backdrop clicks against losing in-progress edits.
   const isDirty =
@@ -982,7 +992,7 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
           <div className="flex items-center gap-3">
             <span className="w-20 text-right text-gray-500 text-sm">Total USD:</span>
             <input className="input w-44 text-sm" value={totalStr} onChange={(e) => setTotalStr(e.target.value)} />
-            <span className="text-xs text-gray-400">(before fee adj.)</span>
+            <span className="text-xs text-gray-400">(<strong>before fees</strong> — the fee below is applied on save)</span>
           </div>
 
           {/* Fee */}
@@ -991,6 +1001,23 @@ function EditModal({ txn, onSave, onClose }: { txn: Transaction; onSave: (update
             <input className="input w-44 text-sm" placeholder="0.00" value={feeStr} onChange={(e) => setFeeStr(e.target.value)} />
             {type === TransactionType.Donation && <span className="text-xs text-gray-400">Network fee</span>}
           </div>
+
+          {feeDoubleCount && (
+            <div className="flex items-start gap-3">
+              <span className="w-20 flex-shrink-0" />
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-2.5 rounded-lg flex-1">
+                <strong>Check your Total.</strong> {formatUSD(Number(totalStr))} looks like it already
+                includes the {formatUSD(Number(feeStr) || 0)} fee. Total is entered{" "}
+                <strong>before</strong> fees — saving as-is would count it twice.
+                <button
+                  className="ml-2 underline font-medium hover:opacity-80"
+                  onClick={() => setTotalStr(feeDoubleCount.suggestedTotal.toFixed(2))}
+                >
+                  Use {formatUSD(feeDoubleCount.suggestedTotal)}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Exchange */}
           <div className="flex items-center gap-3">
@@ -1574,9 +1601,9 @@ function SourceWalletModal({
   );
 }
 
-function SortHeader({ label, field, current, asc, onClick }: { label: string; field: string; current: string; asc: boolean; onClick: (f: any) => void }) {
+function SortHeader({ label, field, current, asc, onClick, title }: { label: string; field: string; current: string; asc: boolean; onClick: (f: any) => void; title?: string }) {
   return (
-    <div className="cursor-pointer select-none flex items-center gap-1" onClick={() => onClick(field)}>
+    <div className="cursor-pointer select-none flex items-center gap-1" title={title} onClick={() => onClick(field)}>
       {label}
       {current === field && <span className="text-orange-500">{asc ? "▲" : "▼"}</span>}
     </div>

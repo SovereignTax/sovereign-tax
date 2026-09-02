@@ -3,7 +3,7 @@ import { useAppState } from "../lib/app-state";
 import { createTransaction, Transaction, SaleRecord } from "../lib/models";
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames } from "../lib/types";
 import { AccountingMethod } from "../lib/types";
-import { formatUSD, formatBTC, formatDate, formatDateTime, findSimilarTransactions } from "../lib/utils";
+import { formatUSD, formatBTC, formatDate, formatDateTime, findSimilarTransactions, detectFeeDoubleCount } from "../lib/utils";
 import { calculate, simulateSale, LotSelection } from "../lib/cost-basis";
 import { LotPicker } from "./LotPicker";
 import { HelpPanel } from "./HelpPanel";
@@ -86,6 +86,16 @@ export function AddTransactionView() {
       .filter((l) => l.remainingBTC > 0 && (l.wallet || l.exchange || "").toLowerCase() === walletNorm)
       .reduce((sum, l) => sum + l.remainingBTC, 0);
   }, [isDisposition, wallet, currentLots]);
+  // Fee double-count guard: warns when the Total typed looks like it already has the
+  // fee baked in (Total ≈ Amount × Price ± Fee), which would apply the fee twice on save.
+  const feeDoubleCount = useMemo(() => detectFeeDoubleCount({
+    transactionType: type,
+    amountBTC: Number(amountStr),
+    pricePerBTC: useLive ? (state.priceState.currentPrice ?? 0) : Number(priceStr),
+    totalUSD: Number(totalStr),
+    fee: Number(feeStr) || 0,
+  }), [type, amountStr, priceStr, totalStr, feeStr, useLive, state.priceState.currentPrice]);
+
   const requestedAmount = Number(amountStr) || 0;
   const showWalletWarning = isDisposition && wallet && walletBTCAvailable !== null && requestedAmount > 0 && requestedAmount > walletBTCAvailable + 0.00000001;
 
@@ -377,7 +387,7 @@ export function AddTransactionView() {
         <div className="flex items-center gap-4">
           <span className="w-24 text-right text-gray-500">Total USD:</span>
           <input className="input w-48" placeholder="Auto-calculated" value={totalStr} onChange={(e) => { setTotalStr(e.target.value); setDispositionPreview(null); setLotSelections(null); }} />
-          <span className="text-xs text-gray-400">(optional)</span>
+          <span className="text-xs text-gray-400">(optional — <strong>before fees</strong>; leave blank to use Amount &times; Price)</span>
         </div>
 
         {/* Fee */}
@@ -386,6 +396,26 @@ export function AddTransactionView() {
           <input className="input w-48" placeholder="0.00" value={feeStr} onChange={(e) => { setFeeStr(e.target.value); setDispositionPreview(null); setLotSelections(null); }} />
           <span className="text-xs text-gray-400">(optional — {type === TransactionType.Donation ? "on-chain/network fee. Enter total BTC sent (including fee) as the amount above so balances stay accurate" : "added to cost basis for buys, subtracted from proceeds for sells"})</span>
         </div>
+
+        {feeDoubleCount && (
+          <div className="flex items-start gap-4">
+            <span className="w-24" />
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs p-3 rounded-lg flex-1">
+              <strong>Check your Total.</strong> {formatUSD(Number(totalStr))} looks like it already
+              includes the {formatUSD(Number(feeStr) || 0)} fee. Total should be the amount{" "}
+              <strong>before</strong> fees — {type === TransactionType.Sell
+                ? "the fee is subtracted from your proceeds automatically"
+                : "the fee is added to your cost basis automatically"}.
+              Saving as-is would count the fee twice.
+              <button
+                className="ml-2 underline font-medium hover:opacity-80"
+                onClick={() => { setTotalStr(feeDoubleCount.suggestedTotal.toFixed(2)); setDispositionPreview(null); setLotSelections(null); }}
+              >
+                Use {formatUSD(feeDoubleCount.suggestedTotal)}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Exchange */}
         <div className="flex items-center gap-4">

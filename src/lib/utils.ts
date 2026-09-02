@@ -1,3 +1,5 @@
+import { TransactionType } from "./types";
+
 /** Format a number as USD currency */
 export function formatUSD(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -118,6 +120,45 @@ export function partitionLooseDuplicates<T extends { date: string; transactionTy
     }
   }
   return { matchCount, nonMatching };
+}
+
+/** Detect the "I entered the gross total" mistake before it is saved.
+ *
+ *  The Total USD field means the amount BEFORE fees — the app applies the fee itself
+ *  (added to cost basis on buys, subtracted from proceeds on sells). A user who types
+ *  what they actually paid or received has the fee in there already, so saving applies
+ *  it a second time: a $87.01 buy with a $2.99 fee entered as $90.00 stores $92.99 and
+ *  reports an inflated cost basis per BTC.
+ *
+ *  The giveaway is Total ≈ (Amount × Price) ± Fee. Returns the corrected pre-fee total
+ *  when that pattern is present, else null. Compared in whole cents with a 1c tolerance
+ *  so ordinary rounding in the user's typed price does not suppress the warning.
+ *  Advisory only — never auto-corrects. */
+export function detectFeeDoubleCount(params: {
+  transactionType: TransactionType;
+  amountBTC: number;
+  pricePerBTC: number;
+  totalUSD: number;
+  fee: number;
+}): { suggestedTotal: number } | null {
+  const { transactionType, amountBTC, pricePerBTC, totalUSD, fee } = params;
+  const isBuy = transactionType === TransactionType.Buy;
+  const isSell = transactionType === TransactionType.Sell;
+  if (!isBuy && !isSell) return null; // transfers/donations do not fee-adjust the total
+  if (!(amountBTC > 0 && pricePerBTC > 0 && totalUSD > 0 && fee > 0)) return null;
+  if (!Number.isFinite(amountBTC) || !Number.isFinite(pricePerBTC)) return null;
+  if (!Number.isFinite(totalUSD) || !Number.isFinite(fee)) return null;
+
+  const cents = (n: number) => Math.round(n * 100);
+  const net = amountBTC * pricePerBTC;          // what the Total field should hold
+  const gross = isBuy ? net + fee : net - fee;  // what it looks like they typed
+
+  // Must match the gross figure...
+  if (Math.abs(cents(totalUSD) - cents(gross)) > 1) return null;
+  // ...and be meaningfully different from the correct one (guards a fee that rounds to 0c).
+  if (Math.abs(cents(totalUSD) - cents(net)) < 1) return null;
+
+  return { suggestedTotal: net };
 }
 
 /** Homepage — the safe fallback for any update URL we don't recognize. */
