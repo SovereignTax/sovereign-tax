@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<!-- Last updated: 2026-09-28 | v1.5.1 — Full help guide: wallets vs. exchanges, transfer workflow, reconciliation (auto-match, Unmatch, Ambiguous), Specific ID, reports, backups -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Help Guide — Sovereign Tax</title>
+<meta name="description" content="How to use Sovereign Tax: importing, wallets and exchanges, recording transfers between your wallets, reconciliation, Specific ID, and exporting Form 8949.">
+<link rel="icon" type="image/png" href="icon-256.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #000000;
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-hover: rgba(255, 255, 255, 0.07);
+  --accent: #f97316;
+  --accent-soft: rgba(249, 115, 22, 0.12);
+  --green: #30d158;
+  --red: #ff453a;
+  --yellow: #ffd60a;
+  --text: #f5f5f7;
+  --text-secondary: #86868b;
+  --text-tertiary: #6e6e73;
+  --radius: 16px;
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Nav ── */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.nav-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.nav-brand img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 400;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover { color: var(--text); }
+
+.nav-links .nav-cta {
+  background: var(--accent);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 980px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.nav-links .nav-cta:hover { opacity: 0.9; color: #fff; }
+
+/* ── Main Container ── */
+.container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 100px 24px 80px;
+}
+
+/* ── Page Header ── */
+.page-header {
+  text-align: center;
+  margin-bottom: 64px;
+}
+
+.page-header h1 {
+  font-size: 2.8rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+}
+
+.page-header h1 .accent { color: var(--accent); }
+
+.page-header p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  font-weight: 300;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.page-header .version-tag {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  border: 1px solid var(--glass-border);
+  border-radius: 980px;
+  padding: 3px 12px;
+}
+
+/* ── Table of Contents ── */
+.toc {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 64px;
+}
+
+.toc h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.toc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toc-list a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 400;
+  transition: color 0.2s;
+}
+
+.toc-list a:hover { color: #fb923c; }
+
+.toc-list .toc-sub {
+  padding-left: 20px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.toc-list .toc-sub:hover { color: var(--accent); }
+
+/* ── Section ── */
+.section {
+  margin-bottom: 72px;
+}
+
+.section-label {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 980px;
+  margin-bottom: 16px;
+}
+
+.section h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.section h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-top: 40px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.section p, .section li {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 300;
+  line-height: 1.75;
+}
+
+.section p { margin-bottom: 16px; }
+
+.section p strong, .section li strong, .step-card strong, .info-box strong, .column-table strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.section ul, .section ol.plain {
+  padding-left: 22px;
+  margin-bottom: 16px;
+}
+
+.section li { margin-bottom: 6px; }
+
+.ui {
+  color: var(--text);
+  font-weight: 500;
+}
+
+code {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--text);
+}
+
+/* ── Steps ── */
+.step-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.step-card .step-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.step-card h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.step-card p, .step-card li {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
+.step-card p { margin-bottom: 8px; }
+.step-card p:last-child { margin-bottom: 0; }
+.step-card ul { padding-left: 20px; margin-bottom: 8px; }
+
+/* ── Info Box ── */
+.info-box {
+  background: var(--accent-soft);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+
+.info-box.green {
+  background: rgba(48, 209, 88, 0.08);
+  border-color: rgba(48, 209, 88, 0.2);
+}
+
+.info-box.red {
+  background: rgba(255, 69, 58, 0.08);
+  border-color: rgba(255, 69, 58, 0.2);
+}
+
+.info-box h4 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+
+.info-box.green h4 { color: var(--green); }
+.info-box.red h4 { color: var(--red); }
+
+.info-box p, .info-box li {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  font-weight: 300;
+  line-height: 1.65;
+  margin-bottom: 0;
+}
+
+.info-box ul { padding-left: 20px; margin: 6px 0 0; }
+
+/* ── Tables ── */
+.table-wrap { overflow-x: auto; margin: 20px 0; }
+
+.column-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.column-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.column-table td {
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-weight: 300;
+  vertical-align: top;
+}
+
+.column-table .yes { color: var(--accent); font-weight: 500; }
+.column-table .no { color: var(--green); font-weight: 500; }
+
+/* ── Badges (mirror the app) ── */
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 980px;
+  white-space: nowrap;
+}
+
+.badge.amber { background: rgba(255, 214, 10, 0.14); color: var(--yellow); }
+.badge.blue { background: rgba(10, 132, 255, 0.16); color: #64a8ff; }
+.badge.green { background: rgba(48, 209, 88, 0.12); color: var(--green); }
+
+/* ── Divider ── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  margin: 64px 0;
+}
+
+/* ── Footer ── */
+.page-footer {
+  text-align: center;
+  padding: 40px 24px;
+  border-top: 1px solid var(--glass-border);
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+}
+
+.page-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.page-footer a:hover { color: var(--accent); }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .page-header h1 { font-size: 2rem; }
+  .section h2 { font-size: 1.4rem; }
+  .nav-links { gap: 16px; }
+  .nav-links a { font-size: 0.78rem; }
+  .toc { padding: 20px; }
+  .step-card { padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Navigation ── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <img src="icon-256.png" alt="Sovereign Tax">
+      Sovereign Tax
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="support.html">Support</a>
+      <a href="index.html#pricing">Pricing</a>
+      <a href="index.html#purchase" class="nav-cta">Buy Now</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ── Page Header ── -->
+  <div class="page-header">
+    <h1>Help <span class="accent">Guide</span></h1>
+    <p>From your first import to Form 8949: how Sovereign Tax tracks your bitcoin, and how to record every buy, sale and transfer so your cost basis is right.</p>
+    <span class="version-tag">Updated for version 1.5.1</span>
+  </div>
+
+  <!-- ── Table of Contents ── -->
+  <div class="toc">
+    <h2>On this page</h2>
+    <ol class="toc-list">
+      <li><a href="#start">Getting started</a></li>
+      <li class="toc-sub"><a href="#start-workflow" class="toc-sub">The workflow at a glance</a></li>
+      <li><a href="#wallets">Wallets and exchanges &mdash; the key idea</a></li>
+      <li><a href="#import">Importing CSV files</a></li>
+      <li><a href="#add">Adding and editing transactions</a></li>
+      <li><a href="#transfers">Transfers between your wallets</a></li>
+      <li class="toc-sub"><a href="#transfers-record" class="toc-sub">Recording a transfer, step by step</a></li>
+      <li class="toc-sub"><a href="#transfers-partial" class="toc-sub">Partial transfers</a></li>
+      <li class="toc-sub"><a href="#transfers-example" class="toc-sub">Worked example</a></li>
+      <li class="toc-sub"><a href="#transfers-entities" class="toc-sub">Several accounts or entities (LLCs)</a></li>
+      <li class="toc-sub"><a href="#transfers-fixing" class="toc-sub">Fixing mistakes &mdash; what affects cost basis</a></li>
+      <li><a href="#reconciliation">The Reconciliation page</a></li>
+      <li><a href="#specific-id">FIFO, Specific ID and Optimize</a></li>
+      <li><a href="#review">Review checklist</a></li>
+      <li><a href="#report">Tax Report and exports</a></li>
+      <li><a href="#income">Income, donations and other views</a></li>
+      <li><a href="#backup">Settings, backups and privacy</a></li>
+      <li><a href="#start-over">Starting over for a tax year</a></li>
+      <li><a href="#contact">Still need help?</a></li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── GETTING STARTED ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="start">
+    <span class="section-label">Basics</span>
+    <h2>Getting started</h2>
+    <p>Sovereign Tax runs entirely on your computer. There is no account and no cloud: your data is stored locally and encrypted with a key derived from your PIN. On first launch you accept the Terms of Service and choose a <strong>4&ndash;6 digit PIN</strong>; after that, the app opens to a lock screen.</p>
+    <div class="info-box">
+      <h4>Keep backups</h4>
+      <p>Because nothing is stored in the cloud, your backups are the only copy of your data outside this computer. Create one in <span class="ui">Settings &rarr; Backup &amp; Restore</span> after each work session (see <a href="#backup" style="color:var(--accent)">Settings, backups and privacy</a>).</p>
+    </div>
+
+    <h3 id="start-workflow">The workflow at a glance</h3>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">1</div><h4>Bring in your history</h4></div>
+      <p>Import a CSV from each exchange or wallet (<span class="ui">Import</span>), and add anything missing by hand (<span class="ui">Add Transaction</span>). You need every purchase that funds a later sale, including prior years.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">2</div><h4>Record transfers between your wallets</h4></div>
+      <p>For every move between wallets you own, make sure there is a <strong>Transfer In</strong> on the receiving wallet and assign its <strong>source wallet</strong>. This is what moves your cost basis. See <a href="#transfers" style="color:var(--accent)">Transfers between your wallets</a>.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">3</div><h4>Choose lots for your sales</h4></div>
+      <p>Sales use FIFO by default. To pick lots yourself, or let the app pick the lowest-tax lots, use <span class="ui">Lots</span> or <span class="ui">Optimize</span> in Transactions. See <a href="#specific-id" style="color:var(--accent)">FIFO, Specific ID and Optimize</a>.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">4</div><h4>Review, then export</h4></div>
+      <p>Work through the <span class="ui">Review</span> checklist until it's all green, then export Form 8949 (PDF or CSV) or a TurboTax file from <span class="ui">Tax Report</span>. Create a backup.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── WALLETS VS EXCHANGES ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="wallets">
+    <span class="section-label">Key idea</span>
+    <h2>Wallets and exchanges</h2>
+    <p>From January 1, 2025, IRS rules require cost basis to be tracked <strong>per wallet or account</strong> (Treasury Reg. &sect;1.1012-1(j)). When you sell bitcoin, the cost basis has to come from lots held in the wallet you sold from. So every transaction in Sovereign Tax belongs to a wallet, and it has two name fields:</p>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Field</th><th>What it means</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Wallet</strong></td>
+            <td>The wallet or account this record's coins are in. On a <strong>Transfer Out</strong>, that's the wallet the coins <strong>left</strong>. On a <strong>Transfer In</strong>, it's the wallet they <strong>arrived in</strong>.</td>
+            <td>Cost basis. Holdings, per-wallet lot selection and wallet balances are all keyed by Wallet.</td>
+          </tr>
+          <tr>
+            <td><strong>Exchange</strong></td>
+            <td>A label for the platform or account: "Swan", "ColdCard", an LLC's name.</td>
+            <td>Display and grouping. Cost basis ignores it unless Wallet is blank, in which case it's used as the wallet name.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>Use one exact name per wallet, everywhere.</strong> Names are case-insensitive ("Coinbase" and "coinbase" are the same wallet), but "Coinbase" and "Coinbase Pro" are two different wallets.</li>
+      <li><strong>Separate accounts need separate names.</strong> If you have two accounts at the same exchange, or accounts for different entities, give each one its own wallet name, for example "Swan &ndash; Personal" and "Swan &ndash; LLC A".</li>
+      <li>A hardware wallet is a wallet too, e.g. "ColdCard Personal".</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── IMPORT ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="import">
+    <span class="section-label">Data</span>
+    <h2>Importing CSV files</h2>
+    <p>Export a CSV from your exchange or wallet software, then open <span class="ui">Import</span>. Supported out of the box: Coinbase, Kraken, Gemini, Strike, Cash App, River, Swan, Bisq, and any CSV with date, amount and price (or total) columns.</p>
+
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">1</div><h4>Enter the Wallet / Exchange Name</h4></div>
+      <p>This field is required, and <strong>every row in the file is tagged with this name as its wallet</strong>. Wallet or account columns inside the CSV are not used. So import each account's CSV separately, under that account's own name, and reuse exactly the same name for later imports. The name also remembers your column mapping for next time.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">2</div><h4>Choose the file and check the mapping</h4></div>
+      <p>Columns are detected automatically. Check the <span class="ui">Column Mapping</span> and <span class="ui">Data Preview</span>, and fix anything that wasn't recognized. <strong>Required:</strong> Date, Amount (BTC), and Price or Total. Type, Fee and Notes are optional.</p>
+      <ul>
+        <li><strong>No Type column?</strong> Pick a default type (Buy, Sell, Transfer In, Transfer Out, Donation) for every row.</li>
+        <li><strong>Total already includes fees?</strong> Tick <span class="ui">The Total column already includes fees</span> so the fee isn't counted twice. It's detected automatically for headers like Coinbase's "Total (inclusive of fees and/or spread)".</li>
+        <li>Files with separate Sent and Received columns are handled automatically.</li>
+      </ul>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">3</div><h4>Import</h4></div>
+      <p>Only bitcoin rows are imported; other assets are skipped. The same file can't be imported twice, and individual duplicate transactions are skipped too.</p>
+    </div>
+    <div class="info-box">
+      <h4>Transfers in your CSVs</h4>
+      <p>An exchange export usually shows withdrawals ("Send", "Withdrawal") and imports them as <strong>Transfer Out</strong>. A wallet export shows deposits ("Receive") and imports them as <strong>Transfer In</strong>. After importing, assign a source wallet to each Transfer In; see <a href="#transfers" style="color:var(--accent)">Transfers</a>.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── ADD / EDIT ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="add">
+    <span class="section-label">Data</span>
+    <h2>Adding and editing transactions</h2>
+    <p><span class="ui">Add Transaction</span> records anything that isn't in a CSV: a <strong>Buy</strong>, <strong>Sell</strong>, <strong>Transfer In</strong>, <strong>Transfer Out</strong> or <strong>Donation</strong>.</p>
+    <ul>
+      <li><strong>Total USD is the amount before fees.</strong> Leave it blank to use Amount &times; Price. Enter the fee separately: it's added to your cost basis on a buy and subtracted from your proceeds on a sale. If the Total looks like it already includes the fee, the app warns you and offers to correct it.</li>
+      <li><strong>Income</strong> (mining, rewards, interest, forks) is a Buy with an <span class="ui">Income Type</span>. Its fair market value becomes both income and cost basis.</li>
+      <li><strong>Donations</strong> use the fair market value per BTC on the donation date.</li>
+      <li><strong>Transfers:</strong> the form explains what Wallet means for each side. Set Wallet to the wallet the coins left (Transfer Out) or arrived in (Transfer In).</li>
+      <li><strong>Sells with Specific ID:</strong> choose Specific ID as the method, pick the wallet, then choose the lots. See <a href="#specific-id" style="color:var(--accent)">Specific ID</a>.</li>
+    </ul>
+    <p>In <span class="ui">Transactions</span> you can search, filter by type and year, sort by any column, use <span class="ui">Edit</span> or delete on any row, and select several rows to delete them or change their Exchange together. <span class="ui">Export CSV</span> saves your full transaction list.</p>
+    <div class="info-box">
+      <h4>Bulk "Change Exchange" also renames the wallet</h4>
+      <p>On rows where Wallet and Exchange were identical, which is the case for every imported row, bulk <span class="ui">Change Exchange</span> updates the Wallet too, so those lots move to the new name. That's usually what you want. Check Holdings afterwards.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── TRANSFERS ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="transfers">
+    <span class="section-label">Transfers</span>
+    <h2>Transfers between your wallets</h2>
+    <p>Moving bitcoin between wallets you own (exchange to hardware wallet, hardware wallet to another exchange) isn't taxable. The cost basis and holding period travel with the coins. Because cost basis is tracked per wallet, the app needs to know <strong>which lots moved where</strong>, so that when you later sell from the new wallet, the right lots are there.</p>
+
+    <div class="info-box green">
+      <h4>The rule in one line</h4>
+      <p>A <strong>Transfer In</strong> on the receiving wallet, with its <strong>source wallet assigned</strong>, is what moves cost basis. A <strong>Transfer Out</strong> on the sending wallet is optional: it completes your paper trail but doesn't move any lots by itself.</p>
+    </div>
+
+    <h3 id="transfers-record">Recording a transfer, step by step</h3>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">1</div><h4>Add (or import) the Transfer In</h4></div>
+      <p><strong>Wallet</strong> = the wallet the coins arrived in (e.g. "ColdCard Personal"). <strong>Amount</strong> = the amount received. <strong>Exchange</strong> is just a label; use whatever describes it ("ColdCard", or the account's name).</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">2</div><h4>Assign its source wallet</h4></div>
+      <p>In <span class="ui">Transactions</span>, unassigned Transfer Ins show a red <span class="ui">Assign</span> button. Click it and choose the wallet the coins came from. The list shows each wallet's balance at the time of the transfer, and a wallet may be marked <span class="badge green">Suggested</span> when a matching withdrawal was found (see <a href="#reconciliation" style="color:var(--accent)">Reconciliation</a>).</p>
+      <p><strong>Which lots moved?</strong> By default the oldest lots move first (FIFO). To choose, tick <span class="ui">Choose specific lots to transfer</span> and pick lots. The picker's <span class="ui">Optimize</span> button can pick for you. Any amount you don't pick is filled FIFO.</p>
+      <p>After saving, the row shows <span class="ui">&larr; source</span> and whether the lots were chosen by Specific ID or FIFO. Click it to change the assignment.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">3</div><h4>Optional: the Transfer Out</h4></div>
+      <p><strong>Wallet</strong> = the wallet the coins left (e.g. "Swan Personal"), with the same date and the amount sent. Exchange-exported withdrawals come in as Transfer Outs automatically. The Reconciliation page pairs it with its Transfer In.</p>
+    </div>
+
+    <h3 id="transfers-partial">Partial transfers</h3>
+    <p>A Transfer In moves <strong>only its own amount</strong>, and everything else stays in the source wallet. Moving 0.3 of your 1.0 BTC to another wallet is simply a 0.3 BTC Transfer In with its source assigned. Use <span class="ui">Choose specific lots to transfer</span> when it matters which lots moved.</p>
+
+    <h3 id="transfers-example">Worked example</h3>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Exchange</th><th>Wallet</th><th>Source wallet (Assign)</th><th>BTC</th></tr></thead>
+        <tbody>
+          <tr><td>Jan 5</td><td>Buy</td><td>Swan</td><td>Swan Personal</td><td>&mdash;</td><td>0.6</td></tr>
+          <tr><td>Jan 20</td><td>Buy</td><td>Swan</td><td>Swan Personal</td><td>&mdash;</td><td>0.4</td></tr>
+          <tr><td>Feb 1</td><td>Transfer Out <em>(optional)</em></td><td>Swan</td><td>Swan Personal</td><td>&mdash;</td><td>1.0</td></tr>
+          <tr><td>Feb 1</td><td>Transfer In</td><td>ColdCard</td><td>ColdCard Personal</td><td><strong>Swan Personal</strong></td><td>1.0</td></tr>
+          <tr><td>Mar 1</td><td>Transfer Out <em>(optional)</em></td><td>ColdCard</td><td>ColdCard Personal</td><td>&mdash;</td><td>0.3</td></tr>
+          <tr><td>Mar 1</td><td>Transfer In</td><td>SafeExchange</td><td>SafeExchange Personal</td><td><strong>ColdCard Personal</strong></td><td>0.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Holdings afterwards: Swan Personal 0, ColdCard Personal 0.7, SafeExchange Personal 0.3, each keeping its original purchase dates and cost basis. The March move is partial: 0.7 BTC stays on the ColdCard.</p>
+    <div class="info-box red">
+      <h4>Common mistake</h4>
+      <p>Setting a Transfer Out's Wallet to the <em>destination</em>. The Transfer Out always belongs to the wallet the coins <strong>left</strong>. In the March row above, that's ColdCard Personal, not SafeExchange Personal. The Reconciliation page warns you when both sides of a pair are in the same wallet.</p>
+    </div>
+
+    <h3 id="transfers-entities">Several accounts or entities (for example, LLCs)</h3>
+    <ul>
+      <li>Give every wallet a distinct name per account and per entity: "Swan &ndash; LLC A", "ColdCard &ndash; LLC A", "Swan &ndash; LLC B"&hellip;</li>
+      <li><strong>Always assign the source wallet</strong> on each Transfer In. That's what keeps one entity's cost basis from moving into another entity's wallet.</li>
+      <li>When two accounts send the <strong>identical amount on the same day</strong>, Reconciliation pairs each with its own deposit if the records say which is which: either an assigned source wallet, or the account's label in Exchange on both sides. If nothing distinguishes them, both are marked <span class="badge amber">Ambiguous</span> and left for you to match. The app never guesses.</li>
+    </ul>
+
+    <h3 id="transfers-fixing">Fixing mistakes &mdash; what affects cost basis</h3>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Change</th><th>Affects cost basis?</th></tr></thead>
+        <tbody>
+          <tr><td>Any field on a Transfer Out</td><td class="no">No. Transfer Outs don't move lots.</td></tr>
+          <tr><td>An Exchange label, with the Wallet unchanged</td><td class="no">No.</td></tr>
+          <tr><td>A Transfer In's Wallet or source wallet</td><td class="yes">Yes. The lots are re-routed. Later sales whose Specific ID picks used lots that moved show a warning and fall back to FIFO, so re-run Optimize for that year.</td></tr>
+          <tr><td>A Buy's or Sell's Wallet</td><td class="yes">Yes. It changes which wallet the lots are in or come from.</td></tr>
+          <tr><td>Bulk <em>Change Exchange</em></td><td class="yes">Possibly. It also renames the Wallet where Wallet and Exchange were identical, so check Holdings.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── RECONCILIATION ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="reconciliation">
+    <span class="section-label">Transfers</span>
+    <h2>The Reconciliation page</h2>
+    <p><span class="ui">Reconciliation</span> checks your paper trail: it pairs each Transfer Out with its Transfer In and shows a balance for every wallet. <strong>Your tax numbers don't depend on this page</strong>, because cost basis moves only through the source wallets you assign. Pairs found here do power the <span class="badge green">Suggested</span> source wallet in Assign.</p>
+
+    <h3>How pairs are matched</h3>
+    <p>A Transfer Out and a Transfer In are paired when the amounts agree (the received amount may be slightly lower, for the miner fee) and the deposit arrives 0&ndash;7 days later in a different wallet. When several deposits could fit one withdrawal, the app prefers, in order:</p>
+    <ol class="plain">
+      <li>the deposit whose assigned source wallet is this withdrawal's wallet;</li>
+      <li>the deposit labeled with the same account (the same Exchange label, or an Exchange label naming the source wallet);</li>
+      <li>the smallest implied fee, then the fewest days.</li>
+    </ol>
+    <p>If two pairings between different wallets are still equally good, nothing is paired and both are marked <span class="badge amber">Ambiguous</span>.</p>
+
+    <h3>What you'll see</h3>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Item</th><th>Meaning</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Matched Transfer Pairs</strong></td><td>Withdrawal &rarr; deposit, with both wallet names. <span class="badge blue">Manual</span> marks pairs you linked yourself.</td><td>Check the wallets. Click <span class="ui">Unmatch</span> on any pair that's wrong.</td></tr>
+          <tr><td><strong>Flagged for Review</strong></td><td>Matched, but the implied miner fee is unusually high (above 0.0005 BTC).</td><td>Approve it or Unmatch it.</td></tr>
+          <tr><td><span class="badge amber">Ambiguous</span></td><td>More than one pairing fits equally well.</td><td>Match by hand, or assign the Transfer In's source wallet.</td></tr>
+          <tr><td><strong>&#10003; from &hellip;</strong></td><td>A deposit with its source wallet assigned. It's accounted for even without a Transfer Out.</td><td>Nothing. Add a Transfer Out only if you want the full paper trail.</td></tr>
+          <tr><td><strong>Unmatched Out</strong></td><td>A withdrawal with no deposit found.</td><td>Normal for withdrawals to a wallet you don't track here. Otherwise add the Transfer In.</td></tr>
+          <tr><td><strong>Unmatched In</strong></td><td>A deposit with no withdrawal found and no source wallet.</td><td>Assign its source wallet (Transactions &rarr; Assign).</td></tr>
+          <tr><td><strong>Pair warnings</strong></td><td>Both sides are in the same wallet, or the deposit's source wallet differs from the withdrawal's wallet.</td><td>Fix the Wallet on the Transfer Out, or the source on the Transfer In, so they agree.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>You're in control</h3>
+    <ul>
+      <li><strong>Manual matching:</strong> select one outgoing and one incoming transfer in the Unmatched lists, then <span class="ui">Confirm Match</span>. Manual matches always take priority over automatic ones.</li>
+      <li><strong>Unmatch</strong> works on every pair. Both transfers move to the Unmatched lists, and auto-match leaves them alone from then on. <span class="ui">Let auto-match pair them again</span> undoes this.</li>
+      <li><strong>Auto-match transfers</strong> (the switch at the top) can be turned off to pair everything by hand.</li>
+    </ul>
+
+    <h3>Wallet balances</h3>
+    <p>Computed per wallet, using the same wallets as Holdings, from your records: buys and deposits add; sells, donations and withdrawals subtract. A Transfer In with a source wallet but no Transfer Out counts as leaving the source wallet. When every transfer is recorded consistently, these match your Holdings. A negative balance usually means a missing buy or transfer.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── SPECIFIC ID ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="specific-id">
+    <span class="section-label">Tax</span>
+    <h2>FIFO, Specific ID and Optimize</h2>
+    <p>Sovereign Tax supports the two IRS-permitted methods. <strong>FIFO</strong> (first in, first out) is the default: each sale uses the oldest lots in its wallet. <strong>Specific Identification</strong> lets you choose exactly which lots each sale or donation uses, but it must be elected before the disposal.</p>
+    <ul>
+      <li><strong>One sale:</strong> in <span class="ui">Transactions</span>, click <span class="ui">Lots</span> on a sell or donation. It shows <span class="ui">Lots &#10003;</span> once lots are chosen. Or choose Specific ID when you add the sale.</li>
+      <li><strong>A whole year:</strong> <span class="ui">Optimize (N)</span> assigns the lowest-tax lots (losses first, then the smallest gains) to every sale and donation in the selected year that doesn't have a Specific ID election yet. It shows the FIFO and optimized totals before you apply anything.</li>
+      <li><strong>Undo:</strong> <span class="ui">Revert to FIFO</span> removes all of the selected year's Specific ID elections.</li>
+      <li><strong>Per-wallet rule:</strong> lots come from the wallet you sell from. If a sale's wallet has no lots, usually because a Transfer In is missing its source wallet, it's marked with &#9888;&#65039; as a wallet mismatch. Fix the transfer and re-optimize.</li>
+      <li><span class="ui">Simulate Sale</span> previews a hypothetical sale without recording anything. With Specific ID, the lots you pick carry over to Add Transaction. <span class="ui">Compare Methods</span> shows FIFO against optimal Specific ID.</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── REVIEW ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="review">
+    <span class="section-label">Tax</span>
+    <h2>Review checklist</h2>
+    <p><span class="ui">Review</span> is a guided checklist for the selected tax year. Fix these before exporting:</p>
+    <ol class="plain">
+      <li><strong>Assign source wallets:</strong> every Transfer In needs one. You can assign right from the checklist.</li>
+      <li><strong>Resolve wallet mismatches:</strong> sales that had to use lots from another wallet. This is usually a missing source wallet on a transfer.</li>
+      <li><strong>Optimize lot selections</strong> (optional): apply Specific ID to lower your tax. You can always revert to FIFO.</li>
+    </ol>
+    <p>When everything is green, your data is ready for the Tax Report.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── TAX REPORT ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="report">
+    <span class="section-label">Tax</span>
+    <h2>Tax Report and exports</h2>
+    <p><span class="ui">Tax Report</span> shows Form 8949 and Schedule D figures for the selected year, split into short-term (held one year or less) and long-term. Sales that span both are split automatically. Specific ID elections from Transactions are applied automatically. Prior-year capital loss carryforwards (short-term and long-term) are entered in <span class="ui">Settings &rarr; Tax Settings</span>.</p>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Export</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>PDF Report</strong></td><td>A Form 8949 summary for your records or your preparer.</td></tr>
+          <tr><td><strong>Form 8949 CSV</strong></td><td>Entering Form 8949 manually or in other tax software.</td></tr>
+          <tr><td><strong>TurboTax TXF</strong> / <strong>TurboTax CSV</strong></td><td>Importing directly into TurboTax.</td></tr>
+          <tr><td><strong>Raw Data CSV</strong></td><td>Every sale broken out lot by lot: dates, proceeds, cost basis, fee and term.</td></tr>
+          <tr><td><strong>Form 8283 CSV</strong></td><td>Reference data for charitable donations (Form 8283). Donations aren't reported on Form 8949.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── OTHER VIEWS ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="income">
+    <span class="section-label">Views</span>
+    <h2>Income, donations and other views</h2>
+    <ul>
+      <li><strong>Income:</strong> mining, rewards, interest and fork income, taxed as ordinary income at fair market value on the date received (Schedule 1).</li>
+      <li><strong>Holdings:</strong> your current lots with cost basis and unrealized gain or loss. Filter by wallet.</li>
+      <li><strong>Lot Maturity:</strong> when each lot becomes long-term.</li>
+      <li><strong>Tax Harvesting:</strong> lots trading below their cost basis that could offset this year's gains.</li>
+      <li><strong>Multi-Year:</strong> gains and losses across all your tax years.</li>
+      <li><strong>Audit Log:</strong> a timestamped record of every import, edit, deletion and lot election.</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── SETTINGS / BACKUP ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="backup">
+    <span class="section-label">Settings</span>
+    <h2>Settings, backups and privacy</h2>
+    <ul>
+      <li><strong>Backup &amp; Restore:</strong> create a password-protected backup file. You'll need that password to restore it. Backups you create are also listed inside the app, and you can restore from a file or from that list.</li>
+      <li><strong>Live BTC Price:</strong> on, the app fetches prices from CoinGecko. Off, it runs fully offline.</li>
+      <li><strong>Hide Amounts</strong> blurs all BTC and USD values, e.g. for screen sharing. <strong>PIN Lock</strong> changes your PIN.</li>
+      <li><strong>Theme:</strong> System, Light or Dark.</li>
+      <li><strong>Permanently Delete All Data</strong> erases everything (type DELETE to confirm). Create a backup first.</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── START OVER ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="start-over">
+    <span class="section-label">Recovery</span>
+    <h2>Starting over for a tax year</h2>
+    <p>Usually you don't need to: correcting a Transfer Out or an Exchange label doesn't touch your cost basis (see <a href="#transfers-fixing" style="color:var(--accent)">Fixing mistakes</a>). If you do want a clean slate for a year's lot choices:</p>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">1</div><h4>Back up</h4></div>
+      <p><span class="ui">Settings &rarr; Backup &amp; Restore</span>.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">2</div><h4>Clear the year</h4></div>
+      <p>In <span class="ui">Transactions</span>, select the year. <span class="ui">Revert to FIFO</span> removes that year's sale and donation elections. <span class="ui">Clear Assignments</span> removes that year's Transfer In source wallets and lot picks.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">3</div><h4>Re-assign transfers</h4></div>
+      <p>Click <span class="ui">Assign</span> on each Transfer In, choose its source wallet, and pick lots if you want.</p>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num">4</div><h4>Re-optimize</h4></div>
+      <p>Click <span class="ui">Optimize</span> for the year's sales, then work through Review.</p>
+    </div>
+    <p>Work from the oldest year forward, because each year's lot choices affect which lots remain for the next.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ── CONTACT ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="contact">
+    <span class="section-label">Contact</span>
+    <h2>Still need help?</h2>
+    <p>See <a href="support.html" style="color:var(--accent)">Support</a> for CSV and installation troubleshooting, or email us.</p>
+    <div class="step-card" style="text-align:center;padding:40px 28px;">
+      <h4 style="font-size:1.1rem;margin-bottom:8px;">Email Us</h4>
+      <p style="margin-bottom:16px;">Describe the issue and include your <strong>Invoice ID</strong> (from your BTCPay receipt or Gumroad order) so we can look you up. Please don't send your data file or backup.</p>
+      <a href="mailto:support@sovereigntax.io" style="display:inline-block;background:var(--accent);color:#fff;padding:12px 32px;border-radius:980px;font-weight:600;font-size:0.95rem;text-decoration:none;">support@sovereigntax.io</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Footer ── -->
+<div class="page-footer">
+  <p>&copy; 2026 Sovereign Tax Solutions LLC &nbsp;&middot;&nbsp; <a href="index.html">Home</a> &nbsp;&middot;&nbsp; <a href="support.html">Support</a> &nbsp;&middot;&nbsp; <a href="terms-of-service.html">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="privacy-policy.html">Privacy Policy</a></p>
+  <p style="font-size:0.7rem;color:#555;margin-top:6px;">This software is for informational purposes only and does not constitute tax advice.</p>
+</div>
+
+</body>
+</html>

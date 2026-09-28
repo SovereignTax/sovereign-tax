@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Last updated: 2026-02-11 | v1.0 — Initial support page with CSV troubleshooting and macOS Gatekeeper guide -->
+<!-- Last updated: 2026-09-28 | v1.1 — Import name is required and sets each row's wallet; CSV Wallet/Exchange columns are ignored; link to Help Guide -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -423,7 +423,7 @@ body {
   <!-- ── Page Header ── -->
   <div class="page-header">
     <h1>Questions & <span class="accent">Troubleshooting</span></h1>
-    <p>Step-by-step guides to help you get the most out of Sovereign Tax. If something looks off, start here.</p>
+    <p>Step-by-step guides to help you get the most out of Sovereign Tax. If something looks off, start here. For the full workflow &mdash; wallets, transfers, reconciliation and reports &mdash; see the <a href="help.html" style="color:var(--accent);text-decoration:none;">Help Guide</a>.</p>
   </div>
 
   <!-- ── Table of Contents ── -->
@@ -455,7 +455,7 @@ body {
     <!-- Step 1: Import Screen -->
     <h3 id="csv-auto">Step 1 &mdash; Drop or browse for your CSV</h3>
     <p>Open the app and click <strong>Import Data</strong> in the sidebar. You'll see the import screen where you can drag and drop your CSV file, or click <strong>"Browse Files..."</strong> to select it from your file system.</p>
-    <p>Optionally, enter the exchange name (e.g., "Coinbase", "Kraken") in the <strong>Exchange Name</strong> field. This helps Sovereign Tax remember your column mapping for next time &mdash; so future imports from the same exchange are instant.</p>
+    <p>Enter the name of the wallet or account this file comes from (e.g., "Coinbase", "Swan Personal") in the <strong>Wallet / Exchange Name</strong> field &mdash; it's required. <strong>Every transaction in the file is tagged with this name as its wallet</strong>, so import each account's CSV separately under that account's own name, and reuse exactly the same name for later imports. The name also remembers your column mapping, so future imports from the same exchange are instant.</p>
 
     <div class="screenshot-wrap">
       <img src="screenshots_original/csv-import-screen.png" alt="Import screen showing drag-and-drop area and Browse Files button" loading="lazy">
@@ -558,12 +558,12 @@ body {
         <tr>
           <td><strong>Wallet</strong></td>
           <td>No</td>
-          <td>Which wallet or sub-account this transaction belongs to.</td>
+          <td>Not used &mdash; every row is tagged with the <strong>Wallet / Exchange Name</strong> you enter on the Import screen.</td>
         </tr>
         <tr>
           <td><strong>Exchange</strong></td>
           <td>No</td>
-          <td>The exchange or platform where the transaction happened.</td>
+          <td>Not used &mdash; same as Wallet above.</td>
         </tr>
         <tr>
           <td><strong>Notes</strong></td>

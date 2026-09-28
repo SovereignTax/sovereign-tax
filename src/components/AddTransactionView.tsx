@@ -42,6 +42,7 @@ export function AddTransactionView() {
 
   // Current lots for disposition preview (Sell or Donation)
   const isDisposition = type === TransactionType.Sell || type === TransactionType.Donation;
+  const isTransferType = type === TransactionType.TransferIn || type === TransactionType.TransferOut;
   const currentLots = useMemo(() => {
     if (!isDisposition) return [];
     return calculate(state.allTransactions, dispositionMethod, state.recordedSales).lots;
@@ -217,7 +218,12 @@ export function AddTransactionView() {
     if (isDisposition) {
       state.setSavedLotSelections(null);
     }
-    setSuccess(`${TransactionTypeDisplayNames[txn.transactionType]} of ${formatBTC(txn.amountBTC)} BTC added`);
+    setSuccess(
+      `${TransactionTypeDisplayNames[txn.transactionType]} of ${formatBTC(txn.amountBTC)} BTC added` +
+      (txn.transactionType === TransactionType.TransferIn
+        ? ` — next, click "Assign" on it in Transactions to choose its source wallet so the cost basis moves with the coins.`
+        : "")
+    );
     setAmountStr(""); setPriceStr(""); setTotalStr(""); setFeeStr(""); setWallet(""); setNotes(""); setIncomeType("");
     setPendingTxn(null);
     setDuplicateMatches([]);
@@ -300,6 +306,26 @@ export function AddTransactionView() {
             ))}
           </div>
         </div>
+
+        {/* Transfer guidance — what the fields mean on each side of a transfer */}
+        {isTransferType && (
+          <div className="flex items-start gap-4">
+            <span className="w-24" />
+            <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-3 rounded-lg flex-1 space-y-1">
+              {type === TransactionType.TransferOut ? (
+                <>
+                  <p><strong>Transfer Out</strong> records the withdrawal side. Set <strong>Wallet</strong> to the wallet the coins <strong>left</strong> (e.g., "Swan Personal"). <strong>Exchange</strong> is only a label for the platform or account (e.g., "Swan") — cost basis follows the Wallet.</p>
+                  <p>A Transfer Out doesn't move cost basis by itself: record the matching <strong>Transfer In</strong> on the wallet the coins arrived in and assign its source wallet.</p>
+                </>
+              ) : (
+                <>
+                  <p><strong>Transfer In</strong> records the deposit side. Set <strong>Wallet</strong> to the wallet the coins <strong>arrived in</strong> (e.g., "ColdCard Personal"). <strong>Exchange</strong> is only a label for the platform or account — cost basis follows the Wallet.</p>
+                  <p>After adding, click <strong>Assign</strong> on it in Transactions to choose the <strong>source wallet</strong> and, optionally, the exact lots that moved. Only this Transfer In's amount moves, so partial moves are fine. A matching Transfer Out on the source wallet is optional but completes the paper trail.</p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Income Type (only for Buy) */}
         {type === TransactionType.Buy && (
@@ -431,7 +457,13 @@ export function AddTransactionView() {
           <datalist id="wallet-options">
             {state.availableWallets.map((w) => <option key={w} value={w} />)}
           </datalist>
-          <span className="text-xs text-gray-400">(optional — for per-wallet cost basis tracking)</span>
+          <span className="text-xs text-gray-400">
+            {type === TransactionType.TransferOut
+              ? "(the wallet the coins left)"
+              : type === TransactionType.TransferIn
+                ? "(the wallet the coins arrived in)"
+                : "(optional — for per-wallet cost basis tracking)"}
+          </span>
         </div>
         )}
         {showWalletWarning && (

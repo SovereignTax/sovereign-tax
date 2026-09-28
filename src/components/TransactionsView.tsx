@@ -220,7 +220,7 @@ export function TransactionsView() {
         (t) => t.transactionType === TransactionType.TransferIn && t.sourceWallet && new Date(t.date).getFullYear() === state.selectedYear
       );
       for (const t of transferIns) {
-        await state.updateTransaction(t.id, { sourceWallet: undefined });
+        await state.updateTransaction(t.id, { sourceWallet: undefined, transferLotSelections: undefined });
       }
       setShowClearAssignments(false);
     } catch (err) {
@@ -728,7 +728,7 @@ export function TransactionsView() {
             txn={modalTxn}
             availableWallets={filteredWallets}
             walletBalances={priorBalances}
-            suggestion={suggestSourceWallet(modalTxn, state.allTransactions)}
+            suggestion={suggestSourceWallet(modalTxn, state.allTransactions, state.reconcileOptions)}
             allTransactions={state.allTransactions}
             recordedSales={state.recordedSales}
             onSave={async (sourceWallet, transferLotSelections) => {
