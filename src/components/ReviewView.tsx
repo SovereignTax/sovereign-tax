@@ -29,6 +29,7 @@ export function ReviewView() {
     recordSalesBatch,
     deleteSaleRecordsByIds,
     setSelectedNav,
+    reconcileOptions,
   } = state;
 
   // Shared resolver
@@ -409,7 +410,7 @@ export function ReviewView() {
             txn={modalTxn}
             availableWallets={filteredWallets}
             walletBalances={priorBalances}
-            suggestion={suggestSourceWallet(modalTxn, allTransactions)}
+            suggestion={suggestSourceWallet(modalTxn, allTransactions, reconcileOptions)}
             allTransactions={allTransactions}
             recordedSales={recordedSales}
             onSave={async (sourceWallet, transferLotSelections) => {

@@ -9,6 +9,7 @@ import { computeHash } from "./csv-import";
 import { deriveEncryptionKey, generateSalt, hashPINWithPBKDF2 } from "./crypto";
 import { AuditEntry, AuditAction, createAuditEntry, capAuditLog } from "./audit";
 import { createBackupBundle, parseBackupBundle, saveBackupToAppData } from "./backup";
+import { ReconcileOptions, reconcileOptionsFromPrefs } from "./reconciliation";
 
 interface PriceState {
   currentPrice: number | null;
@@ -93,6 +94,10 @@ interface AppStateContextType {
   manualTransferMatches: Array<{ outId: string; inId: string }>;
   addManualTransferMatch: (match: { outId: string; inId: string }) => void;
   removeManualTransferMatch: (outId: string, inId: string) => void;
+  autoMatchTransfers: boolean;
+  setAutoMatchTransfers: (on: boolean) => void;
+  /** Manual matches, unmatched pairs and the auto-match switch, ready for reconcileTransfers()/suggestSourceWallet() */
+  reconcileOptions: ReconcileOptions;
 
   // Session-only: saved lot selections from Simulation
   savedLotSelections: SavedLotSelections | null;
@@ -183,6 +188,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [manualTransferMatches, setManualTransferMatchesState] = useState<Array<{ outId: string; inId: string }>>(
     prefs.manualTransferMatches ?? []
   );
+  const [autoMatchTransfers, setAutoMatchTransfers] = useState(prefs.autoMatchTransfers ?? true);
+  const reconcileOptions = React.useMemo(
+    () => reconcileOptionsFromPrefs({ manualTransferMatches, reconciliationDecisions, autoMatchTransfers }),
+    [manualTransferMatches, reconciliationDecisions, autoMatchTransfers]
+  );
 
   const setReconciliationDecision = useCallback((pairKey: string, decision: "approved" | "rejected" | null) => {
     setReconciliationDecisionsState((prev) => {
@@ -233,13 +243,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       txnSortAsc,
       reconciliationDecisions,
       manualTransferMatches,
+      autoMatchTransfers,
       });
     } catch (e) {
       // Quota errors from a passive effect would otherwise unmount the whole tree
       setSaveError("Failed to save preferences — storage may be full.");
       console.error("Preferences save failed:", e);
     }
-  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches]);
+  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches, autoMatchTransfers]);
 
   // Apply appearance mode — default to dark when System is selected
   useEffect(() => {
@@ -927,6 +938,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // savePreferences effect, overwriting what restoreAllData just wrote.
       setReconciliationDecisionsState(p.reconciliationDecisions ?? {});
       setManualTransferMatchesState(p.manualTransferMatches ?? []);
+      if (p.autoMatchTransfers !== undefined) setAutoMatchTransfers(p.autoMatchTransfers);
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -965,6 +977,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     manualTransferMatches,
     addManualTransferMatch,
     removeManualTransferMatch,
+    autoMatchTransfers,
+    setAutoMatchTransfers,
+    reconcileOptions,
     savedLotSelections,
     setSavedLotSelections,
     isUnlocked,

@@ -127,8 +127,9 @@ export interface Preferences {
   priorCarryforwardLT?: number; // Prior-year long-term capital loss carryforward (negative, USD)
   txnSortField?: string; // Transaction sort column (default: "date")
   txnSortAsc?: boolean; // Transaction sort direction (default: true = ascending)
-  reconciliationDecisions?: Record<string, "approved" | "rejected">; // Persisted approve/reject for flagged transfer pairs (keyed by "outId|inId")
+  reconciliationDecisions?: Record<string, "approved" | "rejected">; // Persisted decisions on auto-matched transfer pairs (keyed by "outId|inId"): "approved" confirms a flagged pair, "rejected" = user unmatched it
   manualTransferMatches?: Array<{ outId: string; inId: string }>; // Persisted user-confirmed manual transfer pairs
+  autoMatchTransfers?: boolean; // Reconciliation: pair transfers automatically (default true). false = manual matching only
 }
 
 export function createTransaction(params: Omit<Transaction, "id">): Transaction {
