@@ -1,6 +1,10 @@
 #!/bin/bash
 # Sovereign Tax — macOS Build, Sign, Notarize & Package
-# Usage: ./build-mac.sh
+# Usage: ./build-mac.sh [upload-name.dmg]
+#   Builds a UNIVERSAL app (Apple Silicon + Intel), signs it, packages a DMG,
+#   notarizes and staples it. With an argument, the DMG is copied into the
+#   Cloudflare downloads folder under that name (the UUID file name listed in
+#   version.json); without one it keeps the default SovereignTax-macOS.dmg.
 
 set -e
 
@@ -8,7 +12,9 @@ SIGN_ID="Developer ID Application: Joshua Himmelspach (4K84Q4TST4)"
 PROFILE="SovereignTax"
 APP_NAME="Sovereign Tax"
 DMG_NAME="SovereignTax-macOS.dmg"
-BUNDLE_DIR="src-tauri/target/release/bundle/macos"
+TARGET="universal-apple-darwin"
+BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle/macos"
+UPLOAD_NAME="${1:-$DMG_NAME}"
 OUTPUT_DIR="/Users/joshuahimmelspach/Desktop/Sovereign Tax Final/cloudflare-package/downloads"
 BUILDS_DIR="/Users/joshuahimmelspach/Desktop/Sovereign Tax Final/builds"
 
@@ -17,10 +23,20 @@ echo "  Sovereign Tax — macOS Build Pipeline"
 echo "================================================"
 echo ""
 
-# Step 1: Build
-echo "[1/5] Building app..."
-npm run tauri build
-echo "  ✓ Build complete"
+# Step 1: Build — universal, so the one DMG runs on Apple Silicon and Intel Macs.
+# (A plain `npm run tauri build` only targets this Mac's own architecture.)
+echo "[1/5] Building universal app (Apple Silicon + Intel)..."
+if command -v rustup >/dev/null 2>&1; then
+    rustup target add aarch64-apple-darwin x86_64-apple-darwin
+fi
+npm run tauri build -- --target "$TARGET"
+EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$BUNDLE_DIR/$APP_NAME.app/Contents/Info.plist")
+ARCHS=$(lipo -archs "$BUNDLE_DIR/$APP_NAME.app/Contents/MacOS/$EXECUTABLE")
+if [[ "$ARCHS" != *arm64* || "$ARCHS" != *x86_64* ]]; then
+    echo "[ERROR] Expected a universal binary (arm64 + x86_64), got: $ARCHS"
+    exit 1
+fi
+echo "  ✓ Build complete ($ARCHS)"
 echo ""
 
 # Step 2: Sign
@@ -56,8 +72,8 @@ echo ""
 
 # Copy to output locations
 echo "Copying to output folders..."
-cp /tmp/$DMG_NAME "$OUTPUT_DIR/$DMG_NAME"
-echo "  → $OUTPUT_DIR/$DMG_NAME"
+cp /tmp/$DMG_NAME "$OUTPUT_DIR/$UPLOAD_NAME"
+echo "  → $OUTPUT_DIR/$UPLOAD_NAME"
 
 # Create versioned backup
 VERSION=$(date +%Y-%m-%d_%H%M)
