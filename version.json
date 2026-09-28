@@ -1,12 +1,12 @@
 {
-  "latest": "1.5.0",
+  "latest": "1.5.1",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-09-01",
-  "notes": "Major correctness and reliability release: fixed TurboTax TXF export term codes, tax-year assignment for date-only CSV imports, partial-sale warnings, crash-safe PIN changes, atomic data writes, European number formats, and dozens of import, export, and UI fixes. 623 automated tests.",
+  "releaseDate": "2026-09-28",
+  "notes": "Fixes transfer matching between wallets: transfers now pair by wallet (no more cross-account matches, e.g. two LLCs sending the same amount on the same day), look-alike transfers are never guessed, and you can unmatch any pair or turn auto-matching off. Wallet balances now agree with Holdings. Also fixes double-counted CSV fees and makes backup restore crash-safe. 691 automated tests.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/3cfa4382-0cdf-4f1a-a178-13c72465614c.dmg",
-    "windows": "https://sovereigntax.io/downloads/845a1af7-336e-4e4b-953e-bb7043dd7fe0.exe",
-    "linux": "https://sovereigntax.io/downloads/fc4c6361-d64f-4266-a88c-9ac5f779677a.deb",
-    "linux-rpm": "https://sovereigntax.io/downloads/dd13834c-ce8c-44fa-a6e1-c12254e70d04.rpm"
+    "macos": "https://sovereigntax.io/downloads/5ed346ae-2834-4637-bdca-5f2984027fe4.dmg",
+    "windows": "https://sovereigntax.io/downloads/d7b2a332-bf16-4d12-9c87-edb18b373792.exe",
+    "linux": "https://sovereigntax.io/downloads/0d6adfe1-7cae-4040-97c7-87a2f2a48658.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/8efeb9e4-3338-4282-afbc-bd54a30895b8.rpm"
   }
 }
