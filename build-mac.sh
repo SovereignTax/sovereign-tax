@@ -57,6 +57,11 @@ ln -s /Applications "$STAGING/Applications"
 hdiutil create -volname "$APP_NAME" -srcfolder "$STAGING" -ov -format UDZO /tmp/$DMG_NAME
 rm -rf "$STAGING"
 echo "  ✓ DMG created (with Applications shortcut)"
+# Sign the DMG container itself, before notarizing. Signing only the .app leaves the
+# DMG with "no usable signature", and Gatekeeper rejects it even once stapled.
+codesign --sign "$SIGN_ID" --timestamp /tmp/$DMG_NAME
+codesign --verify --verbose /tmp/$DMG_NAME
+echo "  ✓ DMG signed and verified"
 echo ""
 
 # Step 4: Notarize
@@ -68,6 +73,17 @@ echo ""
 echo "[5/5] Stapling notarization ticket..."
 xcrun stapler staple /tmp/$DMG_NAME
 echo "  ✓ Stapled"
+# Gate: the DMG itself must pass Gatekeeper as notarized before it is copied anywhere.
+# spctl prints its verdict on stderr and exits non-zero on rejection, so capture both
+# and let the check below decide (after showing the verdict).
+xcrun stapler validate /tmp/$DMG_NAME
+SPCTL_OUT=$(spctl -a -vvv -t install /tmp/$DMG_NAME 2>&1) || true
+echo "$SPCTL_OUT"
+if [[ "$SPCTL_OUT" != *accepted* || "$SPCTL_OUT" != *"source=Notarized Developer ID"* ]]; then
+    echo "[ERROR] Gatekeeper did not accept the DMG as Notarized Developer ID; not copying it"
+    exit 1
+fi
+echo "  ✓ Gatekeeper accepts the DMG (source=Notarized Developer ID)"
 echo ""
 
 # Copy to output locations
