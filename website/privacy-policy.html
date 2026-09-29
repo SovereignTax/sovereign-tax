@@ -5,6 +5,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — Sovereign Tax</title>
+<meta name="description" content="Sovereign Tax privacy policy. Zero data collection, zero telemetry. All data stays on your device, encrypted with AES-256-GCM. No cloud, no accounts.">
+<link rel="canonical" href="https://sovereigntax.io/privacy-policy.html">
+<link rel="icon" type="image/png" sizes="256x256" href="icon-256.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icon-128.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<meta name="theme-color" content="#0a0a10">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Sovereign Tax">
+<meta property="og:title" content="Privacy Policy — Sovereign Tax">
+<meta property="og:description" content="Sovereign Tax privacy policy. Zero data collection, zero telemetry. All data stays on your device, encrypted with AES-256-GCM.">
+<meta property="og:url" content="https://sovereigntax.io/privacy-policy.html">
+<meta property="og:image" content="https://sovereigntax.io/icon-512.png">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Privacy Policy — Sovereign Tax">
+<meta name="twitter:description" content="Zero data collection, zero telemetry. All data stays on your device, encrypted with AES-256-GCM.">
+<meta name="twitter:image" content="https://sovereigntax.io/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -104,6 +122,13 @@ hr {
   h2 { font-size: 1.15rem; }
 }
 </style>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-mEDNeVLDMPw3a_29VevMO.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
 </head>
 <body>
 <div class="container">
@@ -116,7 +141,7 @@ hr {
 <p>Sovereign Tax ("we," "us," or "our") is committed to protecting your privacy. This Privacy Policy describes what information we collect, how we use it, and the choices you have. It applies to the Sovereign Tax desktop application ("Software") and the Sovereign Tax website.</p>
 
 <div class="highlight-box">
-  <p><strong>The short version:</strong> Sovereign Tax is a local, offline application. The Software itself collects zero personal data. We have no servers, no accounts, no analytics, and no telemetry. Your financial data never leaves your device. The only data we may receive is what you voluntarily provide during the purchase process.</p>
+  <p><strong>The short version:</strong> Sovereign Tax is a local, offline application. The Software itself collects zero personal data &mdash; no analytics, no telemetry, no accounts, and no servers. Your financial data never leaves your device. Our website uses Plausible, a privacy-friendly, cookieless analytics service that collects no personal data and does not track you across sites. The only other data we may receive is what you voluntarily provide during the purchase process.</p>
 </div>
 
 <h2>1. Information the Software Collects</h2>
@@ -133,19 +158,19 @@ hr {
 <p>All transaction data, tax calculations, reports, and other information you enter into the Software remain on your device at all times. We have no ability to access, view, or recover your data.</p>
 
 <h2>2. Information Collected During Purchase</h2>
-<p>When you purchase Sovereign Tax, the following information may be collected by our payment processor:</p>
+<p>We offer two ways to pay: <strong>Strike</strong> (for Bitcoin payments) and <strong>Gumroad</strong> (for card payments). Depending on the option you choose, the following information may be collected by that payment processor:</p>
 <ul>
-  <li><strong>Email address</strong> &mdash; used to deliver your download link and purchase receipt</li>
-  <li><strong>Payment information</strong> &mdash; processed by the payment provider (we do not see or store your full credit card number, bank details, or wallet addresses)</li>
+  <li><strong>Email address</strong> &mdash; for card purchases via Gumroad, used to deliver your receipt and download link. Bitcoin purchases via Strike are gated by an invoice ID rather than email, so an email address is not required to receive your download.</li>
+  <li><strong>Payment information</strong> &mdash; processed by the payment provider (we do not see or store your full credit card number, bank details, or wallet addresses). Bitcoin payments are settled over the Lightning Network or on-chain by Strike.</li>
   <li><strong>IP address</strong> &mdash; collected automatically by the payment processor for fraud prevention</li>
   <li><strong>Transaction details</strong> &mdash; purchase amount, date, and product purchased</li>
 </ul>
-<p>This information is collected and processed by our third-party payment processor, not by Sovereign Tax directly. We only receive the information necessary to fulfill your order (typically your email address and confirmation of payment).</p>
+<p>This information is collected and processed by our third-party payment processors (Strike and/or Gumroad), not by Sovereign Tax directly. We only receive the information necessary to fulfill your order (for card orders, typically your email address and confirmation of payment; for Bitcoin orders, confirmation of payment associated with an invoice ID).</p>
 
 <h2>3. How We Use Purchase Information</h2>
 <p>The limited information we receive from the purchase process is used exclusively to:</p>
 <ul>
-  <li>Deliver the Software to you (download link via email)</li>
+  <li>Deliver the Software to you (download link via email for card orders, or via an invoice-gated download page for Bitcoin orders)</li>
   <li>Provide customer support if you contact us</li>
   <li>Notify you of important updates to the Software (if applicable)</li>
   <li>Process refund requests</li>
@@ -154,9 +179,13 @@ hr {
 
 <h2>4. Third-Party Services</h2>
 
-<p><strong>Payment Processor:</strong> Purchases are processed by our third-party payment provider. Their collection and use of your information is governed by their own privacy policy. We encourage you to review the payment processor's privacy policy before making a purchase.</p>
+<p><strong>Payment Processors:</strong> Purchases are processed by our third-party payment providers &mdash; <strong>Strike</strong> for Bitcoin payments and <strong>Gumroad</strong> for card payments. Their collection and use of your information is governed by their own privacy policies. We encourage you to review the relevant payment processor's privacy policy before making a purchase.</p>
+
+<p><strong>Website Analytics (Plausible):</strong> Our website (not the desktop application) uses <a href="https://plausible.io/privacy-focused-web-analytics" rel="noopener" target="_blank">Plausible Analytics</a>, a privacy-friendly analytics service, to understand aggregate website traffic. Plausible is cookieless, does not collect or store any personal data, does not use persistent identifiers, and does not track visitors across websites or over time. No analytics of any kind run inside the Sovereign Tax desktop application.</p>
 
 <p><strong>CoinGecko API (Optional):</strong> The Software may optionally fetch current Bitcoin price data from the CoinGecko API. This request contains no personal information, no user identifiers, and no financial data. It is a simple public API call to retrieve the current BTC/USD exchange rate. No cookies or tokens are sent. You can use the Software entirely offline without this feature.</p>
+
+<p><strong>Update Check (Optional):</strong> The Software may check for newer versions by requesting a small public version file from our GitHub repository. This request contains no personal information or financial data.</p>
 
 <h2>5. Data Retention</h2>
 <p><strong>Software data:</strong> All data within the Software is stored locally on your device and encrypted. We have no access to it and do not retain any copies. If you uninstall the Software or clear its data, that data is permanently deleted from your device.</p>
@@ -190,7 +219,7 @@ hr {
 
 <hr>
 
-<p style="margin-top: 32px; color: var(--text-secondary); font-size: 0.85rem;">&copy; 2026 Sovereign Tax. All rights reserved.</p>
+<p style="margin-top: 32px; color: var(--text-secondary); font-size: 0.85rem;">&copy; 2026 Sovereign Tax Solutions LLC &nbsp;&middot;&nbsp; <a href="index.html" style="color:var(--orange);">Home</a> &nbsp;&middot;&nbsp; <a href="help.html" style="color:var(--orange);">Guide</a> &nbsp;&middot;&nbsp; <a href="terms-of-service.html" style="color:var(--orange);">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="mailto:support@sovereigntax.io" style="color:var(--orange);">Support</a></p>
 
 </div>
 </body>

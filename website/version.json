@@ -1,11 +1,12 @@
 {
-  "latest": "1.1.0",
+  "latest": "1.5.1",
   "url": "https://sovereigntax.io",
-  "releaseDate": "2026-02-14",
-  "notes": "Edit/delete transactions, duplicate detection warnings, fee column visibility",
+  "releaseDate": "2026-09-28",
+  "notes": "Fixes transfer matching between wallets: transfers now pair by wallet (no more cross-account matches, e.g. two LLCs sending the same amount on the same day), look-alike transfers are never guessed, and you can unmatch any pair or turn auto-matching off. Wallet balances now agree with Holdings. Also fixes double-counted CSV fees and makes backup restore crash-safe. 691 automated tests.",
   "downloads": {
-    "macos": "https://sovereigntax.io/downloads/SovereignTax-macOS.dmg",
-    "windows": "https://sovereigntax.io/downloads/SovereignTax-Windows.exe",
-    "linux": "https://sovereigntax.io/downloads/SovereignTax-Linux.AppImage"
+    "macos": "https://sovereigntax.io/downloads/5ed346ae-2834-4637-bdca-5f2984027fe4.dmg",
+    "windows": "https://sovereigntax.io/downloads/d7b2a332-bf16-4d12-9c87-edb18b373792.exe",
+    "linux": "https://sovereigntax.io/downloads/0d6adfe1-7cae-4040-97c7-87a2f2a48658.deb",
+    "linux-rpm": "https://sovereigntax.io/downloads/8efeb9e4-3338-4282-afbc-bd54a30895b8.rpm"
   }
 }

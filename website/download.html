@@ -1,12 +1,16 @@
 <!DOCTYPE html>
-<!-- Last updated: 2026-02-12 | v1.1 — Added invoice verification gate -->
+<!-- Last updated: 2026-03-18 | v1.2 — Updated for Strike payment integration -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Download Sovereign Tax</title>
 <meta name="robots" content="noindex, nofollow">
-<link rel="icon" type="image/png" href="icon-256.png">
+<link rel="canonical" href="https://sovereigntax.io/download.html">
+<link rel="icon" type="image/png" sizes="256x256" href="icon-256.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icon-128.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -41,7 +45,7 @@ body {
 }
 
 .container {
-  max-width: 640px;
+  max-width: 780px;
   width: 100%;
   text-align: center;
 }
@@ -74,7 +78,7 @@ h1 .accent {
 /* Download Cards */
 .download-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 40px;
 }
@@ -372,7 +376,13 @@ h1 .accent {
 #download-content { display: none; }
 #gate-content { display: none; }
 
-@media (max-width: 480px) {
+@media (max-width: 800px) {
+  .download-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 500px) {
   .download-grid {
     grid-template-columns: 1fr;
   }
@@ -386,6 +396,13 @@ h1 .accent {
   }
 }
 </style>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-mEDNeVLDMPw3a_29VevMO.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
 </head>
 <body>
 
@@ -396,7 +413,7 @@ h1 .accent {
     <img src="icon-256.png" alt="Sovereign Tax" class="icon">
     <div class="gate-icon">&#128274;</div>
     <h1>Access your <span class="accent">download.</span></h1>
-    <p>Enter your BTCPay Invoice ID to access your purchase. You received this ID when you completed your Bitcoin payment.</p>
+    <p>Enter your Invoice ID to access your purchase. You received this ID when you completed your Bitcoin payment.</p>
 
     <div class="gate-form">
       <input type="text" id="invoice-input" placeholder="Enter Invoice ID" autocomplete="off" spellcheck="false">
@@ -422,28 +439,33 @@ h1 .accent {
 
     <!-- Download Cards -->
     <div class="download-grid">
-      <a href="downloads/SovereignTax-macOS.dmg" class="download-card">
+      <a href="downloads/5ed346ae-2834-4637-bdca-5f2984027fe4.dmg" class="download-card">
         <span class="platform-icon">&#63743;</span>
         <span class="platform-name">macOS</span>
         <span class="platform-detail">Apple Silicon &amp; Intel</span>
         <span class="dl-btn">&#8595; Download .dmg</span>
       </a>
 
-      <a href="downloads/SovereignTax-Windows.exe" class="download-card">
+      <a href="downloads/d7b2a332-bf16-4d12-9c87-edb18b373792.exe" class="download-card">
         <span class="platform-icon">&#128187;</span>
         <span class="platform-name">Windows</span>
         <span class="platform-detail">Windows 10 / 11</span>
         <span class="dl-btn">&#8595; Download .exe</span>
       </a>
 
-      <!-- Linux AppImage available but too large for Cloudflare Pages (79MB > 25MB limit)
-      <a href="downloads/SovereignTax-Linux.AppImage" class="download-card">
+      <a href="downloads/0d6adfe1-7cae-4040-97c7-87a2f2a48658.deb" class="download-card">
         <span class="platform-icon">&#128039;</span>
         <span class="platform-name">Linux</span>
-        <span class="platform-detail">AppImage (all distros)</span>
-        <span class="dl-btn">&#8595; Download .AppImage</span>
+        <span class="platform-detail">Ubuntu / Debian</span>
+        <span class="dl-btn">&#8595; Download .deb</span>
       </a>
-      -->
+
+      <a href="downloads/8efeb9e4-3338-4282-afbc-bd54a30895b8.rpm" class="download-card">
+        <span class="platform-icon">&#128039;</span>
+        <span class="platform-name">Linux</span>
+        <span class="platform-detail">Fedora / RHEL / openSUSE</span>
+        <span class="dl-btn">&#8595; Download .rpm</span>
+      </a>
     </div>
 
     <!-- Invoice Notice -->
@@ -463,7 +485,7 @@ h1 .accent {
 
       <div class="step-item">
         <span class="step-num">2</span>
-        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer.</span>
+        <span class="step-text"><strong>Install</strong> the app. On macOS, drag to Applications. On Windows, run the installer. On Linux, install the .deb or .rpm package.</span>
       </div>
 
       <div class="step-item">
@@ -485,14 +507,14 @@ h1 .accent {
       </p>
     </div>
 
-    <!-- Linux note hidden until hosting solution found
     <div class="platform-note">
       <h4>&#128039; Linux Users</h4>
       <p>
-        Make the AppImage executable: <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">chmod +x SovereignTax-Linux.AppImage</code> then run it directly. Works on Ubuntu, Fedora, Arch, and most distributions. No installation required.
+        <strong>Ubuntu / Debian:</strong> <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">sudo dpkg -i sovereign-tax.deb</code><br>
+        <strong>Fedora / RHEL:</strong> <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.8rem;">sudo dnf install ./sovereign-tax.rpm</code><br>
+        Then launch from your applications menu.
       </p>
     </div>
-    -->
 
   </div>
 
@@ -506,17 +528,17 @@ h1 .accent {
 
 <script>
 (function() {
-  // BTCPay invoice IDs are typically 22-character alphanumeric strings
-  var INVOICE_PATTERN = /^[A-Za-z0-9]{10,30}$/;
+  // Strike invoice IDs are typically 22-character alphanumeric strings
+  var INVOICE_PATTERN = /^[A-Za-z0-9-]{10,40}$/;
   var STORAGE_KEY = "st_invoices";
 
-  // Check URL params first (BTCPay redirect)
+  // Check URL params first (Strike redirect)
   var params = new URLSearchParams(window.location.search);
   var invoiceId = params.get("invoiceId") || params.get("invoice") || params.get("orderId");
 
-  // Check if user just came from BTCPay (referrer-based access)
+  // Check if user just came from checkout (referrer-based access)
   var referrer = document.referrer || "";
-  var cameFromBTCPay = referrer.indexOf("pay.sovereigntax.io") !== -1;
+  var cameFromCheckout = referrer.indexOf("sovereigntax.io/checkout") !== -1;
 
   // Check localStorage for previously verified invoices
   var stored = getStoredInvoices();
@@ -525,8 +547,8 @@ h1 .accent {
     // Valid invoice in URL — grant access and store
     storeInvoice(invoiceId);
     showDownloads(invoiceId);
-  } else if (cameFromBTCPay) {
-    // Came directly from BTCPay checkout — grant access
+  } else if (cameFromCheckout) {
+    // Came directly from Strike checkout — grant access
     // Try to extract invoice ID from referrer URL
     var refInvoiceId = null;
     try {
@@ -536,8 +558,6 @@ h1 .accent {
     } catch(e) {}
     if (refInvoiceId) {
       storeInvoice(refInvoiceId);
-    } else {
-      storeInvoice("btcpay-" + Date.now());
     }
     showDownloads(refInvoiceId || null);
   } else if (stored.length > 0) {
@@ -552,10 +572,10 @@ h1 .accent {
     document.getElementById("download-content").style.display = "block";
     document.getElementById("gate-content").style.display = "none";
     var noticeText = document.getElementById("invoice-notice-text");
-    if (id && id.indexOf("btcpay-") !== 0) {
+    if (id) {
       noticeText.innerHTML = 'Your proof of purchase: <span class="invoice-id">' + id + '</span><br>Save this somewhere safe &mdash; you\'ll need it to re-download or contact support. No personal information was collected with this transaction.';
     } else {
-      noticeText.innerHTML = 'Your proof of purchase is your <strong>BTCPay Invoice ID</strong> shown on the payment receipt. Click "View receipt" on the BTCPay confirmation page to find it.<br>Save it somewhere safe &mdash; you\'ll need it to re-download or contact support. No personal information was collected with this transaction.';
+      noticeText.innerHTML = 'Your proof of purchase is your <strong>Invoice ID</strong> shown on the payment confirmation page. Save it somewhere safe &mdash; you\'ll need it to re-download or contact support. No personal information was collected with this transaction.';
     }
     // Clean URL
     if (window.history.replaceState) {

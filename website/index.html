@@ -1,13 +1,34 @@
 <!DOCTYPE html>
-<!-- Last updated: 2026-02-12 | v1.4 — Added breach warning section to differentiate on security -->
+<!-- Last updated: 2026-02-22 | v1.8 — Added "Optimize All" spotlight section (batch year optimization), updated 5 screenshots + 2 new (optimize-all-modal, compare-methods-chart). Updated Compare Methods/Tax Report/Simulate Sale captions. Previous: Added dedicated Specific ID tax optimization spotlight section, Optimize button callout, savings messaging -->
 <!-- Created: 2026-02-10 | v1.0 — Initial alternative landing page with glass aesthetic -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sovereign Tax — Bitcoin Tax Calculator | Beta Launch — Limited Time Pricing</title>
-<meta name="description" content="Calculate your Bitcoin capital gains, generate IRS Form 8949, and keep your financial data 100% private. One-time purchase. No subscription. No cloud.">
-<link rel="icon" type="image/png" href="icon-256.png">
+<title>Bitcoin Tax Calculator — Specific ID, IRS Form 8949 & Capital Gains | Sovereign Tax</title>
+<meta name="description" content="Private Bitcoin tax calculator with Specific ID lot selection. Generate IRS Form 8949, calculate capital gains, and optimize your tax bill. No cloud, no subscription — one-time purchase. Per-wallet cost basis for 2025 IRS rules.">
+<meta name="keywords" content="bitcoin tax calculator, bitcoin taxes, specific identification, specific ID, IRS Form 8949, crypto capital gains, bitcoin IRS, per-wallet cost basis, FIFO, bitcoin tax software, crypto tax calculator, private bitcoin tax">
+<link rel="canonical" href="https://sovereigntax.io/">
+<link rel="alternate" hreflang="en-US" href="https://sovereigntax.io/">
+<link rel="alternate" hreflang="en-AU" href="https://au.sovereigntax.io/">
+<link rel="icon" type="image/png" sizes="256x256" href="icon-256.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icon-128.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<meta name="theme-color" content="#000000">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Sovereign Tax">
+<meta property="og:title" content="Bitcoin Tax Calculator — Specific ID & IRS Form 8949 | Sovereign Tax">
+<meta property="og:description" content="Private Bitcoin tax calculator with Specific ID lot selection. Generate IRS Form 8949, calculate capital gains, and optimize your tax bill. No cloud, no subscription — one-time purchase.">
+<meta property="og:url" content="https://sovereigntax.io/">
+<meta property="og:image" content="https://sovereigntax.io/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bitcoin Tax Calculator — Specific ID & IRS Form 8949 | Sovereign Tax">
+<meta name="twitter:description" content="Private Bitcoin tax calculator with Specific ID lot selection. Generate Form 8949, calculate capital gains. No cloud, no subscription — one-time purchase.">
+<meta name="twitter:image" content="https://sovereigntax.io/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -286,6 +307,99 @@ nav {
 }
 .nav-cta:hover {
   opacity: 0.9 !important;
+}
+
+.nav-region {
+  padding: 6px 14px !important;
+  font-size: 0.8rem !important;
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  border-radius: 980px;
+  color: var(--accent) !important;
+  font-weight: 600 !important;
+  margin-left: -8px;
+  background: rgba(249, 115, 22, 0.08);
+  letter-spacing: 0.02em;
+}
+.nav-region:hover {
+  border-color: var(--accent);
+  background: rgba(249, 115, 22, 0.15);
+  color: var(--accent) !important;
+}
+
+/* ===== AU Announcement Banner ===== */
+.au-banner {
+  padding: 48px 0;
+  position: relative;
+  overflow: hidden;
+}
+.au-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 43, 127, 0.08) 0%, rgba(249, 115, 22, 0.06) 100%);
+  pointer-events: none;
+}
+.au-banner-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.au-banner-text {
+  text-align: center;
+}
+.au-banner-label {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.au-banner-headline {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+.au-banner-sub {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  font-weight: 300;
+}
+.au-banner .btn-au {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(249, 115, 22, 0.4);
+  border-radius: 980px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+.au-banner .btn-au:hover {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: var(--accent);
+  transform: scale(1.02);
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  .au-banner-inner { flex-direction: column; gap: 16px; }
+  .au-banner-headline { font-size: 1.1rem; }
 }
 
 @media (max-width: 768px) {
@@ -987,26 +1101,179 @@ nav {
 }
 
 .spotlight-bullets li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  padding-left: 18px;
+  position: relative;
   margin-bottom: 12px;
   color: var(--text-secondary);
   font-size: 0.92rem;
   font-weight: 300;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .spotlight-bullets li .bullet-icon {
-  color: var(--accent);
-  flex-shrink: 0;
-  margin-top: 2px;
-  font-size: 0.7rem;
+  position: absolute;
+  left: 0;
+  top: 10px;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
 }
 
 .spotlight-screenshot {
   position: relative;
   z-index: 1;
+}
+
+.spotlight-layout-reversed {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.spotlight-layout-reversed .showcase-img-wrap {
+  width: 100%;
+}
+
+.spotlight-layout-reversed .showcase-img-wrap img {
+  width: 100%;
+  border-radius: var(--radius);
+}
+
+.optimize-highlight {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.savings-callout {
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+  margin-top: 24px;
+}
+
+.savings-callout p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+.savings-callout strong {
+  color: var(--green);
+}
+
+/* ========================================
+   LIGHTNING PAYMENT BANNER
+   ======================================== */
+.lightning-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  padding: 48px 40px;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(168,85,247,0.06) 40%, rgba(249,115,22,0.08) 100%);
+  border: 1px solid rgba(168,85,247,0.2);
+}
+
+.lightning-banner::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 50%, rgba(168,85,247,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 70% 50%, rgba(249,115,22,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.lightning-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(168,85,247,0.2), rgba(249,115,22,0.15));
+  border: 1px solid rgba(168,85,247,0.3);
+  margin-bottom: 20px;
+  box-shadow: 0 0 40px rgba(168,85,247,0.15), 0 0 80px rgba(249,115,22,0.08);
+}
+
+.lightning-icon-wrap svg {
+  width: 40px;
+  height: 40px;
+  filter: drop-shadow(0 0 8px rgba(250,204,21,0.4));
+}
+
+.lightning-banner h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.lightning-banner h2 .lightning-accent {
+  background: linear-gradient(135deg, #a855f7, #f59e0b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lightning-banner p {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto 24px;
+  line-height: 1.6;
+}
+
+.lightning-features {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.lightning-feature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.lightning-feature .lf-icon {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .lightning-banner {
+    padding: 36px 24px;
+  }
+  .lightning-banner h2 {
+    font-size: 1.4rem;
+  }
+  .lightning-features {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
 }
 
 /* ========================================
@@ -1149,6 +1416,34 @@ nav {
 .price-tag {
   color: var(--accent);
   font-weight: 700;
+}
+
+.sale-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 980px;
+  margin-bottom: 8px;
+}
+
+.sale-original {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+.sale-ends {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  font-weight: 400;
 }
 
 .check-mark { color: var(--green); font-weight: 600; }
@@ -1305,7 +1600,8 @@ footer {
   }
 
   .security-layout,
-  .spotlight-layout {
+  .spotlight-layout,
+  .spotlight-layout-reversed {
     grid-template-columns: 1fr;
     gap: 40px;
   }
@@ -1345,100 +1641,380 @@ footer {
 }
 
 /* ========================================
-   BETA LAUNCH BANNER
+   HERO BULLETS
    ======================================== */
-.beta-banner {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.05));
-  border-bottom: 1px solid rgba(249, 115, 22, 0.3);
-  padding: 14px 24px;
-  text-align: center;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 200;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+.hero-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  max-width: 460px;
+  margin: 0 auto 40px;
 }
 
-.beta-banner p {
-  font-size: 0.88rem;
+.hero-bullet {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 1.05rem;
   color: var(--text);
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
-.beta-banner .beta-tag {
-  display: inline-block;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.7rem;
+.hero-bullet .hb-check {
+  color: var(--green);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 3px 10px;
-  border-radius: 980px;
-  margin-right: 8px;
-  vertical-align: middle;
+  flex-shrink: 0;
 }
 
-.beta-banner .beta-price {
-  color: var(--accent);
-  font-weight: 700;
+/* ========================================
+   FAQ
+   ======================================== */
+.faq-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* Push nav and hero down for beta banner */
-nav {
-  top: 46px !important;
+.faq-grid {
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-.hero {
-  padding-top: 166px !important;
+.faq-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 28px 0;
 }
 
-/* Beta notice card */
-.beta-notice {
-  max-width: 720px;
-  margin: 0 auto 64px;
-  padding: 32px 40px;
-  text-align: center;
-  border: 1px solid rgba(249, 115, 22, 0.25);
-  background: rgba(249, 115, 22, 0.04);
+.faq-item:last-child {
+  border-bottom: none;
 }
 
-.beta-notice h3 {
-  color: var(--accent);
-  margin-bottom: 12px;
-  font-size: 1.15rem;
+.faq-q {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
 }
 
-.beta-notice p {
+.faq-a {
   color: var(--text-secondary);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   line-height: 1.7;
   font-weight: 300;
 }
 
-.beta-notice p strong {
+.faq-a strong {
   color: var(--text);
   font-weight: 500;
 }
 
-.beta-strike {
-  text-decoration: line-through;
-  opacity: 0.5;
+/* ========================================
+   IDENTITY QUOTE
+   ======================================== */
+/* ========================================
+   ROI CARDS
+   ======================================== */
+.roi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.roi-card {
+  padding: 32px 28px;
+}
+
+.roi-card h3 {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+
+.roi-card p {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.7;
+  font-weight: 300;
+}
+
+.roi-card p strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.roi-example {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  margin: 16px 0;
+}
+
+.roi-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.88rem;
+  font-weight: 300;
+  color: var(--text-secondary);
+}
+
+.roi-row:last-child {
+  border-bottom: none;
+}
+
+.roi-row .roi-label {
+  color: var(--text);
   font-weight: 400;
 }
+
+.roi-row .roi-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.roi-row .roi-value.green { color: var(--green); }
+.roi-row .roi-value.red { color: var(--red); }
+.roi-row .roi-value.accent { color: var(--accent); }
+
+.roi-punchline {
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: rgba(48, 209, 88, 0.06);
+  border: 1px solid rgba(48, 209, 88, 0.15);
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--green);
+  text-align: center;
+}
+
+.sub-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.sub-table th,
+.sub-table td {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-weight: 300;
+  color: var(--text-secondary);
+}
+
+.sub-table th {
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.sub-table td:first-child {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.sub-table .hl-row td {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sub-table .hl-row td:first-child {
+  color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .roi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   INLINE SECTION CTA
+   ======================================== */
+.section-cta {
+  text-align: center;
+  margin-top: 48px;
+  padding-top: 32px;
+}
+
+.section-cta .btn-primary {
+  margin-bottom: 12px;
+}
+
+.section-cta .cta-urgency {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--accent);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.section-cta .cta-refund {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  margin-top: 6px;
+}
+
+.identity-line {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 40px;
+  letter-spacing: -0.01em;
+}
+
+.identity-line em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 500;
+}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Sovereign Tax",
+  "description": "Self-sovereign Bitcoin tax calculator. Calculate capital gains, generate IRS Form 8949, and keep your financial data fully private with AES-256-GCM encryption. No cloud, no accounts, no telemetry.",
+  "url": "https://sovereigntax.io",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "macOS, Windows, Linux",
+  "softwareVersion": "1.4.1",
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Bitcoin Payment",
+      "price": "59",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
+    },
+    {
+      "@type": "Offer",
+      "name": "Card Payment",
+      "price": "69",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
+    }
+  ],
+  "screenshot": "https://sovereigntax.io/screenshots/transactions.png",
+  "featureList": [
+    "IRS Form 8949 PDF, CSV, and TXF export",
+    "FIFO and Specific ID accounting methods",
+    "Per-wallet cost basis tracking (2025 IRS rules)",
+    "Transfer-aware lot re-tagging",
+    "Tax-loss harvesting dashboard",
+    "Charitable donation tracking with Form 8283",
+    "AES-256-GCM local encryption",
+    "No cloud, no accounts, no telemetry"
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "Sovereign Tax Solutions LLC",
+    "url": "https://sovereigntax.io"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Sovereign Tax Solutions LLC",
+  "url": "https://sovereigntax.io",
+  "logo": "https://sovereigntax.io/icon-512.png",
+  "description": "Private, self-sovereign Bitcoin tax software. Calculate capital gains and generate IRS Form 8949 with Specific Identification lot selection. No cloud, no subscriptions.",
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "email": "support@sovereigntax.io",
+    "contactType": "customer support"
+  },
+  "sameAs": [
+    "https://github.com/sovereigntax/sovereign-tax"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is Sovereign Tax IRS-compliant?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It supports FIFO and Specific Identification — the only two cost basis methods the IRS permits. Generates Form 8949 in PDF, CSV, and TurboTax TXF format. Built for the 2025 per-wallet cost basis rules (Treasury Reg. §1.1012-1(j)) and backed by 584 automated tests."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which exchanges does Sovereign Tax support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Any exchange that exports a CSV. Auto-detects Coinbase, Kraken, Gemini, Coinbase Pro, Celsius, Nexo, and 60+ column name variations. If your exchange exports dates, amounts, and prices — it works."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I get free updates?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. One purchase includes updates for as long as the product is maintained. The app checks for new versions automatically."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I install Sovereign Tax on multiple devices?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Install on your personal Mac, Windows, and Linux machines. Your data stays local to each device — use encrypted backups to move between them."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I need help with Bitcoin taxes?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Email support@sovereigntax.io — real person, fast replies. We also have a comprehensive Getting Started Guide that covers every feature step by step."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I try Sovereign Tax before importing my data?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The app works fully offline from the moment you open it. Set your PIN, explore every view, and see the full interface before importing a single CSV. No account, no trial period, no limits."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I'm not satisfied with Sovereign Tax?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Email support@sovereigntax.io within 30 days and we'll make it right. We stand behind the product."
+      }
+    }
+  ]
+}
+</script>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-mEDNeVLDMPw3a_29VevMO.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
 </head>
 <body>
-
-<!-- ========================================
-     BETA LAUNCH BANNER
-     ======================================== -->
-<div class="beta-banner">
-  <p><span class="beta-tag">Beta Launch</span> Limited-time beta pricing: <span class="beta-price">$49.99</span> with Bitcoin / <span class="beta-price">$59.99</span> with card. Price increases next week.</p>
-</div>
 
 <!-- ========================================
      NAVIGATION
@@ -1450,14 +2026,13 @@ nav {
       Sovereign Tax
     </a>
     <div class="nav-links">
-      <a href="#privacy">Privacy</a>
-      <a href="#breaches">Security</a>
+      <a href="#pricing">Compare</a>
       <a href="#features">Features</a>
-      <a href="#screenshots">App</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#source">Source Code</a>
-      <a href="support.html">Support</a>
+      <a href="bitcoin-specific-identification.html">Specific ID</a>
+      <a href="#breaches">Security</a>
+      <a href="help.html">Guide</a>
       <a href="#purchase" class="nav-cta">Buy Now</a>
+      <a href="https://au.sovereigntax.io/" class="nav-region" title="Switch to Australian version">&#127462;&#127482; Australia</a>
     </div>
   </div>
 </nav>
@@ -1467,54 +2042,43 @@ nav {
      ======================================== -->
 <section class="hero" id="top">
   <div class="hero-content">
-    <img src="icon-256.png" alt="Sovereign Tax" class="hero-icon reveal">
+    <img src="icon-256.png" alt="Sovereign Tax — Private Bitcoin Tax Calculator" class="hero-icon reveal">
 
-    <h1 class="reveal">Bitcoin taxes.<br><span class="accent">Without the surveillance.</span></h1>
+    <h1 class="reveal">Bitcoin taxes.<br><span class="accent">Zero surveillance.</span></h1>
 
-    <p class="hero-sub reveal">
-      Calculate capital gains, generate IRS forms, and plan your tax strategy &mdash;
-      all without uploading a single transaction to someone else's server.
-    </p>
+    <p class="identity-line reveal">The private Bitcoin tax calculator with Specific ID. <em>Self-custody your tax data.</em></p>
 
-    <div class="hero-buttons reveal">
-      <a class="btn-primary gumroad-button" href="https://sovereigntax.gumroad.com/l/epddkw">
-        Purchase with Card &mdash; <span class="beta-strike">$120</span> $59.99
+    <div class="hero-bullets reveal">
+      <div class="hero-bullet"><span class="hb-check">&#10003;</span> IRS Form 8949 in minutes &mdash; PDF, CSV, TurboTax TXF</div>
+      <div class="hero-bullet"><span class="hb-check">&#10003;</span> Specific ID optimization can help reduce taxes per sale</div>
+      <div class="hero-bullet"><span class="hb-check">&#10003;</span> 100% offline &mdash; no account, no cloud, no tracking</div>
+    </div>
+
+    <div class="reveal" style="text-align:center;margin-bottom:8px;">
+      <span class="sale-badge">Early Adopter Sale</span>
+    </div>
+    <div class="hero-buttons reveal" style="gap:12px;">
+      <a class="btn-primary" href="checkout.html" style="padding:18px 48px;font-size:1.1rem;">
+        ⚡ Pay with Bitcoin &mdash; <span class="sale-original">$100</span> $59
       </a>
-      <a class="btn-btc" href="https://pay.sovereigntax.io/apps/21zpxF4wbp4FWCkvJyt3PiNWbdSL/pos" style="border-color:var(--accent);background:var(--accent-soft);">
-        &#8383; Pay with Bitcoin &mdash; <span class="beta-strike">$100</span> $49.99 &nbsp;&#9679;&nbsp; Best Price
+      <a class="btn-primary gumroad-button" href="https://sovereigntax.gumroad.com/l/epddkw" style="padding:18px 48px;font-size:1.1rem;">
+        Buy with Card &mdash; <span class="sale-original">$115</span> $69
       </a>
     </div>
-    <p class="reveal" style="color:var(--accent);font-size:0.85rem;margin-bottom:12px;font-weight:500;">Beta pricing &mdash; save $10 more when you pay with Bitcoin</p>
-    <p class="reveal" style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:48px;font-weight:400;">&#8383; Bitcoin payments &mdash; no payment processor fees, no personal info collected. Price increases next week.</p>
+    <p class="reveal" style="margin-bottom:32px;"><a href="#screenshots" id="sample-cta" style="color:var(--text-secondary);font-size:0.85rem;font-weight:400;text-decoration:underline;text-underline-offset:3px;">See sample Form 8949 output &rarr;</a></p>
 
     <div class="hero-meta reveal">
-      <span class="hero-meta-item"><span class="dot"></span> One-time purchase</span>
-      <span class="hero-meta-item"><span class="dot"></span> macOS &amp; Windows</span>
-      <span class="hero-meta-item"><span class="dot"></span> No account needed</span>
-      <span class="hero-meta-item"><span class="dot"></span> Source code available</span>
+      <span class="hero-meta-item"><span class="dot"></span> No account required</span>
+      <span class="hero-meta-item"><span class="dot"></span> Works fully offline</span>
+      <span class="hero-meta-item"><span class="dot"></span> AES-256 encrypted</span>
+      <span class="hero-meta-item"><span class="dot"></span> Source-available on GitHub</span>
     </div>
   </div>
 </section>
 
-<!-- ========================================
-     BETA NOTICE
-     ======================================== -->
-<section style="padding:80px 0 0;">
-  <div class="container">
-    <div class="glass beta-notice reveal">
-      <h3>Beta Launch</h3>
-      <p>
-        Sovereign Tax is in <strong>beta</strong>. The core tax calculations &mdash; cost basis, capital gains,
-        Form 8949, and all IRS-compliant reporting &mdash; are thoroughly tested and accurate.
-        However, there may be a few rough edges in the interface as we continue to refine the experience.
-      </p>
-      <p style="margin-top:12px;">
-        As a thank you for early adopters, we're offering <strong>special beta pricing</strong> that
-        will increase next week. You'll receive all future updates at no additional cost.
-      </p>
-    </div>
-  </div>
-</section>
+
+<!-- SEO: Accessible summary for search engines -->
+<p style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;">Sovereign Tax is a private Bitcoin tax calculator for the 2025 and 2026 tax years. It supports IRS-compliant Specific Identification (Specific ID) lot selection and FIFO, generates Form 8949 in PDF, CSV and TurboTax TXF formats, and tracks per-wallet cost basis under the new IRS rules (TD 9989). No cloud, no subscription, no data collection. Calculate Bitcoin capital gains and losses entirely offline on macOS, Windows, and Linux.</p>
 
 <!-- ========================================
      TRUST STRIP
@@ -1523,8 +2087,8 @@ nav {
   <div class="container">
     <div class="trust-items reveal">
       <div class="trust-item">
-        <div class="value">0 bytes</div>
-        <div class="label">sent to the cloud</div>
+        <div class="value" style="font-size:1.2rem;">Your data stays</div>
+        <div class="label">on your device</div>
       </div>
       <div class="trust-item">
         <div class="value">AES-256</div>
@@ -1535,8 +2099,305 @@ nav {
         <div class="label">offline capable</div>
       </div>
       <div class="trust-item">
-        <div class="value">From $49.99</div>
-        <div class="label">beta launch pricing</div>
+        <div class="value"><span class="sale-original" style="font-size:0.8em;">$100</span> From $59</div>
+        <div class="label">early adopter sale</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================
+     AUSTRALIA ANNOUNCEMENT
+     ======================================== -->
+<section class="au-banner">
+  <div class="container">
+    <div class="au-banner-inner reveal">
+      <div class="au-banner-text">
+        <div class="au-banner-label">Now Available</div>
+        <div class="au-banner-headline">Sovereign Tax is now available for Australia</div>
+        <div class="au-banner-sub">ATO-compliant CGT reports, 50% discount method, financial year support</div>
+      </div>
+      <a href="https://au.sovereigntax.io/" class="btn-au">Visit AU Site &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================
+     PRICING COMPARISON (moved up — first 2 scrolls)
+     ======================================== -->
+<section class="pricing-section" id="pricing">
+  <div class="container">
+    <div class="reveal" style="text-align:center;margin-bottom:12px;">
+      <span class="sale-badge">Early Adopter Sale</span>
+    </div>
+    <h2 class="section-headline reveal">Pay once. Use it for life.</h2>
+    <p class="section-sub reveal">Same tax calculations. No subscription. No surveillance.</p>
+
+    <div class="pricing-table-wrap reveal">
+      <table class="pricing-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="hl">Sovereign Tax</th>
+            <th><a href="sovereign-tax-vs-cointracker.html" style="color:var(--text-secondary);text-decoration:underline;text-underline-offset:3px;">CoinTracker</a></th>
+            <th><a href="sovereign-tax-vs-koinly.html" style="color:var(--text-secondary);text-decoration:underline;text-underline-offset:3px;">Koinly</a></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Price</td>
+            <td class="hl"><span class="price-tag"><span class="sale-original">$100</span> From $59 once</span></td>
+            <td>$59&ndash;$599/yr</td>
+            <td>$49&ndash;$279/yr</td>
+          </tr>
+          <tr>
+            <td>Data stays on your device</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>No account required</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Form 8949 + TurboTax</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="check-mark">&#10003;</span></td>
+            <td><span class="check-mark">&#10003;</span></td>
+          </tr>
+          <tr>
+            <td>FIFO + Specific ID</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td>FIFO only</td>
+            <td>FIFO only</td>
+          </tr>
+          <tr>
+            <td>Specific ID with tax optimization</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Charitable donation tracking</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Encrypted on device</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Works fully offline</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Source code reviewable</td>
+            <td class="hl"><span class="check-mark">&#10003;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+            <td><span class="cross-mark">&#10007;</span></td>
+          </tr>
+          <tr>
+            <td>Data breach history</td>
+            <td class="hl"><span class="no-sub">No cloud data to breach</span></td>
+            <td><span class="yes-sub">3 breaches (as of early 2026)</span></td>
+            <td><span class="yes-sub">1 breach (as of early 2026)</span></td>
+          </tr>
+          <tr>
+            <td>Subscription required</td>
+            <td class="hl"><span class="no-sub">No</span></td>
+            <td><span class="yes-sub">Yes</span></td>
+            <td><span class="yes-sub">Yes</span></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td class="hl"></td>
+            <td><a href="sovereign-tax-vs-cointracker.html" style="color:var(--accent);font-size:0.85rem;">Full comparison &rarr;</a></td>
+            <td><a href="sovereign-tax-vs-koinly.html" style="color:var(--accent);font-size:0.85rem;">Full comparison &rarr;</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ROI JUSTIFICATION -->
+    <div class="roi-grid reveal">
+      <div class="glass roi-card">
+        <h3 style="color:var(--green);">What Specific ID saves you</h3>
+        <p>Selling 1 BTC purchased at $10,000 when the price is $95,000:</p>
+        <div class="roi-example">
+          <div class="roi-row">
+            <span class="roi-label">FIFO (competitors)</span>
+            <span class="roi-value red">$31,450 tax</span>
+          </div>
+          <div class="roi-row">
+            <span class="roi-label">Specific ID (Sovereign Tax)</span>
+            <span class="roi-value green">$5,550 tax</span>
+          </div>
+          <div class="roi-row">
+            <span class="roi-label">Your savings</span>
+            <span class="roi-value green">$25,900</span>
+          </div>
+        </div>
+        <p style="font-size:0.85rem;margin-top:12px;">Example only &mdash; actual results depend on your tax situation. FIFO sells your <strong>oldest, cheapest</strong> Bitcoin first &mdash; maximizing your taxable gain. Specific ID lets you pick <strong>higher-cost lots</strong>, cutting the gain dramatically. The difference compounds with every sale.</p>
+        <div class="roi-punchline">One optimized sale could pay for the software many times over.</div>
+      </div>
+
+      <div class="glass roi-card">
+        <h3 style="color:var(--accent);">What subscriptions cost over time</h3>
+        <p>Competitors charge every year. You keep paying for the same data.</p>
+        <table class="sub-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Year 1</th>
+              <th>Year 3</th>
+              <th>Year 5</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="hl-row">
+              <td>Sovereign Tax</td>
+              <td>$59</td>
+              <td>$59</td>
+              <td>$59</td>
+            </tr>
+            <tr>
+              <td>CoinTracker</td>
+              <td>$199</td>
+              <td>$597</td>
+              <td>$995</td>
+            </tr>
+            <tr>
+              <td>Koinly</td>
+              <td>$169</td>
+              <td>$507</td>
+              <td>$845</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size:0.85rem;margin-top:12px;">CoinTracker and Koinly lock your tax history behind annual paywalls. Miss a renewal and <strong>lose access to your own records</strong>. Sovereign Tax is one payment &mdash; your data, your device, forever.</p>
+        <div class="roi-punchline">Save $400&ndash;$900 in subscriptions over 5 years.</div>
+      </div>
+    </div>
+
+    <div class="section-cta reveal">
+      <a class="btn-primary" href="#purchase">Buy Now &mdash; From $59</a>
+      <span class="cta-refund">30-day refund policy. Not happy? Email us &mdash; we'll make it right.</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========================================
+     SPECIFIC ID TAX OPTIMIZATION — Key Differentiator
+     ======================================== -->
+<section class="spotlight-section" id="optimize">
+  <div class="container">
+    <div class="spotlight-layout-reversed reveal">
+      <div class="spotlight-screenshot">
+        <div class="showcase-img-wrap">
+          <img src="screenshots/specific-id-add-transaction.png" alt="Specific ID lot picker with Optimize button" loading="lazy">
+        </div>
+      </div>
+      <div class="spotlight-copy">
+        <span class="section-label">Potentially Save on Every Sale</span>
+        <h2>You may be overpaying on<br><span class="accent">Bitcoin taxes.</span></h2>
+        <p>
+          Most tax software uses FIFO &mdash; selling your oldest Bitcoin first. That's often your cheapest Bitcoin, which means the biggest taxable gain. Sovereign Tax gives you <strong>Specific Identification</strong> &mdash; you choose exactly which lots to sell.
+        </p>
+        <p>
+          <span class="optimize-highlight">&#x2728; One-Click Optimize</span><br>
+          Don't want to pick lots manually? Hit <strong>Optimize</strong> and the algorithm does it for you &mdash; scoring every lot by its estimated tax impact, accounting for short-term (37%) vs. long-term (15%) rates. It picks losses first, then the smallest gains, automatically minimizing your tax bill.
+        </p>
+        <ul class="spotlight-bullets">
+          <li><span class="bullet-icon">&#9679;</span> <strong>Losses first</strong> &mdash; harvest tax savings before touching gains</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Rate-aware</strong> &mdash; prefers long-term lots (15%) over short-term (37%)</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>One click</strong> &mdash; review the selection, adjust if needed, confirm</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>As of early 2026</strong>, CoinTracker and Koinly offer FIFO only</li>
+        </ul>
+        <div class="savings-callout">
+          <p>A single sale of 1 BTC with the right lot selection may save <strong>hundreds to thousands of dollars</strong> in taxes compared to FIFO. The difference compounds with every sale you make.</p>
+        </div>
+        <p style="margin-top:16px;"><a href="bitcoin-specific-identification.html" style="color:var(--accent);font-size:0.92rem;font-weight:500;text-decoration:underline;text-underline-offset:3px;">Read the complete Specific ID guide &rarr;</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================
+     OPTIMIZE ALL — Batch Year Optimization
+     ======================================== -->
+<section class="spotlight-section" id="optimize-all">
+  <div class="container">
+    <div class="spotlight-layout reveal">
+      <div class="spotlight-copy">
+        <span class="section-label">New</span>
+        <h2>Optimize an entire year<br><span class="accent">in one click.</span></h2>
+        <p>
+          Already imported your trades? Click <strong>Optimize All</strong> and the engine re-assigns every sell
+          transaction for the year to the tax-optimal lots &mdash; automatically. No manual lot picking required.
+        </p>
+        <p>
+          Before applying, you see a side-by-side comparison: FIFO gain/loss vs. Optimized gain/loss, with
+          your <strong>estimated savings</strong> in green. Review it, then apply with one click.
+        </p>
+        <ul class="spotlight-bullets">
+          <li><span class="bullet-icon">&#9679;</span> <strong>Batch optimization</strong> &mdash; every sell for the year, processed chronologically</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Before &amp; after comparison</strong> &mdash; see exact FIFO vs. Specific ID savings before applying</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Fully reversible</strong> &mdash; one click to revert all back to FIFO</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Fine-tune after</strong> &mdash; adjust individual sales with the per-transaction Lots editor</li>
+        </ul>
+      </div>
+      <div class="spotlight-screenshot">
+        <div class="showcase-img-wrap">
+          <img src="screenshots/compare-methods.png" alt="Compare Methods showing FIFO vs Specific ID savings" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-cta reveal">
+      <a class="btn-primary" href="#purchase">Buy Now &mdash; From $59</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========================================
+     CHARITABLE DONATIONS SPOTLIGHT
+     ======================================== -->
+<section class="spotlight-section" id="donations">
+  <div class="container">
+    <div class="spotlight-layout reveal">
+      <div class="spotlight-copy">
+        <span class="section-label">Tax-Smart Giving</span>
+        <h2>Donate Bitcoin.<br><span class="accent">Skip the tax bill.</span></h2>
+        <p>
+          When you donate appreciated Bitcoin directly to a qualified charity, you may owe <strong>zero capital gains tax</strong> on the appreciation &mdash; and you may be able to deduct the full fair market value. It's one of the most powerful tax strategies in crypto, and most major crypto tax platforms don't track this.
+        </p>
+        <p>
+          Sovereign Tax tracks every donation as a proper disposal &mdash; consuming the correct lots, recording FMV at the time of donation, and generating <strong>Form 8283</strong> data for your non-cash charitable contribution deduction.
+        </p>
+        <ul class="spotlight-bullets">
+          <li><span class="bullet-icon">&#9679;</span> <strong>Potential zero capital gains</strong> &mdash; donating appreciated BTC may avoid the tax you'd pay by selling first (IRC &sect;170)</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Potential FMV deduction</strong> &mdash; you may be able to deduct the full fair market value, not just your cost basis</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Specific ID for donations</strong> &mdash; pick exactly which lots to donate for maximum tax benefit</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>Form 8283 export</strong> &mdash; IRS-ready CSV for non-cash charitable contributions over $500</li>
+        </ul>
+        <div class="savings-callout" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.05);">
+          <p>Donating 1 BTC bought at $10,000 when it's worth $100,000? You may avoid up to <strong>$90,000 in capital gains</strong> and deduct the full $100,000. Selling first and donating cash could cost up to <strong>$33,300 in taxes</strong>. Example only &mdash; actual results depend on your tax situation.</p>
+        </div>
+      </div>
+      <div class="spotlight-screenshot">
+        <div class="showcase-img-wrap">
+          <img src="screenshots/add-donation.png" alt="Add charitable Bitcoin donation with FMV tracking" loading="lazy">
+        </div>
       </div>
     </div>
   </div>
@@ -1561,13 +2422,13 @@ nav {
       <div class="glass privacy-card reveal">
         <span class="p-icon">&#128184;</span>
         <h3>$200/year subscriptions</h3>
-        <p>They charge you annually for the same data. Miss a renewal and lose access to your own records. Your tax history, held hostage.</p>
+        <p>They charge you annually for the same data. Miss a renewal and lose access to your own records. Your tax history, locked behind a paywall.</p>
       </div>
 
       <div class="glass privacy-card reveal">
         <span class="p-icon">&#128274;</span>
         <h3>Sovereign Tax is different</h3>
-        <p>Your data stays on your device, encrypted with AES-256. No accounts. No cloud. No tracking. We literally cannot see your data.</p>
+        <p>Your data stays on your device, encrypted with AES-256. No accounts. No cloud. No tracking. We have no access to your data.</p>
       </div>
     </div>
   </div>
@@ -1606,7 +2467,7 @@ nav {
 
       <div>
         <div class="glass breach-contrast">
-          <h3>Sovereign Tax can't be breached.</h3>
+          <h3>No cloud servers to breach.</h3>
           <p class="contrast-sub">Not because we have better security than them. Because there's nothing to hack. We don't have your data. Period.</p>
 
           <ul class="contrast-points">
@@ -1620,7 +2481,7 @@ nav {
             </li>
             <li>
               <span class="cp-icon">&#10003;</span>
-              <span><strong>No third-party analytics</strong> &mdash; no Mixpanel, no SendGrid, no tracking pixels. Zero attack surface.</span>
+              <span><strong>No third-party analytics</strong> &mdash; no Mixpanel, no SendGrid, no tracking pixels. Minimal attack surface.</span>
             </li>
             <li>
               <span class="cp-icon">&#10003;</span>
@@ -1628,7 +2489,7 @@ nav {
             </li>
             <li>
               <span class="cp-icon">&#10003;</span>
-              <span><strong>Open source</strong> &mdash; verify every claim yourself. Read the code. We have nothing to hide.</span>
+              <span><strong>Source-available</strong> &mdash; verify every claim yourself. Read the code. We have nothing to hide.</span>
             </li>
           </ul>
         </div>
@@ -1653,14 +2514,15 @@ nav {
         </p>
         <ul class="spotlight-bullets">
           <li><span class="bullet-icon">&#9679;</span> Enter any BTC amount and price &mdash; see gains in real time</li>
-          <li><span class="bullet-icon">&#9679;</span> Compare FIFO, LIFO, HIFO, and Specific ID side by side</li>
-          <li><span class="bullet-icon">&#9679;</span> See which lots get consumed and their holding periods</li>
-          <li><span class="bullet-icon">&#9679;</span> Nothing is recorded &mdash; it's a simulation, clearly labeled</li>
+          <li><span class="bullet-icon">&#9679;</span> Compare FIFO and Specific ID &mdash; pick the lots that minimize your tax</li>
+          <li><span class="bullet-icon">&#9679;</span> <strong>One-click Optimize</strong> auto-selects the best lots using per-lot tax scoring</li>
+          <li><span class="bullet-icon">&#9679;</span> Save lot selections and carry them to Add Transaction when you're ready to record</li>
+          <li><span class="bullet-icon">&#9679;</span> Nothing is recorded &mdash; purely hypothetical until you commit</li>
         </ul>
       </div>
       <div class="spotlight-screenshot">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/simulate-sale.png" alt="Simulate Sale feature" loading="lazy">
+          <img src="screenshots/simulate-sale.png" alt="Sovereign Tax Bitcoin sale simulator — preview capital gains before selling" loading="lazy">
         </div>
       </div>
     </div>
@@ -1689,49 +2551,49 @@ nav {
     <div class="showcase-display reveal">
       <div class="showcase-item active" id="sc-holdings">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/holdings.png" alt="Holdings view" loading="lazy">
+          <img src="screenshots/holdings.png" alt="Bitcoin holdings view — per-wallet lot tracking with cost basis and unrealized gains" loading="lazy">
         </div>
         <p class="showcase-caption">Track holdings across every exchange with real-time valuations and per-lot cost basis.</p>
       </div>
 
       <div class="showcase-item" id="sc-tax-report">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/tax-report.png" alt="Tax Report" loading="lazy">
+          <img src="screenshots/tax-report.png" alt="IRS Form 8949 tax report — Bitcoin capital gains with short-term and long-term breakdown" loading="lazy">
         </div>
-        <p class="showcase-caption">Generate IRS-ready Form 8949 reports. Export as PDF, CSV, or TurboTax TXF.</p>
+        <p class="showcase-caption">Generate IRS-ready Form 8949 reports. Export as PDF, CSV, or TurboTax TXF. One-click Optimize All for tax-optimal lot selection.</p>
       </div>
 
       <div class="showcase-item" id="sc-compare">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/compare-methods.png" alt="Compare Methods" loading="lazy">
+          <img src="screenshots/compare-methods.png" alt="FIFO vs Specific ID comparison — showing tax savings from Specific Identification lot selection" loading="lazy">
         </div>
-        <p class="showcase-caption">Compare FIFO, LIFO, and HIFO side-by-side. Find the method that minimizes your tax bill.</p>
+        <p class="showcase-caption">FIFO vs. Optimal Specific ID side-by-side. See exactly how much you save with one-click optimization.</p>
       </div>
 
       <div class="showcase-item" id="sc-multi-year">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/multi-year.png" alt="Multi-Year Dashboard" loading="lazy">
+          <img src="screenshots/multi-year.png" alt="Multi-year Bitcoin tax dashboard — capital gains and losses across tax years" loading="lazy">
         </div>
         <p class="showcase-caption">Analyze tax history across years. Spot trends and plan ahead with lifetime summaries.</p>
       </div>
 
       <div class="showcase-item" id="sc-simulate">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/simulate-sale.png" alt="Simulate Sale" loading="lazy">
+          <img src="screenshots/simulate-sale.png" alt="Bitcoin sale simulator — preview capital gains tax before selling with Specific ID lot selection" loading="lazy">
         </div>
         <p class="showcase-caption">Preview exact tax consequences before selling. See which lots get used.</p>
       </div>
 
       <div class="showcase-item" id="sc-harvesting">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/tax-harvesting.png" alt="Tax-Loss Harvesting" loading="lazy">
+          <img src="screenshots/tax-harvesting.png" alt="Bitcoin tax-loss harvesting dashboard — identify unrealized losses to offset capital gains" loading="lazy">
         </div>
         <p class="showcase-caption">Identify tax-loss harvesting opportunities to offset capital gains.</p>
       </div>
 
       <div class="showcase-item" id="sc-lot-maturity">
         <div class="showcase-img-wrap">
-          <img src="screenshots_original/lot-maturity.png" alt="Lot Maturity" loading="lazy">
+          <img src="screenshots/lot-maturity.png" alt="Bitcoin lot maturity tracker — see when each purchase becomes long-term for lower tax rates" loading="lazy">
         </div>
         <p class="showcase-caption">See when each lot matures to long-term and the tax savings that come with it.</p>
       </div>
@@ -1751,13 +2613,13 @@ nav {
       <div class="glass how-step reveal">
         <span class="step-num">1</span>
         <h3>Import</h3>
-        <p>Drop your exchange CSVs. Auto-detects Coinbase, Kraken, Gemini, and 10+ formats instantly.</p>
+        <p>Drop your exchange CSVs. Auto-detects Coinbase, Kraken, Gemini, and 60+ column variations instantly.</p>
       </div>
 
       <div class="glass how-step reveal">
         <span class="step-num">2</span>
         <h3>Review</h3>
-        <p>Compare FIFO, LIFO, HIFO side-by-side. Pick the method that minimizes your tax bill.</p>
+        <p>Use FIFO or Specific Identification. Pick the method that minimizes your tax bill.</p>
       </div>
 
       <div class="glass how-step reveal">
@@ -1778,12 +2640,12 @@ nav {
       <div class="security-copy">
         <span class="section-label">Security</span>
         <h2>Built for people who<br>take privacy seriously.</h2>
-        <p>Your financial data is encrypted on your device and never transmitted anywhere. No accounts, no telemetry, no exceptions.</p>
+        <p>Your financial data is encrypted on your device and never transmitted anywhere. No accounts, no telemetry — the only optional network calls are price lookups and update checks, which you control.</p>
 
         <ul class="security-list">
           <li>
             <span class="check">&#10003;</span>
-            <span><strong>AES-256-GCM encryption</strong> &mdash; military-grade symmetric encryption for all data at rest.</span>
+            <span><strong>AES-256-GCM encryption</strong> &mdash; AES-256-GCM symmetric encryption for all data at rest.</span>
           </li>
           <li>
             <span class="check">&#10003;</span>
@@ -1880,8 +2742,8 @@ nav {
 
       <div class="glass feature-card reveal">
         <span class="f-icon">&#128200;</span>
-        <h3>4 Accounting Methods</h3>
-        <p>FIFO, LIFO, HIFO, and Specific Identification with manual lot selection. Compare side-by-side to find what saves you the most.</p>
+        <h3>Designed for IRS Requirements</h3>
+        <p>FIFO and Specific Identification &mdash; the only two methods permitted by the IRS. Manual lot selection lets you optimize every sale.</p>
       </div>
 
       <div class="glass feature-card reveal">
@@ -1903,6 +2765,12 @@ nav {
       </div>
 
       <div class="glass feature-card reveal">
+        <span class="f-icon">&#128156;</span>
+        <h3>Charitable Donations</h3>
+        <p>Donate BTC to charity with full lot tracking. Zero-proceeds disposal per IRC &sect;170, FMV recording, and Form 8283 CSV export.</p>
+      </div>
+
+      <div class="glass feature-card reveal">
         <span class="f-icon">&#128274;</span>
         <h3>Encrypted Backups</h3>
         <p>Password-protected backup files with integrity verification. Your data travels with you &mdash; not on our servers.</p>
@@ -1917,101 +2785,91 @@ nav {
 <section class="compliance-section" id="compliance">
   <div class="container">
     <div class="glass compliance-card reveal">
-      <span class="compliance-badge"><span class="badge-check">&#9745;</span> IRS Compliant</span>
-      <h2>Ready for the <span class="accent-green">2025 tax year</span> rules</h2>
-      <p>Starting tax year 2025, the IRS requires <strong>per-wallet cost basis tracking</strong> for cryptocurrency. Sovereign Tax supports both universal and per-wallet cost basis modes with a single toggle &mdash; so you're compliant from day one.</p>
+      <span class="compliance-badge"><span class="badge-check">&#9745;</span> Designed for IRS Rules</span>
+      <h2>Designed for the <span class="accent-green">2025 tax year</span> rules</h2>
+      <p>Starting tax year 2025, the IRS requires <strong>per-wallet cost basis tracking</strong> for cryptocurrency. Sovereign Tax enforces per-wallet cost basis tracking &mdash; fully compliant with the 2025 IRS rules from day one.</p>
     </div>
   </div>
 </section>
 
 <!-- ========================================
-     PRICING COMPARISON
+     LIGHTNING PAYMENT BANNER
      ======================================== -->
-<section class="pricing-section" id="pricing">
+<section class="spotlight-section" id="lightning">
   <div class="container">
-    <h2 class="section-headline reveal">Pay once. Own it forever.</h2>
-    <p class="section-sub reveal">Same tax calculations. No subscription. No surveillance.</p>
-
-    <div class="pricing-table-wrap reveal">
-      <table class="pricing-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th class="hl">Sovereign Tax</th>
-            <th>CoinTracker</th>
-            <th>Koinly</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Price</td>
-            <td class="hl"><span class="price-tag">$49.99&ndash;$59.99 once</span><br><span style="font-size:0.75rem;color:var(--accent);opacity:0.8;">Beta pricing &mdash; increases next week</span></td>
-            <td>$59&ndash;$599/yr</td>
-            <td>$49&ndash;$279/yr</td>
-          </tr>
-          <tr>
-            <td>Data stays on your device</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>No account required</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>Form 8949 + TurboTax</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="check-mark">&#10003;</span></td>
-            <td><span class="check-mark">&#10003;</span></td>
-          </tr>
-          <tr>
-            <td>4 accounting methods</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td>Limited</td>
-            <td><span class="check-mark">&#10003;</span></td>
-          </tr>
-          <tr>
-            <td>Specific ID lot picking</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>Encrypted on device</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>Works fully offline</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>Source code reviewable</td>
-            <td class="hl"><span class="check-mark">&#10003;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-            <td><span class="cross-mark">&#10007;</span></td>
-          </tr>
-          <tr>
-            <td>Data breach history</td>
-            <td class="hl"><span class="no-sub">Impossible</span></td>
-            <td><span class="yes-sub">3 breaches</span></td>
-            <td><span class="yes-sub">1 breach</span></td>
-          </tr>
-          <tr>
-            <td>Subscription required</td>
-            <td class="hl"><span class="no-sub">No</span></td>
-            <td><span class="yes-sub">Yes</span></td>
-            <td><span class="yes-sub">Yes</span></td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="lightning-banner reveal">
+      <div class="lightning-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M13 2L4.09 12.63C3.74 13.04 3.96 13.68 4.48 13.76L11 15L10 22L19.31 10.94C19.64 10.53 19.42 9.9 18.91 9.82L13 9L13 2Z" fill="url(#lightning-grad)" stroke="rgba(250,204,21,0.6)" stroke-width="0.5"/>
+          <defs>
+            <linearGradient id="lightning-grad" x1="4" y1="2" x2="20" y2="22" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#facc15"/>
+              <stop offset="1" stop-color="#f59e0b"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <h2>Now accepting <span class="lightning-accent">Lightning</span> payments.</h2>
+      <p>Pay for Sovereign Tax over the Lightning Network. Instant settlement, near-zero fees, maximum privacy. The way Bitcoin was meant to be spent.</p>
+      <div class="lightning-features">
+        <div class="lightning-feature"><span class="lf-icon">&#9889;</span> <strong>Instant</strong> &mdash; confirmed in seconds</div>
+        <div class="lightning-feature"><span class="lf-icon">&#128176;</span> <strong>Near-zero fees</strong> &mdash; fractions of a cent</div>
+        <div class="lightning-feature"><span class="lf-icon">&#128274;</span> <strong>No KYC</strong> &mdash; no personal info required</div>
+      </div>
     </div>
+  </div>
+</section>
+
+<!-- ========================================
+     FAQ — OBJECTION HANDLING
+     ======================================== -->
+<section class="faq-section" id="faq">
+  <div class="container">
+    <h2 class="section-headline reveal">Common questions.</h2>
+    <p class="section-sub reveal">Everything you need to know before buying.</p>
+
+    <div class="faq-grid reveal">
+      <div class="faq-item">
+        <div class="faq-q">Is Sovereign Tax IRS-compliant?</div>
+        <div class="faq-a">Yes. It supports <strong>FIFO</strong> and <strong><a href="bitcoin-specific-identification.html" style="color:var(--accent);">Specific Identification</a></strong> &mdash; the only two cost basis methods the IRS permits. Generates Form 8949 in PDF, CSV, and TurboTax TXF format. Built for the <strong>2025 per-wallet cost basis rules</strong> (Treasury Reg. &sect;1.1012-1(j)) and backed by 584 automated tests.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Which exchanges does it support?</div>
+        <div class="faq-a">Any exchange that exports a CSV. Auto-detects <strong>Coinbase, Kraken, Gemini, Coinbase Pro, Celsius, Nexo</strong>, and 60+ column name variations. If your exchange exports dates, amounts, and prices &mdash; it works.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Do I get free updates?</div>
+        <div class="faq-a">Yes. <strong>One purchase includes updates</strong> for as long as the product is maintained. The app checks for new versions automatically.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Can I install on multiple devices?</div>
+        <div class="faq-a">Yes. Install on your personal Mac, Windows, and Linux machines. Your data stays local to each device &mdash; use <strong>encrypted backups</strong> to move between them.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">What if I need help?</div>
+        <div class="faq-a">Email <strong>support@sovereigntax.io</strong> &mdash; real person, fast replies. We also have a <a href="help.html">comprehensive Getting Started Guide</a> that covers every feature step by step.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">Can I try it before importing my data?</div>
+        <div class="faq-a">The app <strong>works fully offline from the moment you open it</strong>. Set your PIN, explore every view, and see the full interface before importing a single CSV. No account, no trial period, no limits.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">What if I'm not satisfied?</div>
+        <div class="faq-a">Email <strong>support@sovereigntax.io</strong> within 30 days and we'll make it right. We stand behind the product.</div>
+      </div>
+    </div>
+
+    <div class="section-cta reveal">
+      <a class="btn-primary" href="#purchase" style="padding:18px 56px;font-size:1.1rem;">Buy Now &mdash; From $59</a>
+      <span class="cta-refund">30-day refund policy &bull; Updates included for as long as the product is maintained &bull; macOS, Windows &amp; Linux</span>
+    </div>
+
   </div>
 </section>
 
@@ -2020,24 +2878,28 @@ nav {
      ======================================== -->
 <section class="cta-section" id="purchase">
   <div class="container">
-    <h2 class="reveal">Take control of your<br><span class="accent">Bitcoin tax reporting.</span></h2>
-    <p class="cta-sub reveal">One purchase. No subscription. No data collection. Ever.</p>
+    <h2 class="reveal">Self-custody your<br><span class="accent">tax data.</span></h2>
+    <p class="cta-sub reveal">One purchase. No subscription required. No data collection.</p>
 
     <div class="cta-platforms reveal">
       <span class="cta-platform">&#63743; macOS</span>
       <span class="cta-platform">&#128187; Windows</span>
+      <span class="cta-platform">&#128039; Linux</span>
     </div>
 
+    <div class="reveal" style="margin-bottom:12px;">
+      <span class="sale-badge">Early Adopter Sale</span>
+    </div>
     <div class="cta-buttons reveal">
-      <a class="btn-primary gumroad-button" href="https://sovereigntax.gumroad.com/l/epddkw">
-        Purchase with Card &mdash; <span class="beta-strike">$120</span> $59.99
+      <a class="btn-primary" href="checkout.html">
+        ⚡ Pay with Bitcoin &mdash; <span class="sale-original">$100</span> $59
       </a>
-      <a class="btn-btc" href="https://pay.sovereigntax.io/apps/21zpxF4wbp4FWCkvJyt3PiNWbdSL/pos" style="border-color:var(--accent);background:var(--accent-soft);">
-        &#8383; Pay with Bitcoin &mdash; <span class="beta-strike">$100</span> $49.99 &nbsp;&#9679;&nbsp; Best Price
+      <a class="btn-primary gumroad-button" href="https://sovereigntax.gumroad.com/l/epddkw">
+        Buy with Card &mdash; <span class="sale-original">$115</span> $69
       </a>
     </div>
-    <p class="reveal" style="color:var(--accent);font-size:0.88rem;margin-bottom:8px;font-weight:500;">&#8383; Beta pricing &mdash; save $10 more with Bitcoin. No fees, no personal info collected.</p>
-    <p class="cta-meta reveal">One-time purchase. Instant download. No account required. Price increases next week.</p>
+    <p class="cta-meta reveal">One-time purchase. Instant download. No account required. Updates included for as long as the product is maintained.</p>
+    <p class="reveal" style="color:var(--text-tertiary);font-size:0.82rem;margin-top:12px;">30-day refund policy &mdash; not happy? Email us and we'll make it right.</p>
   </div>
 </section>
 
@@ -2047,7 +2909,7 @@ nav {
 <footer>
   <div class="footer-inner">
     <div class="footer-left">
-      <img src="icon-256.png" alt="">
+      <img src="icon-256.png" alt="Sovereign Tax logo">
       <span>&copy; 2026 Sovereign Tax Solutions LLC</span>
     </div>
     <div class="footer-links">
@@ -2055,6 +2917,11 @@ nav {
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
       <a href="https://github.com/sovereigntax/sovereign-tax" target="_blank" rel="noopener noreferrer">Source Code</a>
+      <a href="help.html">Guide</a>
+      <a href="bitcoin-specific-identification.html">Specific ID Guide</a>
+      <a href="sovereign-tax-vs-koinly.html">vs Koinly</a>
+      <a href="sovereign-tax-vs-cointracker.html">vs CoinTracker</a>
+      <a href="https://au.sovereigntax.io/">Australia Version</a>
       <a href="support.html">Support</a>
       <a href="terms-of-service.html">Terms of Service</a>
       <a href="privacy-policy.html">Privacy Policy</a>
@@ -2093,6 +2960,22 @@ nav {
       if (target) target.classList.add('active');
     });
   });
+
+  // "See sample Form 8949 output" CTA — scrolls to screenshots + activates Tax Report tab
+  var sampleCta = document.getElementById('sample-cta');
+  if (sampleCta) {
+    sampleCta.addEventListener('click', function(e) {
+      e.preventDefault();
+      document.querySelectorAll('.showcase-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.showcase-item').forEach(function(s) { s.classList.remove('active'); });
+      var taxTab = document.querySelector('[data-target="sc-tax-report"]');
+      if (taxTab) taxTab.classList.add('active');
+      var taxItem = document.getElementById('sc-tax-report');
+      if (taxItem) taxItem.classList.add('active');
+      var screenshots = document.getElementById('screenshots');
+      if (screenshots) screenshots.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
 })();
 </script>
 

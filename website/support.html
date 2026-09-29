@@ -1,11 +1,30 @@
 <!DOCTYPE html>
-<!-- Last updated: 2026-09-28 | v1.1 — Import name is required and sets each row's wallet; CSV Wallet/Exchange columns are ignored; link to Help Guide -->
+<!-- Last updated: 2026-02-11 | v1.0 — Initial support page with CSV troubleshooting and macOS Gatekeeper guide -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Support — Sovereign Tax</title>
-<link rel="icon" type="image/png" href="icon-256.png">
+<title>Support & CSV Troubleshooting — Sovereign Tax Bitcoin Tax Calculator</title>
+<meta name="description" content="Get help with Sovereign Tax Bitcoin tax calculator. CSV import troubleshooting, exchange data formatting, column mapping, macOS and Windows installation guides.">
+<link rel="canonical" href="https://sovereigntax.io/support.html">
+<link rel="alternate" hreflang="en-US" href="https://sovereigntax.io/support.html">
+<link rel="alternate" hreflang="en-AU" href="https://au.sovereigntax.io/support.html">
+<link rel="icon" type="image/png" sizes="256x256" href="icon-256.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icon-128.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<meta name="theme-color" content="#000000">
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sovereign Tax">
+<meta property="og:title" content="Support & CSV Troubleshooting — Sovereign Tax">
+<meta property="og:description" content="Get help with Sovereign Tax Bitcoin tax calculator. CSV import troubleshooting, exchange data formatting, and installation guides.">
+<meta property="og:url" content="https://sovereigntax.io/support.html">
+<meta property="og:image" content="https://sovereigntax.io/icon-512.png">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Support — Sovereign Tax Bitcoin Tax Calculator">
+<meta name="twitter:description" content="CSV import troubleshooting, exchange data formatting, and installation guides for Sovereign Tax.">
+<meta name="twitter:image" content="https://sovereigntax.io/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -100,6 +119,20 @@ body {
 }
 
 .nav-links .nav-cta:hover { opacity: 0.9; color: #fff; }
+
+.nav-region {
+  padding: 4px 10px !important;
+  font-size: 0.78rem !important;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 980px;
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+  margin-left: -16px;
+}
+.nav-region:hover {
+  border-color: var(--accent);
+  color: var(--accent) !important;
+}
 
 /* ── Main Container ── */
 .container {
@@ -399,6 +432,13 @@ body {
   .step-card { padding: 20px; }
 }
 </style>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-mEDNeVLDMPw3a_29VevMO.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
 </head>
 <body>
 
@@ -413,7 +453,9 @@ body {
       <a href="index.html">Home</a>
       <a href="index.html#features">Features</a>
       <a href="index.html#pricing">Pricing</a>
+      <a href="help.html">Guide</a>
       <a href="index.html#purchase" class="nav-cta">Buy Now</a>
+      <a href="https://au.sovereigntax.io/support.html" class="nav-region" title="Switch to Australian version">AU</a>
     </div>
   </div>
 </nav>
@@ -458,7 +500,7 @@ body {
     <p>Enter the name of the wallet or account this file comes from (e.g., "Coinbase", "Swan Personal") in the <strong>Wallet / Exchange Name</strong> field &mdash; it's required. <strong>Every transaction in the file is tagged with this name as its wallet</strong>, so import each account's CSV separately under that account's own name, and reuse exactly the same name for later imports. The name also remembers your column mapping, so future imports from the same exchange are instant.</p>
 
     <div class="screenshot-wrap">
-      <img src="screenshots_original/csv-import-screen.png" alt="Import screen showing drag-and-drop area and Browse Files button" loading="lazy">
+      <img src="screenshots/import-empty.png" alt="Import screen showing drag-and-drop area and Browse Files button" loading="lazy">
       <div class="screenshot-caption">The Import Transactions screen &mdash; drag your CSV here or click Browse Files</div>
     </div>
 
@@ -468,7 +510,7 @@ body {
     <p>If everything matches, you'll see <strong>green checkmarks</strong> next to each mapped field and a green <strong>"All required fields mapped. Ready to import."</strong> message at the bottom.</p>
 
     <div class="screenshot-wrap">
-      <img src="screenshots_original/csv-mapping-auto.png" alt="Column mapping with all fields auto-detected and green checkmarks" loading="lazy">
+      <img src="screenshots/import-mapping-top.png" alt="Column mapping with all fields auto-detected and green checkmarks" loading="lazy">
       <div class="screenshot-caption">Auto-detected columns &mdash; green checkmarks mean the field is correctly mapped</div>
     </div>
 
@@ -482,22 +524,22 @@ body {
     <p>If your CSV uses non-standard column names, the auto-detection may not match every field. You'll see <strong>"&mdash; Not mapped &mdash;"</strong> next to unrecognized fields and a <strong>yellow warning</strong> at the bottom listing the missing required fields.</p>
 
     <div class="screenshot-wrap">
-      <img src="screenshots_original/csv-mapping-unmapped.png" alt="Column mapping showing unmapped fields with warnings" loading="lazy">
+      <img src="screenshots/import-mapping-preview.png" alt="Column mapping showing fields with data preview" loading="lazy">
       <div class="screenshot-caption">Unmapped columns &mdash; the app detected the CSV headers but couldn't auto-match them</div>
     </div>
 
-    <p><strong>To fix this:</strong> click the dropdown next to each unmapped field and select the matching column from your CSV. The dropdown lists every column header found in your file. You need to match at minimum the <strong>Date</strong> and <strong>Amount</strong> fields (marked with *).</p>
+    <p><strong>To fix this:</strong> click the dropdown next to each unmapped field and select the matching column from your CSV. The dropdown lists every column header found in your file. You need to match at minimum the <strong>Date</strong>, <strong>Amount</strong>, and either <strong>Price</strong> or <strong>Total</strong> fields (marked with *).</p>
     <p>Here's an example of what your actual CSV data looks like alongside the mapping screen &mdash; use the column names in your file to guide your selections:</p>
 
     <div class="screenshot-wrap">
-      <img src="screenshots_original/csv-mapping-with-file.png" alt="Side-by-side view of CSV file and mapping interface" loading="lazy">
+      <img src="screenshots/import-mapping-top.png" alt="Column mapping interface with auto-detected fields" loading="lazy">
       <div class="screenshot-caption">Your CSV file columns (right) correspond to the mapping dropdowns (left)</div>
     </div>
 
     <p>Once you've mapped the required fields, the warning will disappear and you'll see the green <strong>"All required fields mapped"</strong> confirmation:</p>
 
     <div class="screenshot-wrap">
-      <img src="screenshots_original/csv-mapping-ready.png" alt="All columns mapped with green Ready to import message" loading="lazy">
+      <img src="screenshots/import-success.png" alt="Import complete with transaction count" loading="lazy">
       <div class="screenshot-caption">All fields mapped &mdash; click "Import Transactions" to finish</div>
     </div>
 
@@ -510,7 +552,7 @@ body {
       <p>If your export only contains one kind of transaction (e.g., all purchases), select <strong>"Buy"</strong> as the default. If your export contains mixed types, you may need to split the file or manually add a Type column before importing.</p>
     </div>
 
-    <p>The default type options are: <strong>Buy</strong>, <strong>Sell</strong>, <strong>Transfer In</strong>, and <strong>Transfer Out</strong>.</p>
+    <p>The default type options are: <strong>Buy</strong>, <strong>Sell</strong>, <strong>Transfer In</strong>, <strong>Transfer Out</strong>, and <strong>Donation</strong>.</p>
 
     <!-- Column Reference Table -->
     <h3 id="csv-columns">Column Reference</h3>
@@ -589,7 +631,7 @@ body {
         <div class="step-num">2</div>
         <h4>Only Bitcoin transactions are imported</h4>
       </div>
-      <p>Sovereign Tax focuses exclusively on Bitcoin. If your CSV contains other cryptocurrencies, those rows are automatically filtered out &mdash; only BTC and XBT transactions are processed.</p>
+      <p>Sovereign Tax focuses exclusively on Bitcoin. If your CSV contains other cryptocurrencies, those rows are automatically filtered out &mdash; only Bitcoin (BTC/XBT) transactions are processed.</p>
     </div>
 
     <div class="step-card">
@@ -613,7 +655,7 @@ body {
         <div class="step-num">5</div>
         <h4>"Missing required fields" warning</h4>
       </div>
-      <p>If you see this warning, it means <strong>Date</strong> and/or <strong>Amount</strong> haven't been mapped yet. Use the dropdowns to assign the correct columns from your CSV. Once both are mapped, the warning will clear.</p>
+      <p>If you see this warning, it means <strong>Date</strong>, <strong>Amount</strong>, and/or <strong>Price/Total</strong> haven't been mapped yet. Use the dropdowns to assign the correct columns from your CSV. Once all required fields are mapped, the warning will clear.</p>
     </div>
 
     <div class="step-card">
@@ -679,7 +721,7 @@ body {
 
     <div class="step-card" style="text-align:center;padding:40px 28px;">
       <h4 style="font-size:1.1rem;margin-bottom:8px;">Email Us</h4>
-      <p style="margin-bottom:16px;">Send a description of your issue along with your <strong>Invoice ID</strong> (from your BTCPay receipt or Gumroad order) so we can look you up.</p>
+      <p style="margin-bottom:16px;">Send a description of your issue along with your <strong>Invoice ID</strong> (from your Strike receipt or Gumroad order) so we can look you up.</p>
       <a href="mailto:support@sovereigntax.io" style="display:inline-block;background:var(--accent);color:#fff;padding:12px 32px;border-radius:980px;font-weight:600;font-size:0.95rem;text-decoration:none;transition:opacity 0.2s;">support@sovereigntax.io</a>
       <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:16px;margin-bottom:0;">We typically respond within 24 hours.</p>
     </div>
@@ -687,9 +729,18 @@ body {
 
 </div>
 
+<!-- ── Help Cross-Reference ── -->
+<div style="max-width:860px;margin:0 auto;padding:0 24px 40px;">
+  <div style="background:var(--glass);border:1px solid var(--glass-border);border-radius:16px;padding:32px;text-align:center;">
+    <p style="font-size:1rem;font-weight:500;color:var(--text);margin-bottom:8px;">Looking for more?</p>
+    <p style="font-size:0.92rem;color:var(--text-secondary);font-weight:300;margin-bottom:20px;">Check our comprehensive documentation covering accounting methods, tax reports, wallets, transfers, and more.</p>
+    <a href="help.html" style="display:inline-block;background:var(--accent);color:#fff;padding:10px 28px;border-radius:980px;font-weight:600;font-size:0.9rem;text-decoration:none;transition:opacity 0.2s;">Getting Started Guide &rarr;</a>
+  </div>
+</div>
+
 <!-- ── Footer ── -->
 <div class="page-footer">
-  <p>&copy; 2026 Sovereign Tax Solutions LLC &nbsp;&middot;&nbsp; <a href="index.html">Home</a> &nbsp;&middot;&nbsp; <a href="terms-of-service.html">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="privacy-policy.html">Privacy Policy</a></p>
+  <p>&copy; 2026 Sovereign Tax Solutions LLC &nbsp;&middot;&nbsp; <a href="index.html">Home</a> &nbsp;&middot;&nbsp; <a href="help.html">Guide</a> &nbsp;&middot;&nbsp; <a href="terms-of-service.html">Terms of Service</a> &nbsp;&middot;&nbsp; <a href="privacy-policy.html">Privacy Policy</a></p>
   <p style="font-size:0.7rem;color:#555;margin-top:6px;">This software is for informational purposes only and does not constitute tax advice.</p>
 </div>
 
