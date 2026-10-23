@@ -184,7 +184,7 @@ export function RecordSaleView() {
         </div>
         {showWalletWarning && (
           <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs p-2 rounded-lg mt-2">
-            ⚠️ Only {formatBTC(walletBTCAvailable!)} BTC available in "{selectedWallet}". Per IRS rules (TD 9989), you cannot mix lots across wallets in a single sale. Record separate sales from each wallet, or transfer BTC between wallets first.
+            ⚠️ Only {formatBTC(walletBTCAvailable!)} BTC available in "{selectedWallet}". Per IRS rules (TD 10000), you cannot mix lots across wallets in a single sale. Record separate sales from each wallet, or transfer BTC between wallets first.
           </div>
         )}
         {hasSavedSelections && saved && (

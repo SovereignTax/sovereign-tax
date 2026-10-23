@@ -6,7 +6,7 @@ import { exportForm8949PDF } from "../lib/pdf-export";
 import { formatUSD, formatBTC, formatDate } from "../lib/utils";
 import { AccountingMethod, TransactionType } from "../lib/types";
 import { SaleRecord } from "../lib/models";
-import { getUnassignedTransfers, getWalletMismatchSales, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
+import { getUnassignedTransfers, getWalletMismatchSales, getOptimizableSells, getAssignedSells, getBatchOptimizeGuidance } from "../lib/review-helpers";
 import { computeCarryforward } from "../lib/carryforward";
 import { saveTextFile, saveBinaryFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
@@ -531,15 +531,12 @@ export function TaxReportView() {
             <h3 className="text-lg font-bold mb-4">Optimize — {selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
-              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
+              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 10000). Applying Specific ID to all dispositions ensures consistency.
             </div>
 
             <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
               <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale. Applying Specific ID to transactions that were already completed without a contemporaneous lot identification may not satisfy IRS requirements.
-              {selectedYear === 2025
-                ? <span className="block mt-1"><strong>What to do:</strong> For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
-                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO or consulting a tax professional.</span>
-              }
+              <span className="block mt-1"><strong>What to do:</strong> {getBatchOptimizeGuidance(selectedYear)}</span>
             </div>
 
             <div className="space-y-3 mb-4">

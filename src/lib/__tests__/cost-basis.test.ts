@@ -282,7 +282,7 @@ describe("FIFO — holding period classification", () => {
 });
 
 // ═══════════════════════════════════════════════════════
-// FIFO — Per-wallet cost basis (IRS TD 9989)
+// FIFO — Per-wallet cost basis (IRS TD 10000)
 // ═══════════════════════════════════════════════════════
 
 describe("FIFO — per-wallet enforcement", () => {

@@ -176,7 +176,7 @@ export function ComparisonView() {
       {/* Info */}
       <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-sm text-blue-600 dark:text-blue-400">
         <strong>How to apply:</strong> Go to <strong>Transactions</strong> and click <strong>Optimize All</strong> to automatically assign optimal Specific ID lots to all sells in {selectedYear}. You can also assign lots individually using the <strong>Lots</strong> button on each sell.
-        <div className="mt-2 text-xs opacity-75">IRS expects consistent use of one accounting method per wallet within a tax year (IRC §1012, TD 9989).</div>
+        <div className="mt-2 text-xs opacity-75">IRS expects consistent use of one accounting method per wallet within a tax year (IRC §1012, TD 10000).</div>
       </div>
     </div>
   );

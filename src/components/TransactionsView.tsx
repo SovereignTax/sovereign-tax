@@ -4,7 +4,7 @@ import { formatUSD, formatBTC, formatDateTime, formatDate, hasCrossWalletLots, d
 import { TransactionType, TransactionTypeDisplayNames, IncomeType, IncomeTypeDisplayNames, AccountingMethod } from "../lib/types";
 import { Transaction, SaleRecord } from "../lib/models";
 import { calculate, calculateUpTo, simulateSale, resolveRecordedSales, batchOptimizeSpecificId, LotSelection } from "../lib/cost-basis";
-import { getUnassignedTransfers, getAssignedTransferCount, getWalletMismatchSales, getWalletMismatchIds, getOptimizableSells, getAssignedSells } from "../lib/review-helpers";
+import { getUnassignedTransfers, getAssignedTransferCount, getWalletMismatchSales, getWalletMismatchIds, getOptimizableSells, getAssignedSells, getBatchOptimizeGuidance, getLotEditGuidance } from "../lib/review-helpers";
 import { saveTextFile } from "../lib/file-save";
 import { csvCell } from "../lib/export";
 import { confirmDialog } from "../lib/dialog";
@@ -634,15 +634,12 @@ export function TransactionsView() {
             <h3 className="text-lg font-bold mb-4">Optimize — {state.selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
-              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
+              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 10000). Applying Specific ID to all dispositions ensures consistency.
             </div>
 
             <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
               <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale. Applying Specific ID to transactions that were already completed without a contemporaneous lot identification may not satisfy IRS requirements.
-              {state.selectedYear === 2025
-                ? <span className="block mt-1"><strong>What to do:</strong> For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
-                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {state.selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO or consulting a tax professional.</span>
-              }
+              <span className="block mt-1"><strong>What to do:</strong> {getBatchOptimizeGuidance(state.selectedYear)}</span>
             </div>
 
             <div className="space-y-3 mb-4">
@@ -1088,7 +1085,7 @@ function EditLotsModal({
 
   // Filter to available lots (remainingBTC > 0), subtract BTC claimed by LATER Specific ID
   // elections (only records for transactions AFTER txn — prior records are already reflected
-  // in lotsAtPoint via calculateUpTo), then wallet-filter (per-wallet cost basis, TD 9989).
+  // in lotsAtPoint via calculateUpTo), then wallet-filter (per-wallet cost basis, TD 10000).
   const walletName = txn.wallet || txn.exchange;
   const walletLotsResult = useMemo(() => {
     const available = lotsAtPoint.filter((l) => l.remainingBTC > 0);
@@ -1152,6 +1149,7 @@ function EditLotsModal({
   }, [existingRecord]);
 
   const isDonation = txn.transactionType === TransactionType.Donation;
+  const lotEditGuidance = getLotEditGuidance(new Date(txn.date).getFullYear());
 
   const handleLotPickerConfirm = (selections: LotSelection[]) => {
     setError(null);
@@ -1241,19 +1239,13 @@ function EditLotsModal({
         </div>
 
         <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
-          IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). If you use Specific ID for any {isDonation ? "donation" : "sale"}, use it for all dispositions from this wallet in the same year.
+          IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 10000). If you use Specific ID for any {isDonation ? "donation" : "sale"}, use it for all dispositions from this wallet in the same year.
         </div>
 
         <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
           <strong>IRS timing requirement:</strong> Specific ID elections must be made no later than the date and time of the sale (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82). If this {isDonation ? "donation" : "sale"} occurred before you used this software, applying Specific ID retroactively may not satisfy IRS requirements.
-          {new Date(txn.date).getFullYear() === 2025
-            ? " For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping — your lot selections are saved as your identification record."
-            : ` This transaction is from ${new Date(txn.date).getFullYear()}. Notice 2025-07 temporary relief applies only to 2025.`
-          }
-          <span className="block mt-1"><strong>What to do:</strong> {new Date(txn.date).getFullYear() === 2025
-            ? "Proceed with Specific ID — Notice 2025-07 covers 2025. Sovereign Tax stores your lot identifications as required records."
-            : "If you made a contemporaneous lot identification at the time of the original sale (e.g., written records or broker confirmation), you can record it here. If not, FIFO is the safer method for pre-2025 transactions. Consult a tax professional if unsure."
-          }</span>
+          {lotEditGuidance.note}
+          <span className="block mt-1"><strong>What to do:</strong> {lotEditGuidance.action}</span>
         </div>
 
         {isWalletMismatch && (
