@@ -254,6 +254,7 @@ export function calculate(
             if (Math.abs(take - lots[idx].remainingBTC) < 1e-8) {
               // Re-tag entire lot in place (avoids splitting)
               lots[idx].wallet = destWallet;
+              lots[idx].transferred = true;
             } else {
               // Split: reduce original lot, create new re-tagged lot with the taken portion
               lots[idx].remainingBTC -= take;
@@ -285,6 +286,7 @@ export function calculate(
                   exchange: lots[idx].exchange,
                   wallet: destWallet,
                   remainingBTC: take,
+                  transferred: true,
                 });
                 lots.push(retagged);
               }
@@ -760,6 +762,7 @@ function processSale(
         exchange: lots[lotIdx].exchange,
         wallet: lots[lotIdx].wallet,
         isLongTerm: isMoreThanOneYear(lots[lotIdx].purchaseDate, sale.date),
+        transferred: lots[lotIdx].transferred || undefined,
       });
 
       lots[lotIdx].remainingBTC -= sellFromLot;
@@ -799,6 +802,7 @@ function processSale(
         exchange: lots[idx].exchange,
         wallet: lots[idx].wallet,
         isLongTerm: isMoreThanOneYear(lots[idx].purchaseDate, sale.date),
+        transferred: lots[idx].transferred || undefined,
       });
 
       lots[idx].remainingBTC -= sellFromLot;
@@ -844,6 +848,7 @@ function processSale(
     id: crypto.randomUUID(),
     sourceTransactionId: sale.id,
     saleDate: sale.date,
+    wallet: saleWallet || undefined,
     amountSold,
     salePricePerBTC: isDonation ? 0 : sale.pricePerBTC,
     totalProceeds,

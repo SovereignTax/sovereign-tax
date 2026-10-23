@@ -1,4 +1,5 @@
-import { SaleRecord, Transaction } from "./models";
+import { LotDetail, SaleRecord, Transaction, WalletReporting } from "./models";
+import { assignBox, groupByBox, getUnclassifiedSaleWallets, BOX_INFO, BASIS_REPORTED_NOTE, DIGITAL_ASSET_BOXES_FIRST_YEAR } from "./form8949-boxes";
 import { AccountingMethod, AccountingMethodDisplayNames, IncomeTypeDisplayNames, TransactionType } from "./types";
 
 function formatDate(isoDate: string): string {
@@ -96,16 +97,71 @@ function formatPropertyDescription(amountBTC: number, detail: { wallet?: string;
   return `"${propertyDescription(amountBTC, detail).replace(/"/g, '""')}"`;
 }
 
-/** Export Form 8949 compatible CSV — splits lot details by term, not sales */
+interface SectionTotals { proceeds: number; basis: number; gainLoss: number; fees: number }
+
+/**
+ * Emit one Form 8949 section (rows + total line) for the lot details that pass `include`.
+ * Each sale's fee is apportioned to the section by BTC weight (D2); the last lot of the
+ * sale within the section takes the rounding remainder.
+ */
+function emitForm8949Section(
+  lines: string[],
+  sales: SaleRecord[],
+  include: (detail: LotDetail, sale: SaleRecord) => boolean,
+  totalLabel: string
+): SectionTotals {
+  const totals: SectionTotals = { proceeds: 0, basis: 0, gainLoss: 0, fees: 0 };
+  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Fees (included in Proceeds),Gain or (Loss)");
+
+  for (const sale of sales) {
+    const details = sale.lotDetails.filter((d) => include(d, sale));
+    if (details.length === 0) continue;
+    const sectionBTC = details.reduce((a, d) => a + d.amountBTC, 0);
+    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
+    const feeShare = sale.fee ? sale.fee * (sectionBTC / saleBTCTotal) : 0;
+    let feeRemaining = feeShare;
+    for (let di = 0; di < details.length; di++) {
+      const detail = details[di];
+      const proceeds = detail.amountBTC * sale.salePricePerBTC;
+      const gainLoss = proceeds - detail.totalCost;
+      // Assign fee per lot; last lot gets remainder to avoid rounding loss
+      let lotFee = 0;
+      if (feeShare > 0) {
+        lotFee = di < details.length - 1 ? Math.round((feeShare * (detail.amountBTC / sectionBTC)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
+        feeRemaining -= lotFee;
+      }
+      const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
+      lines.push(
+        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
+      );
+      totals.proceeds += proceeds;
+      totals.basis += detail.totalCost;
+      totals.gainLoss += gainLoss;
+    }
+    totals.fees += feeShare;
+  }
+
+  lines.push(`${totalLabel},,,${formatCSVDecimal(totals.proceeds)},${formatCSVDecimal(totals.basis)},${totals.fees > 0 ? formatCSVDecimal(totals.fees) : ""},${formatCSVDecimal(totals.gainLoss)}`);
+  lines.push("");
+  return totals;
+}
+
+/**
+ * Export Form 8949 compatible CSV — splits lot details by term, not sales.
+ * Tax years 2025+ use the digital-asset boxes (G–L), one section per checked box,
+ * classified from `walletReporting`. Earlier years keep the plain Part I / Part II layout.
+ */
 export function exportForm8949CSV(
   sales: SaleRecord[],
   year: number,
   method: AccountingMethod,
-  walletMismatchCount?: number
+  walletMismatchCount?: number,
+  walletReporting?: Record<string, WalletReporting>
 ): string {
   // Exclude donations — they are not capital gain/loss events (IRC §170)
   sales = sales.filter((s) => !s.isDonation);
   const lines: string[] = [];
+  const useBoxes = year >= DIGITAL_ASSET_BOXES_FIRST_YEAR;
 
   // Title
   lines.push("IRS Form 8949 — Sales and Dispositions of Capital Assets");
@@ -122,6 +178,13 @@ export function exportForm8949CSV(
     lines.push("To fix: assign source wallets on your Transfer In transactions so lots are re-tagged to the correct wallet.");
   }
 
+  const unclassified = useBoxes ? getUnclassifiedSaleWallets(sales, walletReporting) : [];
+  if (unclassified.length > 0) {
+    lines.push("");
+    lines.push(`WARNING: ${unclassified.length} wallet(s) are not classified as an exchange or self-custody: ${csvCell(unclassified.join("; "))}`);
+    lines.push("Their sales are listed under box I/L (not reported on Form 1099-DA). If an exchange sent you a Form 1099-DA for them, classify the wallet in Settings → Wallets and export again.");
+  }
+
   lines.push("");
   // Proceeds in this report are NET of selling fees (matching the in-app numbers and
   // 1099-B net-proceeds convention). The Fees column is informational only — applying
@@ -129,87 +192,43 @@ export function exportForm8949CSV(
   lines.push("NOTE: Proceeds are net of selling fees. The Fees column is informational — do NOT subtract it again as a Form 8949 adjustment.");
   lines.push("");
 
-  // Collect all lot details split by term across ALL sales (handles mixed-term sales)
-  let stProceeds = 0, stBasis = 0, stGainLoss = 0, stFees = 0;
-  let ltProceeds = 0, ltBasis = 0, ltGainLoss = 0, ltFees = 0;
+  const st: SectionTotals = { proceeds: 0, basis: 0, gainLoss: 0, fees: 0 };
+  const lt: SectionTotals = { proceeds: 0, basis: 0, gainLoss: 0, fees: 0 };
+  const add = (into: SectionTotals, t: SectionTotals) => {
+    into.proceeds += t.proceeds; into.basis += t.basis; into.gainLoss += t.gainLoss; into.fees += t.fees;
+  };
+  const lineSummaries: string[] = [];
 
-  // Part I — Short-Term
-  lines.push("PART I — SHORT-TERM CAPITAL GAINS AND LOSSES (held one year or less)");
-  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Fees (included in Proceeds),Gain or (Loss)");
-
-  for (const sale of sales) {
-    const stDetails = sale.lotDetails.filter((d) => !d.isLongTerm);
-    if (stDetails.length === 0) continue;
-    // Apportion fee proportionally to short-term portion
-    const stBTCTotal = stDetails.reduce((a, d) => a + d.amountBTC, 0);
-    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
-    const feeShare = sale.fee ? sale.fee * (stBTCTotal / saleBTCTotal) : 0;
-    let feeRemaining = feeShare;
-    for (let di = 0; di < stDetails.length; di++) {
-      const detail = stDetails[di];
-      const proceeds = detail.amountBTC * sale.salePricePerBTC;
-      const gainLoss = proceeds - detail.totalCost;
-      // Assign fee per lot; last lot gets remainder to avoid rounding loss
-      let lotFee = 0;
-      if (feeShare > 0) {
-        lotFee = di < stDetails.length - 1 ? Math.round((feeShare * (detail.amountBTC / stBTCTotal)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
-        feeRemaining -= lotFee;
-      }
-      const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
-      lines.push(
-        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
-      );
-      stProceeds += proceeds;
-      stBasis += detail.totalCost;
-      stGainLoss += gainLoss;
+  if (useBoxes) {
+    const groups = groupByBox(sales, walletReporting);
+    if (groups.length === 0) {
+      lines.push("No taxable dispositions for this tax year.");
+      lines.push("");
     }
-    stFees += feeShare;
-  }
-
-  lines.push(`TOTAL SHORT-TERM,,,${formatCSVDecimal(stProceeds)},${formatCSVDecimal(stBasis)},${stFees > 0 ? formatCSVDecimal(stFees) : ""},${formatCSVDecimal(stGainLoss)}`);
-  lines.push("");
-
-  // Part II — Long-Term
-  lines.push("PART II — LONG-TERM CAPITAL GAINS AND LOSSES (held more than one year)");
-  lines.push("Description of Property,Date Acquired,Date Sold,Proceeds (Sales Price),Cost or Other Basis,Fees (included in Proceeds),Gain or (Loss)");
-
-  for (const sale of sales) {
-    const ltDetails = sale.lotDetails.filter((d) => d.isLongTerm);
-    if (ltDetails.length === 0) continue;
-    // Apportion fee proportionally to long-term portion
-    const ltBTCTotal = ltDetails.reduce((a, d) => a + d.amountBTC, 0);
-    const saleBTCTotal = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);
-    const feeShare = sale.fee ? sale.fee * (ltBTCTotal / saleBTCTotal) : 0;
-    let feeRemaining = feeShare;
-    for (let di = 0; di < ltDetails.length; di++) {
-      const detail = ltDetails[di];
-      const proceeds = detail.amountBTC * sale.salePricePerBTC;
-      const gainLoss = proceeds - detail.totalCost;
-      let lotFee = 0;
-      if (feeShare > 0) {
-        lotFee = di < ltDetails.length - 1 ? Math.round((feeShare * (detail.amountBTC / ltBTCTotal)) * 100) / 100 : Math.round(feeRemaining * 100) / 100;
-        feeRemaining -= lotFee;
-      }
-      const feeStr = lotFee > 0 ? formatCSVDecimal(lotFee) : "";
-      lines.push(
-        `${formatPropertyDescription(detail.amountBTC, detail)},${formatDate(detail.purchaseDate)},${formatDate(sale.saleDate)},${formatCSVDecimal(proceeds)},${formatCSVDecimal(detail.totalCost)},${feeStr},${formatCSVDecimal(gainLoss)}`
-      );
-      ltProceeds += proceeds;
-      ltBasis += detail.totalCost;
-      ltGainLoss += gainLoss;
+    for (const { box } of groups) {
+      const info = BOX_INFO[box];
+      lines.push(`PART ${info.part} — ${info.isLongTerm ? "LONG-TERM" : "SHORT-TERM"} — BOX ${box} CHECKED (${info.label})`);
+      if (box === "G" || box === "J") lines.push(`NOTE: ${BASIS_REPORTED_NOTE}`);
+      const totals = emitForm8949Section(lines, sales, (d, s) => assignBox(d, s, walletReporting) === box, `TOTAL BOX ${box}`);
+      add(info.isLongTerm ? lt : st, totals);
+      lineSummaries.push(`Line ${info.scheduleDLine} (Form 8949 box ${box}),${formatCSVDecimal(totals.proceeds)},${formatCSVDecimal(totals.basis)},${formatCSVDecimal(totals.gainLoss)}`);
     }
-    ltFees += feeShare;
+  } else {
+    // Part I — Short-Term
+    lines.push("PART I — SHORT-TERM CAPITAL GAINS AND LOSSES (held one year or less)");
+    add(st, emitForm8949Section(lines, sales, (d) => !d.isLongTerm, "TOTAL SHORT-TERM"));
+    // Part II — Long-Term
+    lines.push("PART II — LONG-TERM CAPITAL GAINS AND LOSSES (held more than one year)");
+    add(lt, emitForm8949Section(lines, sales, (d) => d.isLongTerm, "TOTAL LONG-TERM"));
   }
-
-  lines.push(`TOTAL LONG-TERM,,,${formatCSVDecimal(ltProceeds)},${formatCSVDecimal(ltBasis)},${ltFees > 0 ? formatCSVDecimal(ltFees) : ""},${formatCSVDecimal(ltGainLoss)}`);
-  lines.push("");
 
   // Schedule D Summary
   lines.push("SCHEDULE D SUMMARY — Capital Gains and Losses");
   lines.push("Category,Proceeds,Cost Basis,Gain or (Loss)");
-  lines.push(`Short-term (Part I),${formatCSVDecimal(stProceeds)},${formatCSVDecimal(stBasis)},${formatCSVDecimal(stGainLoss)}`);
-  lines.push(`Long-term (Part II),${formatCSVDecimal(ltProceeds)},${formatCSVDecimal(ltBasis)},${formatCSVDecimal(ltGainLoss)}`);
-  lines.push(`NET TOTAL,${formatCSVDecimal(stProceeds + ltProceeds)},${formatCSVDecimal(stBasis + ltBasis)},${formatCSVDecimal(stGainLoss + ltGainLoss)}`);
+  lines.push(...lineSummaries);
+  lines.push(`Short-term (Part I),${formatCSVDecimal(st.proceeds)},${formatCSVDecimal(st.basis)},${formatCSVDecimal(st.gainLoss)}`);
+  lines.push(`Long-term (Part II),${formatCSVDecimal(lt.proceeds)},${formatCSVDecimal(lt.basis)},${formatCSVDecimal(lt.gainLoss)}`);
+  lines.push(`NET TOTAL,${formatCSVDecimal(st.proceeds + lt.proceeds)},${formatCSVDecimal(st.basis + lt.basis)},${formatCSVDecimal(st.gainLoss + lt.gainLoss)}`);
 
   // Repeat wallet mismatch disclaimer at end of document for visibility
   if (walletMismatchCount && walletMismatchCount > 0) {

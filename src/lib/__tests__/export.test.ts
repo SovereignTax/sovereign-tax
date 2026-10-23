@@ -716,3 +716,66 @@ describe("csvCell — exported for reuse by view-level CSV exports", () => {
     expect(csvCell("-100.00")).toBe("'-100.00");
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// Form 8949 digital-asset boxes (G–L), tax years 2025+
+// ═══════════════════════════════════════════════════════
+
+describe("exportForm8949CSV — digital-asset boxes (2025+)", () => {
+  const reporting = { coinbase: { kind: "exchange" as const }, cold: { kind: "self-custody" as const } };
+  const d2026 = (o: Partial<LotDetail> = {}) =>
+    makeLotDetail({ purchaseDate: new Date(2026, 1, 1, 12).toISOString(), wallet: "Coinbase", ...o });
+  const s2026 = (o: Partial<SaleRecord> = {}) =>
+    makeSaleRecord({ saleDate: new Date(2026, 5, 1, 12).toISOString(), wallet: "Coinbase", ...o });
+
+  it("one section per checked box, in G–L order, with Schedule D lines", () => {
+    const sales = [
+      s2026({ lotDetails: [d2026(), d2026({ id: "ld-2", transferred: true })] }), // G + H
+      s2026({ id: "sale-2", wallet: "Cold", lotDetails: [d2026({ wallet: "Cold", exchange: "Cold", isLongTerm: true, purchaseDate: "2024-01-15T12:00:00.000Z" })] }), // L
+    ];
+    const csv = exportForm8949CSV(sales, 2026, AccountingMethod.FIFO, 0, reporting);
+    const g = csv.indexOf("BOX G CHECKED"), h = csv.indexOf("BOX H CHECKED"), l = csv.indexOf("BOX L CHECKED");
+    expect(g).toBeGreaterThan(0);
+    expect(h).toBeGreaterThan(g);
+    expect(l).toBeGreaterThan(h);
+    expect(csv).not.toContain("BOX I CHECKED");
+    expect(csv).not.toContain("BOX J CHECKED");
+    expect(csv).toContain("Line 1b (Form 8949 box G)");
+    expect(csv).toContain("Line 2 (Form 8949 box H)");
+    expect(csv).toContain("Line 10 (Form 8949 box L)");
+    // G/J sections carry the compare-with-1099-DA note; H does not need it
+    expect(csv.slice(g, h)).toContain("code B");
+    expect(csv.slice(h, l)).not.toContain("code B");
+  });
+
+  it("box totals add up to the Part totals and net total", () => {
+    const sales = [s2026({ fee: 10, lotDetails: [d2026({ totalCost: 10000 }), d2026({ id: "ld-2", transferred: true, totalCost: 15000 })] })];
+    const csv = exportForm8949CSV(sales, 2026, AccountingMethod.FIFO, 0, reporting);
+    const rows = csv.split("\n");
+    const total = (label: string) => rows.find((r) => r.startsWith(label))!.split(",");
+    const g = total("TOTAL BOX G"), h = total("TOTAL BOX H"), part = total("Short-term (Part I)");
+    expect(Number(g[3]) + Number(h[3])).toBeCloseTo(Number(part[1]), 2);
+    expect(Number(g[4]) + Number(h[4])).toBeCloseTo(Number(part[2]), 2);
+    // Sale fee apportioned across the two boxes by BTC weight (equal lots → $5 each)
+    expect(g[5]).toBe("5.00");
+    expect(h[5]).toBe("5.00");
+  });
+
+  it("warns about unclassified wallets and lists their sales under I/L", () => {
+    const csv = exportForm8949CSV([s2026({ wallet: "Ledger", lotDetails: [d2026({ wallet: "Ledger" })] })], 2026, AccountingMethod.FIFO, 0, {});
+    expect(csv).toContain("1 wallet(s) are not classified");
+    expect(csv).toContain("Ledger");
+    expect(csv).toContain("BOX I CHECKED");
+  });
+
+  it("no warning when every sale wallet is classified", () => {
+    const csv = exportForm8949CSV([s2026({ lotDetails: [d2026()] })], 2026, AccountingMethod.FIFO, 0, reporting);
+    expect(csv).not.toContain("not classified");
+  });
+
+  it("pre-2025 years keep the plain Part I / Part II layout", () => {
+    const csv = exportForm8949CSV([makeSaleRecord()], 2024, AccountingMethod.FIFO, 0, reporting);
+    expect(csv).toContain("PART I — SHORT-TERM CAPITAL GAINS AND LOSSES");
+    expect(csv).not.toContain("CHECKED");
+  });
+});

@@ -26,6 +26,7 @@ export interface Lot {
   remainingBTC: number;
   exchange: string;
   wallet?: string; // Wallet/account for per-wallet cost basis tracking
+  transferred?: boolean; // true once re-tagged by a TransferIn — no longer "covered" by the acquiring broker (Form 8949 box G/J vs H/K)
 }
 
 /** Lot selection for Specific Identification method */
@@ -45,6 +46,7 @@ export interface LotDetail {
   exchange: string;
   wallet?: string;
   isLongTerm: boolean;
+  transferred?: boolean; // Copied from Lot.transferred — lot moved wallets before this disposition
 }
 
 export interface SaleRecord {
@@ -66,6 +68,7 @@ export interface SaleRecord {
   donationFmvTotal?: number; // Original total FMV (amount × FMV) from the donation transaction
   sourceTransactionId?: string; // Links to originating Sell/Donation transaction for unique keying
   walletMismatch?: boolean; // true when sale used lots from a different wallet (global fallback)
+  wallet?: string; // Wallet/account the disposition was made from (txn.wallet || txn.exchange)
 }
 
 export interface EngineWarning {
@@ -130,6 +133,18 @@ export interface Preferences {
   reconciliationDecisions?: Record<string, "approved" | "rejected">; // Persisted decisions on auto-matched transfer pairs (keyed by "outId|inId"): "approved" confirms a flagged pair, "rejected" = user unmatched it
   manualTransferMatches?: Array<{ outId: string; inId: string }>; // Persisted user-confirmed manual transfer pairs
   autoMatchTransfers?: boolean; // Reconciliation: pair transfers automatically (default true). false = manual matching only
+  walletReporting?: Record<string, WalletReporting>; // Form 8949 box classification, keyed by normalized wallet (trim + lowercase)
+}
+
+/**
+ * How a wallet's dispositions are reported to the IRS — drives the Form 8949 digital-asset box.
+ * kind "exchange" = a broker that issues Form 1099-DA; "self-custody" = no 1099-DA (box I/L).
+ * basisReported (exchange only, default "covered"): which sales the 1099-DA shows basis for —
+ * "covered" = only units bought on/after 2026-01-01 in that account that never left it.
+ */
+export interface WalletReporting {
+  kind: "exchange" | "self-custody";
+  basisReported?: "covered" | "all" | "none";
 }
 
 export function createTransaction(params: Omit<Transaction, "id">): Transaction {

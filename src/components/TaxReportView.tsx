@@ -10,10 +10,12 @@ import { getUnassignedTransfers, getWalletMismatchSales, getOptimizableSells, ge
 import { computeCarryforward } from "../lib/carryforward";
 import { saveTextFile, saveBinaryFile } from "../lib/file-save";
 import { HelpPanel } from "./HelpPanel";
+import { assignBox, getUnclassifiedSaleWallets, BOX_INFO, DIGITAL_ASSET_BOXES_FIRST_YEAR } from "../lib/form8949-boxes";
 
 export function TaxReportView() {
   const state = useAppState();
-  const { allTransactions, recordedSales, selectedYear, setSelectedYear, availableYears } = state;
+  const { allTransactions, recordedSales, selectedYear, setSelectedYear, availableYears, walletReporting } = state;
+  const usesBoxes = selectedYear >= DIGITAL_ASSET_BOXES_FIRST_YEAR;
 
   const result = useMemo(() => calculate(allTransactions, AccountingMethod.FIFO, recordedSales), [allTransactions, recordedSales]);
 
@@ -104,6 +106,12 @@ export function TaxReportView() {
   const salesForYear = useMemo(() => {
     return result.sales.filter((s) => new Date(s.saleDate).getFullYear() === selectedYear);
   }, [result.sales, selectedYear]);
+
+  // Wallets with taxable sales this year that have no Form 8949 classification (2025+ boxes)
+  const unclassifiedWallets = useMemo(
+    () => (usesBoxes ? getUnclassifiedSaleWallets(salesForYear, walletReporting) : []),
+    [usesBoxes, salesForYear, walletReporting]
+  );
 
   // Determine effective method from actual sales data for accurate export labels.
   // Each SaleRecord carries its own method (FIFO or SpecificID).
@@ -440,7 +448,7 @@ export function TaxReportView() {
           <div className="card mb-6">
             <h3 className="font-semibold mb-3">Export Tax Documents</h3>
             <div className="flex gap-3 flex-wrap">
-              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportForm8949CSV(salesForYear, selectedYear, effectiveMethod, walletMismatchCount), `form_8949_${selectedYear}.csv`); }}>
+              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportForm8949CSV(salesForYear, selectedYear, effectiveMethod, walletMismatchCount, walletReporting), `form_8949_${selectedYear}.csv`); }}>
                 📊 Form 8949 CSV
               </button>
               <button className="btn-secondary" onClick={async () => { await downloadCSV(exportLegacyCSV(salesForYear, walletMismatchCount), `btc_tax_${selectedYear}.csv`); }}>
@@ -449,17 +457,29 @@ export function TaxReportView() {
               <button className="btn-secondary" onClick={async () => { await downloadCSV(exportTurboTaxCSV(salesForYear, selectedYear, walletMismatchCount), `turbotax_${selectedYear}.csv`); }}>
                 💼 TurboTax CSV
               </button>
-              <button className="btn-secondary" onClick={async () => { await downloadCSV(exportTurboTaxTXF(salesForYear, selectedYear, walletMismatchCount), `turbotax_${selectedYear}.txf`); }}>
+              <button className="btn-secondary" title={usesBoxes ? "TXF files can't carry the Form 8949 digital-asset box (G–L). Check the box for each sale after importing." : undefined} onClick={async () => { await downloadCSV(exportTurboTaxTXF(salesForYear, selectedYear, walletMismatchCount), `turbotax_${selectedYear}.txf`); }}>
                 📑 TurboTax TXF
               </button>
-              <button className="btn-secondary" onClick={async () => { const pdf = exportForm8949PDF(salesForYear, selectedYear, effectiveMethod, walletMismatchCount); const saved = await saveBinaryFile(pdf, { defaultPath: `form_8949_${selectedYear}_${effectiveMethod}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] }); if (saved) setExportToast(`form_8949_${selectedYear}.pdf`); }}>
+              <button className="btn-secondary" onClick={async () => { const pdf = exportForm8949PDF(salesForYear, selectedYear, effectiveMethod, walletMismatchCount, walletReporting); const saved = await saveBinaryFile(pdf, { defaultPath: `form_8949_${selectedYear}_${effectiveMethod}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] }); if (saved) setExportToast(`form_8949_${selectedYear}.pdf`); }}>
                 📄 PDF Report
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Form 8949 exports include Part I (short-term) and Part II (long-term) separated sections with Schedule D summary.
-              TurboTax formats can be imported directly into TurboTax.
+              {usesBoxes
+                ? "Form 8949 CSV and PDF exports group sales by digital-asset box (G–L) with a Schedule D summary by line. TurboTax formats can be imported directly into TurboTax."
+                : "Form 8949 exports include Part I (short-term) and Part II (long-term) separated sections with Schedule D summary. TurboTax formats can be imported directly into TurboTax."}
             </p>
+            {usesBoxes && unclassifiedWallets.length > 0 && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2 font-medium">
+                ⚠️ {unclassifiedWallets.length} wallet{unclassifiedWallets.length === 1 ? " isn't" : "s aren't"} classified for Form 8949 ({unclassifiedWallets.join(", ")}), so {unclassifiedWallets.length === 1 ? "its" : "their"} sales export as box I/L (not reported on Form 1099-DA).{" "}
+                <button className="underline" onClick={() => state.setSelectedNav("review")}>Classify wallets in Review</button>
+              </p>
+            )}
+            {usesBoxes && (
+              <p className="text-xs text-gray-500 mt-1">
+                TurboTax CSV and TXF files have no field for the Form 8949 box. After importing, confirm in TurboTax which sales were reported on a Form 1099-DA (boxes G/H, J/K) and which weren't (I/L), using the Form 8949 CSV or PDF as your guide.
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Note: If your modified adjusted gross income exceeds $200,000 ($250,000 MFJ),
               capital gains may be subject to an additional 3.8% Net Investment Income Tax (NIIT).
@@ -515,6 +535,10 @@ export function TaxReportView() {
                       <span>{d.daysHeld} days</span>
                       <span className={d.isLongTerm ? "text-green-600" : "text-orange-500"}>{d.isLongTerm ? "Long" : "Short"}</span>
                       <span>{d.exchange}</span>
+                      {usesBoxes && !sale.isDonation && (() => {
+                        const box = assignBox(d, sale, walletReporting);
+                        return <span className="badge" title={`Form 8949 box ${box}: ${BOX_INFO[box].label}`}>Box {box}</span>;
+                      })()}
                     </div>
                   ))}
                 </div>

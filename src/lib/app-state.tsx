@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
-import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences } from "./models";
+import { Transaction, SaleRecord, ColumnMapping, ImportRecord, Preferences, WalletReporting } from "./models";
 import { AccountingMethod, TransactionType } from "./types";
 import { calculate, simulateSale as simSale, resolveRecordedSales, LotSelection } from "./cost-basis";
 import { fetchBTCPrice, fetchHistoricalPrice } from "./price-service";
@@ -10,6 +10,7 @@ import { deriveEncryptionKey, generateSalt, hashPINWithPBKDF2 } from "./crypto";
 import { AuditEntry, AuditAction, createAuditEntry, capAuditLog } from "./audit";
 import { createBackupBundle, parseBackupBundle, saveBackupToAppData } from "./backup";
 import { ReconcileOptions, reconcileOptionsFromPrefs } from "./reconciliation";
+import { normalizeWalletKey } from "./form8949-boxes";
 
 interface PriceState {
   currentPrice: number | null;
@@ -96,6 +97,10 @@ interface AppStateContextType {
   removeManualTransferMatch: (outId: string, inId: string) => void;
   autoMatchTransfers: boolean;
   setAutoMatchTransfers: (on: boolean) => void;
+  /** Form 8949 box classification per wallet, keyed by normalized wallet name */
+  walletReporting: Record<string, WalletReporting>;
+  /** Set (or clear with null) a wallet's Form 8949 reporting classification */
+  setWalletReporting: (wallet: string, reporting: WalletReporting | null) => void;
   /** Manual matches, unmatched pairs and the auto-match switch, ready for reconcileTransfers()/suggestSourceWallet() */
   reconcileOptions: ReconcileOptions;
 
@@ -189,6 +194,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     prefs.manualTransferMatches ?? []
   );
   const [autoMatchTransfers, setAutoMatchTransfers] = useState(prefs.autoMatchTransfers ?? true);
+  const [walletReporting, setWalletReportingState] = useState<Record<string, WalletReporting>>(
+    prefs.walletReporting ?? {}
+  );
+  const setWalletReporting = useCallback((wallet: string, reporting: WalletReporting | null) => {
+    const key = normalizeWalletKey(wallet);
+    if (!key) return;
+    setWalletReportingState((prev) => {
+      const next = { ...prev };
+      if (reporting === null) {
+        delete next[key];
+      } else {
+        next[key] = reporting;
+      }
+      return next;
+    });
+  }, []);
   const reconcileOptions = React.useMemo(
     () => reconcileOptionsFromPrefs({ manualTransferMatches, reconciliationDecisions, autoMatchTransfers }),
     [manualTransferMatches, reconciliationDecisions, autoMatchTransfers]
@@ -244,13 +265,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       reconciliationDecisions,
       manualTransferMatches,
       autoMatchTransfers,
+      walletReporting,
       });
     } catch (e) {
       // Quota errors from a passive effect would otherwise unmount the whole tree
       setSaveError("Failed to save preferences — storage may be full.");
       console.error("Preferences save failed:", e);
     }
-  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches, autoMatchTransfers]);
+  }, [selectedYear, selectedMethod, appearanceMode, privacyBlur, selectedWallet, livePriceEnabled, priorCarryforwardST, priorCarryforwardLT, txnSortField, txnSortAsc, reconciliationDecisions, manualTransferMatches, autoMatchTransfers, walletReporting]);
 
   // Apply appearance mode — default to dark when System is selected
   useEffect(() => {
@@ -819,6 +841,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setPriorCarryforwardLT(0);
     setReconciliationDecisionsState({});
     setManualTransferMatchesState([]);
+    setWalletReportingState({});
     setSelectedWallet(null);
     await guardedSave(() => persistence.clearAllData());
   }, [appendAuditLog]);
@@ -939,6 +962,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setReconciliationDecisionsState(p.reconciliationDecisions ?? {});
       setManualTransferMatchesState(p.manualTransferMatches ?? []);
       if (p.autoMatchTransfers !== undefined) setAutoMatchTransfers(p.autoMatchTransfers);
+      setWalletReportingState(p.walletReporting ?? {});
     }
 
     const encLabel = result.wasEncrypted ? "encrypted" : "legacy unencrypted";
@@ -979,6 +1003,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     removeManualTransferMatch,
     autoMatchTransfers,
     setAutoMatchTransfers,
+    walletReporting,
+    setWalletReporting,
     reconcileOptions,
     savedLotSelections,
     setSavedLotSelections,
