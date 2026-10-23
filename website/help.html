@@ -1,12 +1,34 @@
 <!DOCTYPE html>
-<!-- Last updated: 2026-09-28 | v1.5.1 — Full help guide: wallets vs. exchanges, transfer workflow, reconciliation (auto-match, Unmatch, Ambiguous), Specific ID, reports, backups -->
+<!-- Last updated: 2026-10-23 | v1.5.2 (Form 8949 boxes G–L, wallet reporting, Notice 2026-20) | was 2026-09-28 v1.5.1 — Full help guide: wallets vs. exchanges, transfer workflow, reconciliation (auto-match, Unmatch, Ambiguous), Specific ID, reports, backups -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Help Guide — Sovereign Tax</title>
-<meta name="description" content="How to use Sovereign Tax: importing, wallets and exchanges, recording transfers between your wallets, reconciliation, Specific ID, and exporting Form 8949.">
-<link rel="icon" type="image/png" href="icon-256.png">
+<title>Bitcoin Tax Guide — Specific ID, FIFO, Form 8949 & Per-Wallet Cost Basis | Sovereign Tax</title>
+<meta name="description" content="Complete Bitcoin tax guide: Specific Identification lot selection, FIFO, IRS Form 8949, per-wallet cost basis tracking (2025 IRS rules), CSV import from any exchange, tax-loss harvesting, and charitable donations.">
+<link rel="canonical" href="https://sovereigntax.io/help.html">
+<link rel="alternate" hreflang="en-US" href="https://sovereigntax.io/help.html">
+<link rel="alternate" hreflang="en-AU" href="https://au.sovereigntax.io/help.html">
+<link rel="icon" type="image/png" sizes="256x256" href="icon-256.png">
+<link rel="icon" type="image/png" sizes="128x128" href="icon-128.png">
+<link rel="apple-touch-icon" href="icon-256.png">
+<meta name="theme-color" content="#000000">
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Sovereign Tax">
+<meta property="og:title" content="Bitcoin Tax Guide — Specific ID, FIFO & Form 8949 | Sovereign Tax">
+<meta property="og:description" content="Complete Bitcoin tax guide covering Specific Identification, FIFO, IRS Form 8949, per-wallet cost basis, CSV import, tax-loss harvesting, and charitable donations.">
+<meta property="og:url" content="https://sovereigntax.io/help.html">
+<meta property="og:image" content="https://sovereigntax.io/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Sovereign Tax — private Bitcoin tax software: Form 8949, Specific ID and per-wallet cost basis, running on your own computer.">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bitcoin Tax Guide — Specific ID, FIFO & Form 8949 | Sovereign Tax">
+<meta name="twitter:description" content="Complete Bitcoin tax guide: Specific Identification, FIFO, IRS Form 8949, per-wallet cost basis, CSV import, tax-loss harvesting, and charitable donations.">
+<meta name="twitter:image" content="https://sovereigntax.io/og-card.png">
+<meta name="twitter:image:alt" content="Sovereign Tax — private Bitcoin tax software: Form 8949, Specific ID and per-wallet cost basis, running on your own computer.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -411,6 +433,71 @@ code {
 
 .page-footer a:hover { color: var(--accent); }
 
+/* ── Screenshots ── */
+.screenshot-wrap {
+  margin: 24px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+}
+
+.screenshot-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.screenshot-caption {
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  text-align: center;
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ── FAQ ── */
+.accordion {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.accordion summary {
+  padding: 14px 20px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.93rem;
+  color: var(--text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: background 0.2s;
+}
+
+.accordion summary:hover { background: var(--glass-hover); }
+.accordion summary::-webkit-details-marker { display: none; }
+
+.accordion summary::after {
+  content: '+';
+  font-size: 1.2rem;
+  color: var(--accent);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.accordion[open] summary::after { content: '\2212'; }
+
+.accordion-body { padding: 0 20px 18px; }
+.accordion-body p { margin-bottom: 10px; }
+.accordion-body p:last-child { margin-bottom: 0; }
+.accordion-body a { color: var(--accent); }
+
 /* ── Responsive ── */
 @media (max-width: 640px) {
   .page-header h1 { font-size: 2rem; }
@@ -419,8 +506,291 @@ code {
   .nav-links a { font-size: 0.78rem; }
   .toc { padding: 20px; }
   .step-card { padding: 20px; }
+  .accordion summary { padding: 12px 16px; }
+  .accordion-body { padding: 0 16px 16px; }
 }
 </style>
+
+<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-mEDNeVLDMPw3a_29VevMO.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>
+
+<!-- FAQ structured data (mirrors the visible FAQ section) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How do I export my CSV from Coinbase?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Log in to Coinbase and go to Account > Statements (or Reports > Transaction history in the newer layout). Select your date range, click Generate Report, download the CSV, and import it into Sovereign Tax."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I export my CSV from Kraken?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Log in to Kraken and go to History > Export. Select \"Ledgers\" or \"Trades\" for your date range and download the CSV. Sovereign Tax handles Kraken's separate Received and Sent columns automatically."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I export my CSV from Strike, Cash App or Swan?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Strike: Settings > Transaction History > Export. Cash App: open the Activity tab, tap the download icon, and choose a date range. Swan: History > Download CSV. All three formats are detected automatically."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "My import shows \"missing required fields\"",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "One or more required columns haven't been mapped. You need Date, Amount, and either Price or Total. Use the dropdown next to each field to pick the matching column from your CSV. Once every required field is mapped, the warning clears and you can import."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I import from multiple exchanges?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Import each exchange's or account's CSV separately, each under its own Wallet / Exchange Name. Sovereign Tax combines them and tracks cost basis per wallet. A file that was already imported is rejected, and duplicate transactions are skipped."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why is the Wallet / Exchange Name required when importing?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Under the per-wallet rules that apply from 2025, every transaction has to belong to a specific wallet or account. The name you enter becomes the wallet for every row in that CSV, and it also remembers your column mapping for next time. Use one exact name per account every time you import: names aren't case-sensitive, but \"Coinbase\" and \"Coinbase Pro\" are two different wallets. See Wallets and exchanges."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Sovereign Tax support other cryptocurrencies?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Sovereign Tax is Bitcoin-only by design. Rows for other assets (ETH, SOL and so on) are skipped when you import; only BTC and XBT rows are processed."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do transfers affect my cost basis?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Moving bitcoin between your own wallets isn't taxable (IRS FAQ 81): the cost basis and holding period stay the same. Under the 2025 per-wallet rules, though, the lots have to move to the receiving wallet so the right lots are there when you sell from it. That happens when you assign a source wallet on the Transfer In. See Recording a transfer, step by step."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does \"Assign\" mean on Transfer In rows?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A Transfer In records bitcoin arriving in a wallet. Assign tells the app which of your wallets it came from, so it can move those lots. For example, if you withdrew from Swan to your Trezor, click Assign on the Trezor's Transfer In and choose \"Swan\". The lots move to the Trezor with their original cost basis and purchase dates. Transfer Ins without a source wallet show a red Assign button."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is lot re-tagging?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It's what happens when you assign a source wallet: the app takes lots from the source wallet (oldest first, or the lots you pick) and moves them to the receiving wallet. A partial transfer splits a lot. Cost basis per BTC and the original purchase date carry over; only the wallet changes. This is how the app follows the 2025 per-wallet rules (Treasury Reg. §1.1012-1(j)) and IRS FAQ 81."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I choose which specific lots to transfer between wallets?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. When you assign a source wallet, tick Choose specific lots to transfer and pick the lots that moved; the picker's Optimize button can pick for you. Any amount you don't pick is filled oldest-first (FIFO). This is useful when you want to follow a particular lot to cold storage and back to an exchange for a sale."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I have transfers but no Transfer In recorded?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "If you withdrew bitcoin to cold storage but only imported the exchange's CSV (which shows a Transfer Out), add the Transfer In on the receiving side. In Add Transaction, choose Transfer In, enter the date and the amount received, and set Wallet to your cold storage wallet. Then click Assign on that row and choose the exchange as its source wallet. Without it the lots stay on the exchange, and later sales from cold storage show wallet mismatch warnings."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why can't the app automatically tell which wallet my BTC came from?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Exchange CSVs don't say where a withdrawal went, and hardware wallets often have no CSV at all, so your records can't prove which of your wallets the coins came from. The Reconciliation page pairs withdrawals with deposits by amount and date, and those pairs mark a wallet as Suggested when you click Assign. The app never assigns a source wallet on its own: you confirm it, because that choice moves your cost basis."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does the green \"Suggested\" badge mean when assigning a source wallet?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It means Reconciliation paired this deposit with a withdrawal from that wallet: the amounts agree (the deposit can be slightly lower, for the miner fee) and the deposit arrived 0–7 days later. A yellow Possible match badge means a pair was found but flagged, usually because the implied fee is unusually high. Wallets without a badge are there for you to choose manually."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does Reconciliation show a negative wallet balance?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Wallet balances are built from your records: buys and deposits add; sells, donations and withdrawals subtract. A negative balance means your records show more bitcoin leaving that wallet than arriving. That usually points to a missing buy (for example an older CSV you haven't imported) or a transfer recorded against the wrong wallet. See The Reconciliation page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I fix wallet mismatch warnings?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A wallet mismatch (⚠️) means a sale used lots from another wallet because none were found in the wallet it was sold from. Usually a Transfer In is missing its source wallet. In Transactions, find the Transfer In that brought the coins into the selling wallet, click its red Assign button, choose the wallet the coins came from, and save. Once the lots are in the right wallet, the warning clears. If you use Specific ID, re-run Optimize for that year."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I use Specific ID to choose which lots to sell?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "For one sale, click Lots on the sell or donation in Transactions, or choose Specific ID when you add the sale. For a whole year, Optimize (N) assigns the lowest-tax lots to every sale that doesn't have an election yet, and shows the FIFO and optimized totals before you apply anything. Compare Methods shows the difference, and Simulate Sale lets you try a sale first. See FIFO, Specific ID and Optimize."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I assign Specific ID lots to sales I already imported?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. In Transactions, click Lots on any sell or donation. You'll see the lots that were available at the time of that sale; select your lots, preview the tax impact, and save. To remove an election, use Revert to FIFO in the same window. IRS note: under Treas. Reg. §1.1012-1(c) and IRS FAQ 82, Specific ID must be elected at or before the time of sale. Assigning lots afterwards may not satisfy the IRS unless you identified the lots before the sale. For 2025 and 2026 transactions, IRS Notice 2025-07 (extended through 2026 by Notice 2026-20) lets you record the identification for bitcoin held on an exchange in your own records instead of with the exchange — but it still has to be made by the time of the sale. For earlier years, FIFO applies to any sale without a contemporaneous election."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "I used FIFO in prior years. Should I switch to Specific ID now?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Keep prior years as FIFO. If you filed using FIFO, or never made Specific ID elections at the time of sale, leave those years as FIFO in the app: retroactively assigning lots to past sales is generally not permitted (Treas. Reg. §1.1012-1(c)(1)). You can use Specific ID for current and future sales by making the election at or before the time of sale. For 2025 and 2026 transactions, IRS Notice 2025-07 (extended through 2026 by Notice 2026-20) lets you record the identification for bitcoin held on an exchange in your own records instead of with the exchange — but it still has to be made by the time of the sale. Use the year selector to check each prior year."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What happens if I switch between FIFO and Specific ID?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FIFO is the default for every sale; Specific ID applies only to the sales where you've chosen lots. Your figures update as soon as you add or remove an election, and Revert to FIFO removes a whole year's elections if you change your mind. Explore freely, but when you file, the IRS expects one method to be applied consistently per wallet within a tax year."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is a mixed-term sale?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A sale that uses both short-term and long-term lots. For example, selling 1 BTC where 0.6 BTC was held 8 months (short-term) and 0.4 BTC was held 2 years (long-term). Sovereign Tax splits it into separate short-term and long-term lines on Form 8949 automatically."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I undo a sale I recorded?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. In Transactions, click Del on the sell and confirm. The lots it used are restored exactly as they were, because cost basis is recalculated from your remaining transactions. The deletion is recorded in the Audit Log."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What happens if I edit or delete a Buy that Specific ID elections use?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "If an edit changes which lots exist (a lower amount, a different wallet or a different type), or you delete the Buy, any Specific ID elections that used its lots are removed. Those sales go back to FIFO until you choose lots again with Lots. This keeps stale lot references out of your tax figures."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does Tax Harvesting have a wallet filter?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Under the 2025 per-wallet rules, a sale must use lots from the wallet it's made in, so harvesting opportunities are per wallet. Choose a wallet to see its opportunities; All Wallets gives a portfolio-wide overview, but each actual sale has to come from one wallet."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the Review checklist?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Review is a checklist for the selected tax year: assign a source wallet on every Transfer In, resolve wallet mismatches, classify the wallets you sold from for Form 8949 (2025 and later), and optionally optimize lot selections. When every check is green it shows Ready to File with a link to the Tax Report. See Review checklist."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which Form 8949 box does each sale go in?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "For 2025 and later, bitcoin sales use boxes G/H/I (short-term) and J/K/L (long-term). Sales on an exchange whose Form 1099-DA shows basis go in G/J; exchange sales without reported basis (usually coins you moved onto the exchange) go in H/K; self-custody and other sales with no 1099-DA go in I/L. Mark your wallets in Settings → Wallets and the exports group sales by box. See Tax Report and exports."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I record a charitable bitcoin donation?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In Add Transaction, choose Donation and enter the date, the BTC amount and the fair market value per BTC on the donation date. Use FIFO or pick lots with Specific ID, check the preview of which lots are used, and save. Donations appear in the Tax Report with a Form 8283 CSV export; they aren't reported on Form 8949."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are bitcoin donations taxable?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Donating bitcoin to a qualified charity isn't a taxable sale: no capital gain or loss is recognized, and you may be able to claim a charitable deduction instead. If you held the bitcoin for more than one year, the deduction is generally its fair market value (limited to 30% of AGI); if you held it one year or less, it's limited to your cost basis. Sovereign Tax records these details and exports them for Form 8283."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is fair market value (FMV), and why is it required for donations?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "FMV is the price the bitcoin would sell for on the open market on the donation date. The IRS uses it to work out your deduction, so enter the FMV per BTC for that date. With Live BTC Price turned on in Settings, the Fetch FMV button fills in the historical price from CoinGecko."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where is my data stored?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only on your computer, encrypted with AES-256-GCM using a key derived from your PIN. Your data is never sent to any server: there's no cloud, no account and no telemetry."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I lose my PIN?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The data stored in the app can't be recovered without your PIN. That's by design: there's no back door, no cloud recovery and no \"forgot PIN\" option, so keep your PIN somewhere safe. Backups are protected by their own backup password, not your PIN, so with a backup file and its password you can restore your data once the app has been reset. If you're locked out, email support for help resetting the app."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I update the app?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Go to Settings → About → Check for Updates. If a new version is available, you'll see what's new and a link to download it from sovereigntax.io."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I clear all my data and start over?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In Settings, click Clear All Data and type DELETE to confirm. This permanently erases all your transactions, lot elections, mappings and history, so create a backup first. To redo only one year's lot choices, see Starting over for a tax year."
+      }
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
@@ -446,7 +816,7 @@ code {
   <div class="page-header">
     <h1>Help <span class="accent">Guide</span></h1>
     <p>From your first import to Form 8949: how Sovereign Tax tracks your bitcoin, and how to record every buy, sale and transfer so your cost basis is right.</p>
-    <span class="version-tag">Updated for version 1.5.1</span>
+    <span class="version-tag">Updated for version 1.5.2</span>
   </div>
 
   <!-- ── Table of Contents ── -->
@@ -471,6 +841,7 @@ code {
       <li><a href="#income">Income, donations and other views</a></li>
       <li><a href="#backup">Settings, backups and privacy</a></li>
       <li><a href="#start-over">Starting over for a tax year</a></li>
+      <li><a href="#faq">Frequently asked questions</a></li>
       <li><a href="#contact">Still need help?</a></li>
     </ol>
   </div>
@@ -565,6 +936,10 @@ code {
         <li>Files with separate Sent and Received columns are handled automatically.</li>
       </ul>
     </div>
+    <div class="screenshot-wrap">
+      <img src="screenshots/import-mapping-preview.png" alt="Import screen with the required Wallet / Exchange Name field, the Column Mapping with auto-detected columns, and the Data Preview" width="2430" height="2838" loading="lazy">
+      <div class="screenshot-caption">Import: the required Wallet / Exchange Name, then Column Mapping and Data Preview</div>
+    </div>
     <div class="step-card">
       <div class="step-header"><div class="step-num">3</div><h4>Import</h4></div>
       <p>Only bitcoin rows are imported; other assets are skipped. The same file can't be imported twice, and individual duplicate transactions are skipped too.</p>
@@ -593,6 +968,10 @@ code {
       <li><strong>Sells with Specific ID:</strong> choose Specific ID as the method, pick the wallet, then choose the lots. See <a href="#specific-id" style="color:var(--accent)">Specific ID</a>.</li>
     </ul>
     <p>In <span class="ui">Transactions</span> you can search, filter by type and year, sort by any column, use <span class="ui">Edit</span> or delete on any row, and select several rows to delete them or change their Exchange together. <span class="ui">Export CSV</span> saves your full transaction list.</p>
+    <div class="screenshot-wrap">
+      <img src="screenshots/transactions.png" alt="Transactions list with a banner about Transfer Ins that need a source wallet, and Lots, Edit, Del and Assign buttons on the rows" width="2930" height="1844" loading="lazy">
+      <div class="screenshot-caption">Transactions: Lots, Edit and Del on each row, and a red Assign on Transfer Ins that still need a source wallet</div>
+    </div>
     <div class="info-box">
       <h4>Bulk "Change Exchange" also renames the wallet</h4>
       <p>On rows where Wallet and Exchange were identical, which is the case for every imported row, bulk <span class="ui">Change Exchange</span> updates the Wallet too, so those lots move to the new name. That's usually what you want. Check Holdings afterwards.</p>
@@ -740,6 +1119,10 @@ code {
       <li><strong>Per-wallet rule:</strong> lots come from the wallet you sell from. If a sale's wallet has no lots, usually because a Transfer In is missing its source wallet, it's marked with &#9888;&#65039; as a wallet mismatch. Fix the transfer and re-optimize.</li>
       <li><span class="ui">Simulate Sale</span> previews a hypothetical sale without recording anything. With Specific ID, the lots you pick carry over to Add Transaction. <span class="ui">Compare Methods</span> shows FIFO against optimal Specific ID.</li>
     </ul>
+    <div class="screenshot-wrap">
+      <img src="screenshots/compare-methods.png" alt="Compare Methods view showing total, short-term and long-term gains under FIFO and optimal Specific ID, with the estimated savings" width="2438" height="2214" loading="lazy">
+      <div class="screenshot-caption">Compare Methods: FIFO against optimal Specific ID for the selected year</div>
+    </div>
   </div>
 
   <hr class="divider">
@@ -755,9 +1138,18 @@ code {
     <ol class="plain">
       <li><strong>Assign source wallets:</strong> every Transfer In needs one. You can assign right from the checklist.</li>
       <li><strong>Resolve wallet mismatches:</strong> sales that had to use lots from another wallet. This is usually a missing source wallet on a transfer.</li>
+      <li><strong>Form 8949 wallet reporting</strong> (2025 and later): mark each wallet you sold from as an <em>exchange</em> that sends you a Form 1099-DA, or as <em>self-custody</em>. This decides which Form 8949 box each sale goes in (see <a href="#report">Tax Report and exports</a>).</li>
       <li><strong>Optimize lot selections</strong> (optional): apply Specific ID to lower your tax. You can always revert to FIFO.</li>
     </ol>
+    <div class="screenshot-wrap">
+      <img src="screenshots/review-view-issues.png" alt="Review checklist for 2024 needing attention: two Transfer Ins with Assign buttons, one wallet mismatch, and sales that can be optimized" width="2908" height="1850" loading="lazy">
+      <div class="screenshot-caption">Review with items to fix: Transfer Ins to assign, a wallet mismatch, and sales that can be optimized</div>
+    </div>
     <p>When everything is green, your data is ready for the Tax Report.</p>
+    <div class="screenshot-wrap">
+      <img src="screenshots/review-view.png" alt="Review checklist with every check green and a Ready to File card linking to the Tax Report" width="2912" height="1846" loading="lazy">
+      <div class="screenshot-caption">Review when everything is green: Ready to File</div>
+    </div>
   </div>
 
   <hr class="divider">
@@ -770,17 +1162,35 @@ code {
     <span class="section-label">Tax</span>
     <h2>Tax Report and exports</h2>
     <p><span class="ui">Tax Report</span> shows Form 8949 and Schedule D figures for the selected year, split into short-term (held one year or less) and long-term. Sales that span both are split automatically. Specific ID elections from Transactions are applied automatically. Prior-year capital loss carryforwards (short-term and long-term) are entered in <span class="ui">Settings &rarr; Tax Settings</span>.</p>
+    <h3>Form 8949 boxes for digital assets (2025 and later)</h3>
+    <p>Since Form 1099-DA, bitcoin sales go in their own Form 8949 boxes, and the Form 8949 CSV and PDF group your sales by box, with a Schedule D summary by line:</p>
+    <div class="table-wrap">
+      <table class="column-table">
+        <thead><tr><th>Box</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td><strong>G</strong> (short-term) / <strong>J</strong> (long-term)</td><td>Sold on an exchange whose Form 1099-DA shows your cost basis.</td></tr>
+          <tr><td><strong>H</strong> (short-term) / <strong>K</strong> (long-term)</td><td>Sold on an exchange whose Form 1099-DA doesn't show cost basis &mdash; typically coins you moved onto the exchange from another wallet.</td></tr>
+          <tr><td><strong>I</strong> (short-term) / <strong>L</strong> (long-term)</td><td>No Form 1099-DA: self-custody wallets, peer-to-peer sales.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Tell the app which wallets are exchanges in <span class="ui">Settings &rarr; Wallets</span> or in the Review checklist. By default an exchange is assumed to report basis only for coins bought there on or after January 1, 2026 that never left the account; if your 1099-DA shows basis for every sale (or for none), choose that instead. Wallets you haven't classified are exported as box I/L with a warning. Each lot on the Tax Report shows its box.</p>
+    <p>For boxes G and J, compare with your Form 1099-DA: column (e) must show the basis the exchange reported. If it differs from the basis Sovereign Tax shows, enter the exchange's figure in (e) and the difference in column (g) with code B.</p>
     <div class="table-wrap">
       <table class="column-table">
         <thead><tr><th>Export</th><th>Use it for</th></tr></thead>
         <tbody>
           <tr><td><strong>PDF Report</strong></td><td>A Form 8949 summary for your records or your preparer.</td></tr>
           <tr><td><strong>Form 8949 CSV</strong></td><td>Entering Form 8949 manually or in other tax software.</td></tr>
-          <tr><td><strong>TurboTax TXF</strong> / <strong>TurboTax CSV</strong></td><td>Importing directly into TurboTax.</td></tr>
+          <tr><td><strong>TurboTax TXF</strong> / <strong>TurboTax CSV</strong></td><td>Importing directly into TurboTax. These files have no field for the Form 8949 box, so check each sale's box in TurboTax against the Form 8949 CSV or PDF.</td></tr>
           <tr><td><strong>Raw Data CSV</strong></td><td>Every sale broken out lot by lot: dates, proceeds, cost basis, fee and term.</td></tr>
           <tr><td><strong>Form 8283 CSV</strong></td><td>Reference data for charitable donations (Form 8283). Donations aren't reported on Form 8949.</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="screenshot-wrap">
+      <img src="screenshots/tax-report.png" alt="Tax Report for 2025 with the yearly summary, the export buttons, and each sale with its short-term, long-term or mixed term" width="2434" height="2222" loading="lazy">
+      <div class="screenshot-caption">Tax Report: the yearly summary, the exports, and every disposition with its term</div>
     </div>
   </div>
 
@@ -801,6 +1211,18 @@ code {
       <li><strong>Multi-Year:</strong> gains and losses across all your tax years.</li>
       <li><strong>Audit Log:</strong> a timestamped record of every import, edit, deletion and lot election.</li>
     </ul>
+    <div class="screenshot-wrap">
+      <img src="screenshots/lot-maturity.png" alt="Lot Maturity view listing each lot with its purchase date, days held, long-term date and status" width="2432" height="2220" loading="lazy">
+      <div class="screenshot-caption">Lot Maturity: when each lot becomes long-term</div>
+    </div>
+    <div class="screenshot-wrap">
+      <img src="screenshots/multi-year.png" alt="Multi-Year Dashboard with a gain and loss bar per year and a table of short-term, long-term and total results with a lifetime row" width="2432" height="2222" loading="lazy">
+      <div class="screenshot-caption">Multi-Year: gains and losses for each year, with a lifetime total</div>
+    </div>
+    <div class="screenshot-wrap">
+      <img src="screenshots/audit-log.png" alt="Audit Log listing timestamped entries for imports, edits, lot elections and unlocks" width="2430" height="2218" loading="lazy">
+      <div class="screenshot-caption">Audit Log: every import, edit, deletion and lot election, with timestamps</div>
+    </div>
   </div>
 
   <hr class="divider">
@@ -814,6 +1236,7 @@ code {
     <h2>Settings, backups and privacy</h2>
     <ul>
       <li><strong>Backup &amp; Restore:</strong> create a password-protected backup file. You'll need that password to restore it. Backups you create are also listed inside the app, and you can restore from a file or from that list.</li>
+      <li><strong>Wallets &mdash; Form 1099-DA reporting:</strong> mark each wallet as an exchange that sends a Form 1099-DA or as self-custody, and (for exchanges) which sales the 1099-DA shows basis for. This sets the Form 8949 box for each sale.</li>
       <li><strong>Live BTC Price:</strong> on, the app fetches prices from CoinGecko. Off, it runs fully offline.</li>
       <li><strong>Hide Amounts</strong> blurs all BTC and USD values, e.g. for screen sharing. <strong>PIN Lock</strong> changes your PIN.</li>
       <li><strong>Theme:</strong> System, Light or Dark.</li>
@@ -853,6 +1276,259 @@ code {
   <hr class="divider">
 
   <!-- ══════════════════════════════════════════════ -->
+  <!-- ── FAQ ── -->
+  <!-- ══════════════════════════════════════════════ -->
+
+  <div class="section" id="faq">
+    <span class="section-label">FAQ</span>
+    <h2>Frequently asked questions</h2>
+
+    <h3>Importing</h3>
+
+    <details class="accordion">
+      <summary>How do I export my CSV from Coinbase?</summary>
+      <div class="accordion-body">
+        <p>Log in to Coinbase and go to <strong>Account &gt; Statements</strong> (or <strong>Reports &gt; Transaction history</strong> in the newer layout). Select your date range, click <strong>Generate Report</strong>, download the CSV, and import it into Sovereign Tax.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>How do I export my CSV from Kraken?</summary>
+      <div class="accordion-body">
+        <p>Log in to Kraken and go to <strong>History &gt; Export</strong>. Select "Ledgers" or "Trades" for your date range and download the CSV. Sovereign Tax handles Kraken's separate Received and Sent columns automatically.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>How do I export my CSV from Strike, Cash App or Swan?</summary>
+      <div class="accordion-body">
+        <p><strong>Strike:</strong> Settings &gt; Transaction History &gt; Export. <strong>Cash App:</strong> open the Activity tab, tap the download icon, and choose a date range. <strong>Swan:</strong> History &gt; Download CSV. All three formats are detected automatically.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>My import shows "missing required fields"</summary>
+      <div class="accordion-body">
+        <p>One or more required columns haven't been mapped. You need <strong>Date</strong>, <strong>Amount</strong>, and either <strong>Price</strong> or <strong>Total</strong>. Use the dropdown next to each field to pick the matching column from your CSV. Once every required field is mapped, the warning clears and you can import.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Can I import from multiple exchanges?</summary>
+      <div class="accordion-body">
+        <p>Yes. Import each exchange's or account's CSV separately, each under its own <span class="ui">Wallet / Exchange Name</span>. Sovereign Tax combines them and tracks cost basis per wallet. A file that was already imported is rejected, and duplicate transactions are skipped.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Why is the Wallet / Exchange Name required when importing?</summary>
+      <div class="accordion-body">
+        <p>Under the per-wallet rules that apply from 2025, every transaction has to belong to a specific wallet or account. The name you enter becomes the wallet for every row in that CSV, and it also remembers your column mapping for next time. Use one exact name per account every time you import: names aren't case-sensitive, but "Coinbase" and "Coinbase Pro" are two different wallets. See <a href="#wallets">Wallets and exchanges</a>.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Does Sovereign Tax support other cryptocurrencies?</summary>
+      <div class="accordion-body">
+        <p>No. Sovereign Tax is Bitcoin-only by design. Rows for other assets (ETH, SOL and so on) are skipped when you import; only BTC and XBT rows are processed.</p>
+      </div>
+    </details>
+
+    <h3>Transfers and wallets</h3>
+
+    <details class="accordion">
+      <summary>How do transfers affect my cost basis?</summary>
+      <div class="accordion-body">
+        <p>Moving bitcoin between your own wallets isn't taxable (IRS FAQ 81): the cost basis and holding period stay the same. Under the 2025 per-wallet rules, though, the lots have to move to the receiving wallet so the right lots are there when you sell from it. That happens when you assign a source wallet on the Transfer In. See <a href="#transfers-record">Recording a transfer, step by step</a>.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What does "Assign" mean on Transfer In rows?</summary>
+      <div class="accordion-body">
+        <p>A Transfer In records bitcoin arriving in a wallet. <span class="ui">Assign</span> tells the app which of your wallets it came from, so it can move those lots. For example, if you withdrew from Swan to your Trezor, click <span class="ui">Assign</span> on the Trezor's Transfer In and choose "Swan". The lots move to the Trezor with their original cost basis and purchase dates. Transfer Ins without a source wallet show a red <span class="ui">Assign</span> button.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What is lot re-tagging?</summary>
+      <div class="accordion-body">
+        <p>It's what happens when you assign a source wallet: the app takes lots from the source wallet (oldest first, or the lots you pick) and moves them to the receiving wallet. A partial transfer splits a lot. Cost basis per BTC and the original purchase date carry over; only the wallet changes. This is how the app follows the 2025 per-wallet rules (Treasury Reg. &sect;1.1012-1(j)) and IRS FAQ 81.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Can I choose which specific lots to transfer between wallets?</summary>
+      <div class="accordion-body">
+        <p>Yes. When you assign a source wallet, tick <span class="ui">Choose specific lots to transfer</span> and pick the lots that moved; the picker's <span class="ui">Optimize</span> button can pick for you. Any amount you don't pick is filled oldest-first (FIFO). This is useful when you want to follow a particular lot to cold storage and back to an exchange for a sale.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What if I have transfers but no Transfer In recorded?</summary>
+      <div class="accordion-body">
+        <p>If you withdrew bitcoin to cold storage but only imported the exchange's CSV (which shows a Transfer Out), add the Transfer In on the receiving side. In <span class="ui">Add Transaction</span>, choose <strong>Transfer In</strong>, enter the date and the amount received, and set Wallet to your cold storage wallet. Then click <span class="ui">Assign</span> on that row and choose the exchange as its source wallet. Without it the lots stay on the exchange, and later sales from cold storage show wallet mismatch warnings.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Why can't the app automatically tell which wallet my BTC came from?</summary>
+      <div class="accordion-body">
+        <p>Exchange CSVs don't say where a withdrawal went, and hardware wallets often have no CSV at all, so your records can't prove which of your wallets the coins came from. The <a href="#reconciliation">Reconciliation</a> page pairs withdrawals with deposits by amount and date, and those pairs mark a wallet as <strong>Suggested</strong> when you click <span class="ui">Assign</span>. The app never assigns a source wallet on its own: you confirm it, because that choice moves your cost basis.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What does the green "Suggested" badge mean when assigning a source wallet?</summary>
+      <div class="accordion-body">
+        <p>It means Reconciliation paired this deposit with a withdrawal from that wallet: the amounts agree (the deposit can be slightly lower, for the miner fee) and the deposit arrived 0&ndash;7 days later. A yellow <strong>Possible match</strong> badge means a pair was found but flagged, usually because the implied fee is unusually high. Wallets without a badge are there for you to choose manually.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Why does Reconciliation show a negative wallet balance?</summary>
+      <div class="accordion-body">
+        <p>Wallet balances are built from your records: buys and deposits add; sells, donations and withdrawals subtract. A negative balance means your records show more bitcoin leaving that wallet than arriving. That usually points to a missing buy (for example an older CSV you haven't imported) or a transfer recorded against the wrong wallet. See <a href="#reconciliation">The Reconciliation page</a>.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>How do I fix wallet mismatch warnings?</summary>
+      <div class="accordion-body">
+        <p>A wallet mismatch (&#9888;&#65039;) means a sale used lots from another wallet because none were found in the wallet it was sold from. Usually a Transfer In is missing its source wallet. In <span class="ui">Transactions</span>, find the Transfer In that brought the coins into the selling wallet, click its red <span class="ui">Assign</span> button, choose the wallet the coins came from, and save. Once the lots are in the right wallet, the warning clears. If you use Specific ID, re-run <span class="ui">Optimize</span> for that year.</p>
+      </div>
+    </details>
+
+    <h3>Sales, Specific ID and filing</h3>
+
+    <details class="accordion">
+      <summary>How do I use Specific ID to choose which lots to sell?</summary>
+      <div class="accordion-body">
+        <p>For one sale, click <span class="ui">Lots</span> on the sell or donation in <span class="ui">Transactions</span>, or choose Specific ID when you add the sale. For a whole year, <span class="ui">Optimize (N)</span> assigns the lowest-tax lots to every sale that doesn't have an election yet, and shows the FIFO and optimized totals before you apply anything. <span class="ui">Compare Methods</span> shows the difference, and <span class="ui">Simulate Sale</span> lets you try a sale first. See <a href="#specific-id">FIFO, Specific ID and Optimize</a>.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Can I assign Specific ID lots to sales I already imported?</summary>
+      <div class="accordion-body">
+        <p>Yes. In <span class="ui">Transactions</span>, click <span class="ui">Lots</span> on any sell or donation. You'll see the lots that were available at the time of that sale; select your lots, preview the tax impact, and save. To remove an election, use <span class="ui">Revert to FIFO</span> in the same window.</p>
+        <p><strong>IRS note:</strong> under Treas. Reg. &sect;1.1012-1(c) and IRS FAQ 82, Specific ID must be elected at or before the time of sale. Assigning lots afterwards may not satisfy the IRS unless you identified the lots before the sale. For 2025 and 2026 transactions, IRS Notice 2025-07 (extended through 2026 by Notice 2026-20) lets you record the identification for bitcoin held on an exchange in your own records instead of with the exchange &mdash; but it still has to be made by the time of the sale. For earlier years, FIFO applies to any sale without a contemporaneous election.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>I used FIFO in prior years. Should I switch to Specific ID now?</summary>
+      <div class="accordion-body">
+        <p>Keep prior years as FIFO. If you filed using FIFO, or never made Specific ID elections at the time of sale, leave those years as FIFO in the app: retroactively assigning lots to past sales is generally not permitted (Treas. Reg. &sect;1.1012-1(c)(1)). You can use Specific ID for current and future sales by making the election at or before the time of sale. For 2025 and 2026 transactions, IRS Notice 2025-07 (extended through 2026 by Notice 2026-20) lets you record the identification for bitcoin held on an exchange in your own records instead of with the exchange &mdash; but it still has to be made by the time of the sale. Use the year selector to check each prior year.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What happens if I switch between FIFO and Specific ID?</summary>
+      <div class="accordion-body">
+        <p>FIFO is the default for every sale; Specific ID applies only to the sales where you've chosen lots. Your figures update as soon as you add or remove an election, and <span class="ui">Revert to FIFO</span> removes a whole year's elections if you change your mind. Explore freely, but when you file, the IRS expects one method to be applied consistently per wallet within a tax year.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What is a mixed-term sale?</summary>
+      <div class="accordion-body">
+        <p>A sale that uses both short-term and long-term lots. For example, selling 1 BTC where 0.6 BTC was held 8 months (short-term) and 0.4 BTC was held 2 years (long-term). Sovereign Tax splits it into separate short-term and long-term lines on Form 8949 automatically.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Can I undo a sale I recorded?</summary>
+      <div class="accordion-body">
+        <p>Yes. In <span class="ui">Transactions</span>, click <span class="ui">Del</span> on the sell and confirm. The lots it used are restored exactly as they were, because cost basis is recalculated from your remaining transactions. The deletion is recorded in the Audit Log.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What happens if I edit or delete a Buy that Specific ID elections use?</summary>
+      <div class="accordion-body">
+        <p>If an edit changes which lots exist (a lower amount, a different wallet or a different type), or you delete the Buy, any Specific ID elections that used its lots are removed. Those sales go back to FIFO until you choose lots again with <span class="ui">Lots</span>. This keeps stale lot references out of your tax figures.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Why does Tax Harvesting have a wallet filter?</summary>
+      <div class="accordion-body">
+        <p>Under the 2025 per-wallet rules, a sale must use lots from the wallet it's made in, so harvesting opportunities are per wallet. Choose a wallet to see its opportunities; <span class="ui">All Wallets</span> gives a portfolio-wide overview, but each actual sale has to come from one wallet.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What is the Review checklist?</summary>
+      <div class="accordion-body">
+        <p><span class="ui">Review</span> is a checklist for the selected tax year: assign a source wallet on every Transfer In, resolve wallet mismatches, classify the wallets you sold from for Form 8949 (2025 and later), and optionally optimize lot selections. When every check is green it shows <strong>Ready to File</strong> with a link to the Tax Report. See <a href="#review">Review checklist</a>.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Which Form 8949 box does each sale go in?</summary>
+      <div class="accordion-body">
+        <p>For 2025 and later, bitcoin sales use boxes G/H/I (short-term) and J/K/L (long-term). Sales on an exchange whose Form 1099-DA shows basis go in G/J; exchange sales without reported basis (usually coins you moved onto the exchange) go in H/K; self-custody and other sales with no 1099-DA go in I/L. Mark your wallets in <span class="ui">Settings &rarr; Wallets</span> and the exports group sales by box. See <a href="#report">Tax Report and exports</a>.</p>
+      </div>
+    </details>
+
+    <h3>Donations</h3>
+
+    <details class="accordion">
+      <summary>How do I record a charitable bitcoin donation?</summary>
+      <div class="accordion-body">
+        <p>In <span class="ui">Add Transaction</span>, choose <strong>Donation</strong> and enter the date, the BTC amount and the fair market value per BTC on the donation date. Use FIFO or pick lots with Specific ID, check the preview of which lots are used, and save. Donations appear in the Tax Report with a Form 8283 CSV export; they aren't reported on Form 8949.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>Are bitcoin donations taxable?</summary>
+      <div class="accordion-body">
+        <p>Donating bitcoin to a qualified charity isn't a taxable sale: no capital gain or loss is recognized, and you may be able to claim a charitable deduction instead. If you held the bitcoin for more than one year, the deduction is generally its fair market value (limited to 30% of AGI); if you held it one year or less, it's limited to your cost basis. Sovereign Tax records these details and exports them for Form 8283.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What is fair market value (FMV), and why is it required for donations?</summary>
+      <div class="accordion-body">
+        <p>FMV is the price the bitcoin would sell for on the open market on the donation date. The IRS uses it to work out your deduction, so enter the FMV per BTC for that date. With <span class="ui">Live BTC Price</span> turned on in Settings, the <span class="ui">Fetch FMV</span> button fills in the historical price from CoinGecko.</p>
+      </div>
+    </details>
+
+    <h3>Your data and the app</h3>
+
+    <details class="accordion">
+      <summary>Where is my data stored?</summary>
+      <div class="accordion-body">
+        <p>Only on your computer, encrypted with AES-256-GCM using a key derived from your PIN. Your data is never sent to any server: there's no cloud, no account and no telemetry.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>What if I lose my PIN?</summary>
+      <div class="accordion-body">
+        <p>The data stored in the app can't be recovered without your PIN. That's by design: there's no back door, no cloud recovery and no "forgot PIN" option, so keep your PIN somewhere safe. Backups are protected by their own backup password, not your PIN, so with a backup file and its password you can restore your data once the app has been reset. If you're locked out, email support for help resetting the app.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>How do I update the app?</summary>
+      <div class="accordion-body">
+        <p>Go to <span class="ui">Settings &rarr; About &rarr; Check for Updates</span>. If a new version is available, you'll see what's new and a link to download it from sovereigntax.io.</p>
+      </div>
+    </details>
+
+    <details class="accordion">
+      <summary>How do I clear all my data and start over?</summary>
+      <div class="accordion-body">
+        <p>In <span class="ui">Settings</span>, click <span class="ui">Clear All Data</span> and type DELETE to confirm. This permanently erases all your transactions, lot elections, mappings and history, so create a backup first. To redo only one year's lot choices, see <a href="#start-over">Starting over for a tax year</a>.</p>
+      </div>
+    </details>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════════ -->
   <!-- ── CONTACT ── -->
   <!-- ══════════════════════════════════════════════ -->
 
@@ -862,7 +1538,7 @@ code {
     <p>See <a href="support.html" style="color:var(--accent)">Support</a> for CSV and installation troubleshooting, or email us.</p>
     <div class="step-card" style="text-align:center;padding:40px 28px;">
       <h4 style="font-size:1.1rem;margin-bottom:8px;">Email Us</h4>
-      <p style="margin-bottom:16px;">Describe the issue and include your <strong>Invoice ID</strong> (from your BTCPay receipt or Gumroad order) so we can look you up. Please don't send your data file or backup.</p>
+      <p style="margin-bottom:16px;">Describe the issue and include your <strong>Invoice ID</strong> (from your Strike receipt or Gumroad order) so we can look you up. Please don't send your data file or backup.</p>
       <a href="mailto:support@sovereigntax.io" style="display:inline-block;background:var(--accent);color:#fff;padding:12px 32px;border-radius:980px;font-weight:600;font-size:0.95rem;text-decoration:none;">support@sovereigntax.io</a>
     </div>
   </div>
