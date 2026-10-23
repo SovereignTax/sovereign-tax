@@ -10,7 +10,10 @@ import {
   getWalletMismatchSales,
   getOptimizableSells,
   getAssignedSells,
+  getBatchOptimizeGuidance,
 } from "../lib/review-helpers";
+import { getUnclassifiedSaleWallets, DIGITAL_ASSET_BOXES_FIRST_YEAR } from "../lib/form8949-boxes";
+import { WalletReportingEditor } from "./WalletReportingEditor";
 import { suggestSourceWallet } from "../lib/reconciliation";
 import { LotPicker } from "./LotPicker";
 import { HelpPanel } from "./HelpPanel";
@@ -30,6 +33,7 @@ export function ReviewView() {
     deleteSaleRecordsByIds,
     setSelectedNav,
     reconcileOptions,
+    walletReporting,
   } = state;
 
   // Shared resolver
@@ -58,6 +62,21 @@ export function ReviewView() {
     [calcResult.warnings, selectedYear]
   );
 
+  // Form 8949 box classification (2025+): wallets with taxable sales this year
+  const usesBoxes = selectedYear >= DIGITAL_ASSET_BOXES_FIRST_YEAR;
+  const taxableSalesForYear = useMemo(
+    () => calcResult.sales.filter((s) => !s.isDonation && new Date(s.saleDate).getFullYear() === selectedYear),
+    [calcResult.sales, selectedYear]
+  );
+  const saleWallets = useMemo(
+    () => [...new Set(taxableSalesForYear.map((s) => s.wallet || s.lotDetails[0]?.wallet || s.lotDetails[0]?.exchange || "").filter(Boolean))].sort(),
+    [taxableSalesForYear]
+  );
+  const unclassifiedWallets = useMemo(
+    () => (usesBoxes ? getUnclassifiedSaleWallets(taxableSalesForYear, walletReporting) : []),
+    [usesBoxes, taxableSalesForYear, walletReporting]
+  );
+
   // Wallet balances for source wallet modal
   const walletBalances = useMemo(() => {
     const balances = new Map<string, number>();
@@ -84,7 +103,7 @@ export function ReviewView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // --- Readiness status ---
-  const hasIssues = selectedYear >= 2025 && (unassignedTransfers.length > 0 || walletMismatchSales.length > 0);
+  const hasIssues = selectedYear >= 2025 && (unassignedTransfers.length > 0 || walletMismatchSales.length > 0 || unclassifiedWallets.length > 0);
   const hasOptimizable = optimizableSells.length > 0;
   const readinessStatus: "ready" | "warning" | "action" =
     hasIssues ? "action" : (hasOptimizable || engineWarnings.length > 0) ? "warning" : "ready";
@@ -173,7 +192,8 @@ export function ReviewView() {
           <>
             <p><strong>Step 1 — Assign source wallets:</strong> Transfer In transactions need a source wallet so the engine tracks lots at the correct wallet for IRS per-wallet rules.</p>
             <p><strong>Step 2 — Resolve wallet mismatches:</strong> Sales that used lots from the wrong wallet need attention — usually a missing Transfer In assignment.</p>
-            <p><strong>Step 3 — Optimize lot selections:</strong> Apply Specific ID to minimize your tax liability. You can always revert to FIFO.</p>
+            <p><strong>Step 3 — Classify wallets for Form 8949 (2025+):</strong> Mark each wallet you sold from as an exchange that sends a Form 1099-DA or as self-custody, so each sale lands in the right box (G–L).</p>
+            <p><strong>Step 4 — Optimize lot selections:</strong> Apply Specific ID to minimize your tax liability. You can always revert to FIFO.</p>
             <p><strong>When all green:</strong> Your data is ready — go to Tax Report to export Form 8949.</p>
           </>
         }
@@ -216,7 +236,11 @@ export function ReviewView() {
                       hasOptimizable && `${optimizableSells.length} sale${optimizableSells.length === 1 ? "" : "s"} can be optimized with Specific ID`,
                       engineWarnings.length > 0 && `${engineWarnings.length} cost basis warning${engineWarnings.length === 1 ? "" : "s"} to review`,
                     ].filter(Boolean).join("; ") + "."
-                  : `${unassignedTransfers.length > 0 ? `${unassignedTransfers.length} unassigned transfer${unassignedTransfers.length === 1 ? "" : "s"}` : ""}${unassignedTransfers.length > 0 && walletMismatchSales.length > 0 ? " and " : ""}${walletMismatchSales.length > 0 ? `${walletMismatchSales.length} wallet mismatch${walletMismatchSales.length === 1 ? "" : "es"}` : ""} need${(unassignedTransfers.length + walletMismatchSales.length) === 1 ? "s" : ""} to be resolved.`
+                  : [
+                      unassignedTransfers.length > 0 && `${unassignedTransfers.length} unassigned transfer${unassignedTransfers.length === 1 ? "" : "s"}`,
+                      walletMismatchSales.length > 0 && `${walletMismatchSales.length} wallet mismatch${walletMismatchSales.length === 1 ? "" : "es"}`,
+                      unclassifiedWallets.length > 0 && `${unclassifiedWallets.length} wallet${unclassifiedWallets.length === 1 ? "" : "s"} to classify for Form 8949`,
+                    ].filter(Boolean).join("; ") + " — resolve before filing."
               }
             </p>
           </div>
@@ -314,7 +338,26 @@ export function ReviewView() {
         )}
       </ReviewSection>
 
-      {/* Section 3: Lot Optimization */}
+      {/* Section 3: Form 8949 box classification — 2025+ digital-asset boxes G–L */}
+      {usesBoxes && saleWallets.length > 0 && (
+        <ReviewSection
+          title="Form 8949 Wallet Reporting"
+          status={unclassifiedWallets.length === 0 ? "pass" : "fail"}
+          summary={
+            unclassifiedWallets.length === 0
+              ? `All ${saleWallets.length} wallet${saleWallets.length === 1 ? "" : "s"} with ${selectedYear} sales are classified for Form 8949 boxes G–L.`
+              : `${unclassifiedWallets.length} wallet${unclassifiedWallets.length === 1 ? "" : "s"} with ${selectedYear} sales not classified: ${unclassifiedWallets.join(", ")}.`
+          }
+        >
+          <p className="text-xs text-gray-500 mb-3">
+            Form 8949 puts each sale in a box based on whether an exchange reported it on Form 1099-DA. Mark each wallet as an exchange or self-custody.
+            Unclassified wallets are exported as box I/L (not reported on Form 1099-DA).
+          </p>
+          <WalletReportingEditor wallets={saleWallets} />
+        </ReviewSection>
+      )}
+
+      {/* Section 4: Lot Optimization */}
       <ReviewSection
         title="Lot Optimization"
         status={optimizableSells.length === 0 ? "pass" : "info"}
@@ -436,15 +479,12 @@ export function ReviewView() {
             <h3 className="text-lg font-bold mb-4">Optimize Sells — {selectedYear}</h3>
 
             <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs p-2 rounded-lg mb-4">
-              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 9989). Applying Specific ID to all dispositions ensures consistency.
+              IRS expects consistent use of one accounting method per wallet within a tax year (IRC &sect;1012, TD 10000). Applying Specific ID to all dispositions ensures consistency.
             </div>
 
             <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs p-2 rounded-lg mb-4">
               <strong>IRS timing requirement (Treas. Reg. &sect;1.1012-1(c), IRS FAQ 82):</strong> Specific ID elections must be made no later than the date and time of the sale.
-              {selectedYear === 2025
-                ? <span className="block mt-1"><strong>What to do:</strong> For 2025 transactions, Notice 2025-07 provides temporary relief for record-keeping. Proceed with optimization — Sovereign Tax stores your lot identifications as required records.</span>
-                : <span className="block mt-1"><strong>What to do:</strong> You are optimizing {selectedYear} transactions. Notice 2025-07 temporary relief applies only to 2025. If you made contemporaneous lot identifications at the time of each original sale, this records them. If not, consider reverting to FIFO or consulting a tax professional.</span>
-              }
+              <span className="block mt-1"><strong>What to do:</strong> {getBatchOptimizeGuidance(selectedYear)}</span>
             </div>
 
             <div className="space-y-3 mb-4">

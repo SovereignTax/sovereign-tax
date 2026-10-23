@@ -254,6 +254,7 @@ export function calculate(
             if (Math.abs(take - lots[idx].remainingBTC) < 1e-8) {
               // Re-tag entire lot in place (avoids splitting)
               lots[idx].wallet = destWallet;
+              lots[idx].transferred = true;
             } else {
               // Split: reduce original lot, create new re-tagged lot with the taken portion
               lots[idx].remainingBTC -= take;
@@ -285,6 +286,7 @@ export function calculate(
                   exchange: lots[idx].exchange,
                   wallet: destWallet,
                   remainingBTC: take,
+                  transferred: true,
                 });
                 lots.push(retagged);
               }
@@ -557,7 +559,7 @@ export function batchOptimizeSpecificId(
     const result = calculateUpTo(transactions, AccountingMethod.FIFO, txn.id, workingSales);
     const available = result.lots.filter((l) => l.remainingBTC > 0);
 
-    // Wallet filter (TD 9989)
+    // Wallet filter (TD 10000)
     const walletName = txn.wallet || txn.exchange;
     const walletNorm = (walletName || "").trim().toLowerCase();
     let pool = available;
@@ -627,7 +629,7 @@ export function batchOptimizeSpecificId(
 
 /**
  * Simulate a sale without modifying actual lot state.
- * If wallet is provided, enforces per-wallet lot selection (TD 9989).
+ * If wallet is provided, enforces per-wallet lot selection (TD 10000).
  */
 export function simulateSale(
   amountBTC: number,
@@ -665,7 +667,7 @@ type DispositionType = "sale" | "donation";
 /**
  * Process a disposition (sale or donation) against available lots.
  * MUTATES the lots array (reduces remainingBTC).
- * Enforces per-wallet/per-account cost basis per IRS TD 9989 (effective Jan 1, 2025).
+ * Enforces per-wallet/per-account cost basis per IRS TD 10000 (effective Jan 1, 2025).
  * Optionally accepts lotSelections for Specific Identification method.
  *
  * For donations: proceeds, salePricePerBTC, and gainLoss are always zero.
@@ -683,7 +685,7 @@ function processSale(
   const amountToSell = sale.amountBTC;
   if (amountToSell <= 0) return null;
 
-  // Per-wallet cost basis enforcement (IRS TD 9989)
+  // Per-wallet cost basis enforcement (IRS TD 10000)
   // Filter lots to the same wallet/account as the sale (case-insensitive)
   const normalizeWallet = (w: string | undefined) => (w || "").trim().toLowerCase();
   const saleWallet = sale.wallet || sale.exchange;
@@ -760,6 +762,7 @@ function processSale(
         exchange: lots[lotIdx].exchange,
         wallet: lots[lotIdx].wallet,
         isLongTerm: isMoreThanOneYear(lots[lotIdx].purchaseDate, sale.date),
+        transferred: lots[lotIdx].transferred || undefined,
       });
 
       lots[lotIdx].remainingBTC -= sellFromLot;
@@ -799,6 +802,7 @@ function processSale(
         exchange: lots[idx].exchange,
         wallet: lots[idx].wallet,
         isLongTerm: isMoreThanOneYear(lots[idx].purchaseDate, sale.date),
+        transferred: lots[idx].transferred || undefined,
       });
 
       lots[idx].remainingBTC -= sellFromLot;
@@ -844,6 +848,7 @@ function processSale(
     id: crypto.randomUUID(),
     sourceTransactionId: sale.id,
     saleDate: sale.date,
+    wallet: saleWallet || undefined,
     amountSold,
     salePricePerBTC: isDonation ? 0 : sale.pricePerBTC,
     totalProceeds,

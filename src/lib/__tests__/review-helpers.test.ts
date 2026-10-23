@@ -6,6 +6,9 @@ import {
   getWalletMismatchIds,
   getOptimizableSells,
   getAssignedSells,
+  hasSpecificIdRelief,
+  getBatchOptimizeGuidance,
+  getLotEditGuidance,
 } from "../review-helpers";
 import { TransactionType, AccountingMethod } from "../types";
 import { Transaction, SaleRecord } from "../models";
@@ -188,5 +191,44 @@ describe("getAssignedSells", () => {
     const result = getAssignedSells([sell1, sell2], recorded, 2024);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(sell1.id);
+  });
+});
+
+describe("Specific ID relief (Notice 2025-07 / 2026-20)", () => {
+  it("covers 2025 and 2026 only", () => {
+    expect(hasSpecificIdRelief(2024)).toBe(false);
+    expect(hasSpecificIdRelief(2025)).toBe(true);
+    expect(hasSpecificIdRelief(2026)).toBe(true);
+    expect(hasSpecificIdRelief(2027)).toBe(false);
+  });
+
+  it("batch guidance cites the extension and keeps the timing rule for relief years", () => {
+    for (const year of [2025, 2026]) {
+      const text = getBatchOptimizeGuidance(year);
+      expect(text).toContain(`For ${year} transactions`);
+      expect(text).toContain("Notice 2026-20");
+      expect(text).toContain("no later than each sale");
+      expect(text).not.toContain("applies only to 2025");
+    }
+  });
+
+  it("batch guidance flags the relief as expired after 2026", () => {
+    const text = getBatchOptimizeGuidance(2027);
+    expect(text).toContain("covers only 2025–2026");
+    expect(text).toContain("reverting to FIFO");
+  });
+
+  it("batch guidance for pre-2025 years does not mention the relief", () => {
+    const text = getBatchOptimizeGuidance(2024);
+    expect(text).not.toContain("Notice");
+    expect(text).toContain("contemporaneous lot identifications");
+  });
+
+  it("lot-edit guidance distinguishes before, during and after the relief", () => {
+    expect(getLotEditGuidance(2026).note).toContain("Notice 2026-20");
+    expect(getLotEditGuidance(2026).action).toContain("at or before the time of the sale");
+    expect(getLotEditGuidance(2024).note).toContain("before the temporary relief");
+    expect(getLotEditGuidance(2027).note).toContain("covers only 2025–2026");
+    expect(getLotEditGuidance(2024).action).toContain("FIFO is the safer method");
   });
 });

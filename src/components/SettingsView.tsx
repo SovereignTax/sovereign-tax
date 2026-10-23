@@ -4,6 +4,7 @@ import { SetupPIN } from "./SetupPIN";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { HelpPanel } from "./HelpPanel";
+import { WalletReportingEditor } from "./WalletReportingEditor";
 import { isEncryptedBackup, listSavedBackups, readSavedBackup, deleteSavedBackup, downloadBackup, SavedBackupInfo } from "../lib/backup";
 import { sanitizeCarryforward, safeDownloadUrl } from "../lib/utils";
 
@@ -186,6 +187,17 @@ export function SettingsView() {
           </div>
         </div>
         <p className="text-xs text-gray-500 mt-2">Enter the short-term and long-term capital loss carryforward from your prior-year Schedule D Capital Loss Carryover Worksheet. These are applied to their respective categories in the Tax Report. Values are capped at $100,000,000.</p>
+      </div>
+
+      {/* Wallets — Form 8949 digital-asset box classification */}
+      <div className="card mb-4">
+        <h3 className="font-semibold mb-3">🏦 Wallets — Form 1099-DA reporting</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Tell Sovereign Tax which wallets are exchanges that send you a Form 1099-DA. This sets the Form 8949 box for each sale (2025+):
+          exchange sales go in box G/J when the 1099-DA shows cost basis and H/K when it doesn't; self-custody sales go in box I/L.
+          For 2026 sales, exchanges must report basis only for coins bought there on or after January 1, 2026 that never left the account.
+        </p>
+        <WalletReportingEditor wallets={state.availableWallets} />
       </div>
 
       {/* Data */}

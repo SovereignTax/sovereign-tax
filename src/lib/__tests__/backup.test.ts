@@ -337,3 +337,19 @@ describe("isEncryptedBackup", () => {
     expect(isEncryptedBackup("")).toBe(false);
   });
 });
+
+describe("walletReporting survives a backup round trip", () => {
+  it("restores Form 8949 wallet classifications", async () => {
+    const preferences = {
+      ...SAMPLE_DATA.preferences,
+      walletReporting: { coinbase: { kind: "exchange" as const, basisReported: "none" as const }, coldcard: { kind: "self-custody" as const } },
+    };
+    const bundle = await createBackupBundle(
+      SAMPLE_DATA.transactions, SAMPLE_DATA.recordedSales,
+      SAMPLE_DATA.mappings, SAMPLE_DATA.importHistory,
+      SAMPLE_DATA.auditLog, preferences, PASSWORD
+    );
+    const result = await parseBackupBundle(JSON.stringify(bundle), PASSWORD);
+    expect(result.data.preferences.walletReporting).toEqual(preferences.walletReporting);
+  });
+});

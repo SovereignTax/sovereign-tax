@@ -12,7 +12,7 @@
  * - IRC §1222 (short-term vs long-term holding period)
  * - IRC §170 (charitable donations of appreciated property)
  * - IRC §1012 (Specific Identification method)
- * - IRS TD 9989 / Rev. Proc. 2024-28 (per-wallet cost basis, effective Jan 1 2025)
+ * - IRS TD 10000 / Rev. Proc. 2024-28 (per-wallet cost basis, effective Jan 1 2025)
  * - IRS Rev. Rul. 2019-24 (hard fork / airdrop income)
  * - IRS Form 8949 Instructions (reporting format)
  */
@@ -377,12 +377,12 @@ describe("IRC §1012 — Specific Identification method", () => {
 });
 
 // ═══════════════════════════════════════════════════════
-// IRS TD 9989: PER-WALLET COST BASIS (EFFECTIVE JAN 1, 2025)
+// IRS TD 10000: PER-WALLET COST BASIS (EFFECTIVE JAN 1, 2025)
 // Each wallet/exchange account is an independent lot pool.
 // Cannot sell from Wallet A using lots from Wallet B.
 // ═══════════════════════════════════════════════════════
 
-describe("IRS TD 9989 — Per-wallet cost basis enforcement", () => {
+describe("IRS TD 10000 — Per-wallet cost basis enforcement", () => {
   it("IRS example: sell from Exchange B uses only Exchange B's lots", () => {
     // Exchange A: 1 BTC @ $20,000
     // Exchange B: 1 BTC @ $25,000

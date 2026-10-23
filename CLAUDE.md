@@ -43,7 +43,7 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 
 `RecordSaleView.tsx` is legacy — removed from navigation/routing, file retained.
 
-### Lib (16 modules)
+### Lib (17 modules)
 | File | Purpose |
 |------|---------|
 | `app-state.tsx` | React context for global state; `isMaterialChange()`; edit invalidation |
@@ -61,6 +61,7 @@ Self-sovereign Bitcoin-only tax software. Desktop app (Tauri v2 + React 19 + Typ
 | `carryforward.ts` | Capital loss carryforward with IRS ST/LT split (Schedule D worksheet) |
 | `review-helpers.ts` | Shared warning-aggregation utilities for the review/report views |
 | `reconciliation.ts` | Transfer matching logic, source-wallet suggestions |
+| `form8949-boxes.ts` | Form 8949 digital-asset box (G–L) assignment from per-wallet 1099-DA classification |
 | `utils.ts` | Shared utilities |
 
 ### Theming
@@ -108,6 +109,7 @@ Update `package.json`, `src-tauri/tauri.conf.json`, and `version.json` together.
 - Per-wallet cost basis tracking (2025+ rules, Treasury Reg. §1.1012-1(j))
 - Two IRS-permitted accounting methods: **FIFO** and **Specific ID** (LIFO/HIFO are not permitted and were removed)
 - Form 8949 export: PDF, CSV, TurboTax TXF; Form 8283 CSV for charitable donations
+- Tax years 2025+: Form 8949 CSV/PDF grouped by digital-asset box (G/H/I short-term, J/K/L long-term), classified per wallet (Settings → Wallets, Review checklist)
 - Short-term vs long-term capital gains (1-year holding period, IRC §1222)
 - Mining/rewards as ordinary income (Schedule 1)
 - Mixed-term sale splitting

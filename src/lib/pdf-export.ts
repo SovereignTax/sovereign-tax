@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { SaleRecord } from "./models";
+import { LotDetail, SaleRecord, WalletReporting } from "./models";
+import { assignBox, groupByBox, getUnclassifiedSaleWallets, BOX_INFO, BASIS_REPORTED_NOTE, DIGITAL_ASSET_BOXES_FIRST_YEAR } from "./form8949-boxes";
 import { AccountingMethod, AccountingMethodDisplayNames } from "./types";
 
 function formatDate(isoDate: string): string {
@@ -28,15 +29,31 @@ function formatUSD(value: number): string {
   }).format(value);
 }
 
+type DetailFilter = (detail: LotDetail, sale: SaleRecord) => boolean;
+
+interface PdfSection {
+  title: string;
+  note?: string;
+  include: DetailFilter;
+  box?: keyof typeof BOX_INFO; // 2025+ digital-asset box; undefined for the pre-2025 layout
+  isLongTerm: boolean;
+  totalLabel: string;
+  emptyText: string;
+  color: [number, number, number];
+}
+
 /**
  * Generate a Form 8949 PDF report using jsPDF + autoTable.
+ * Tax years 2025+ use the digital-asset boxes (G–L), one section per checked box,
+ * classified from `walletReporting`. Earlier years keep the plain Part I / Part II layout.
  * Returns the PDF as a Uint8Array for saving via Tauri dialog.
  */
 export function exportForm8949PDF(
   sales: SaleRecord[],
   year: number,
   method: AccountingMethod,
-  walletMismatchCount?: number
+  walletMismatchCount?: number,
+  walletReporting?: Record<string, WalletReporting>
 ): Uint8Array {
   // Exclude donations — they are not capital gain/loss events (IRC §170)
   sales = sales.filter((s) => !s.isDonation);
@@ -85,76 +102,111 @@ export function exportForm8949PDF(
     yPos += 8;
   }
 
-  // Build detail rows at the lot-detail level across ALL sales (handles mixed-term correctly)
-  const stRows = buildDetailRows(sales, false);
-  const ltRows = buildDetailRows(sales, true);
+  const useBoxes = year >= DIGITAL_ASSET_BOXES_FIRST_YEAR;
+  const pageHeight = doc.internal.pageSize.getHeight();
 
-  // Compute totals from lot details, not sale-level aggregates
-  const { proceeds: stProceeds, basis: stBasis, gainLoss: stGL, fees: stFees } = computeDetailTotals(sales, false);
-  const { proceeds: ltProceeds, basis: ltBasis, gainLoss: ltGL, fees: ltFees } = computeDetailTotals(sales, true);
-
-  // --- Part I: Short-Term ---
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "bold");
-  doc.text("Part I — Short-Term Capital Gains and Losses (held one year or less)", 14, yPos);
-  yPos += 5;
-
-  if (stRows.length === 0) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "italic");
-    doc.text("No short-term sales for this period.", 14, yPos + 5);
-    yPos += 12;
-  } else {
-    autoTable(doc, {
-      startY: yPos,
-      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Fees (in Proceeds)", "Gain/(Loss)"]],
-      body: stRows,
-      foot: [buildTotalRowFromDetails("Total Short-Term", stProceeds, stBasis, stGL, stFees)],
-      theme: "striped",
-      headStyles: { fillColor: [41, 128, 185], fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 8 },
-      margin: { left: 14, right: 14 },
-      styles: { cellPadding: 2 },
-    });
-    yPos = (doc as any).lastAutoTable.finalY + 10;
+  // --- Unclassified wallet warning (2025+ boxes) ---
+  const unclassified = useBoxes ? getUnclassifiedSaleWallets(sales, walletReporting) : [];
+  if (unclassified.length > 0) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(180, 100, 0);
+    doc.text(`WARNING: ${unclassified.length} wallet(s) not classified as exchange or self-custody: ${unclassified.join(", ")}`, 14, yPos, { maxWidth: pageWidth - 28 });
+    yPos += 4;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(
+      "Their sales are listed under box I/L (not reported on Form 1099-DA). If an exchange sent you a Form 1099-DA for them, classify the wallet in Settings \u2192 Wallets and export again.",
+      14,
+      yPos,
+      { maxWidth: pageWidth - 28 }
+    );
+    doc.setTextColor(0, 0, 0);
+    yPos += 8;
   }
 
-  // Check if we need a new page
-  if (yPos > doc.internal.pageSize.getHeight() - 40) {
-    doc.addPage();
-    yPos = 15;
-  }
+  const sections: PdfSection[] = useBoxes
+    ? groupByBox(sales, walletReporting).map(({ box }) => {
+        const info = BOX_INFO[box];
+        return {
+          title: `Part ${info.part} \u2014 Box ${box} checked: ${info.label}`,
+          note: box === "G" || box === "J" ? BASIS_REPORTED_NOTE : undefined,
+          include: (d: LotDetail, sale: SaleRecord) => assignBox(d, sale, walletReporting) === box,
+          box,
+          isLongTerm: info.isLongTerm,
+          totalLabel: `Total Box ${box}`,
+          emptyText: "",
+          color: info.isLongTerm ? [39, 174, 96] : [41, 128, 185],
+        };
+      })
+    : [
+        { title: "Part I \u2014 Short-Term Capital Gains and Losses (held one year or less)", include: (d) => !d.isLongTerm, isLongTerm: false, totalLabel: "Total Short-Term", emptyText: "No short-term sales for this period.", color: [41, 128, 185] },
+        { title: "Part II \u2014 Long-Term Capital Gains and Losses (held more than one year)", include: (d) => d.isLongTerm, isLongTerm: true, totalLabel: "Total Long-Term", emptyText: "No long-term sales for this period.", color: [39, 174, 96] },
+      ];
 
-  // --- Part II: Long-Term ---
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "bold");
-  doc.text("Part II — Long-Term Capital Gains and Losses (held more than one year)", 14, yPos);
-  yPos += 5;
-
-  if (ltRows.length === 0) {
+  if (useBoxes && sections.length === 0) {
     doc.setFontSize(10);
     doc.setFont("helvetica", "italic");
-    doc.text("No long-term sales for this period.", 14, yPos + 5);
+    doc.text("No taxable dispositions for this tax year.", 14, yPos + 5);
     yPos += 12;
-  } else {
-    autoTable(doc, {
-      startY: yPos,
-      head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Fees (in Proceeds)", "Gain/(Loss)"]],
-      body: ltRows,
-      foot: [buildTotalRowFromDetails("Total Long-Term", ltProceeds, ltBasis, ltGL, ltFees)],
-      theme: "striped",
-      headStyles: { fillColor: [39, 174, 96], fontSize: 8 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 8 },
-      margin: { left: 14, right: 14 },
-      styles: { cellPadding: 2 },
-    });
-    yPos = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  const st = { proceeds: 0, basis: 0, gainLoss: 0 };
+  const lt = { proceeds: 0, basis: 0, gainLoss: 0 };
+  const lineRows: string[][] = [];
+
+  for (let si = 0; si < sections.length; si++) {
+    const section = sections[si];
+    // Check if we need a new page
+    if (si > 0 && yPos > pageHeight - 40) {
+      doc.addPage();
+      yPos = 15;
+    }
+    doc.setFontSize(useBoxes ? 11 : 12);
+    doc.setFont("helvetica", "bold");
+    doc.text(section.title, 14, yPos);
+    yPos += 5;
+    if (section.note) {
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "italic");
+      const noteLines = doc.splitTextToSize(section.note, pageWidth - 28);
+      doc.text(noteLines, 14, yPos);
+      yPos += noteLines.length * 3.5 + 1;
+    }
+
+    // Build detail rows and totals at the lot-detail level (handles mixed-term / mixed-box sales)
+    const rows = buildDetailRows(sales, section.include);
+    const totals = computeDetailTotals(sales, section.include);
+    const into = section.isLongTerm ? lt : st;
+    into.proceeds += totals.proceeds; into.basis += totals.basis; into.gainLoss += totals.gainLoss;
+    if (section.box) {
+      lineRows.push([`Line ${BOX_INFO[section.box].scheduleDLine} (box ${section.box})`, formatUSD(totals.proceeds), formatUSD(totals.basis), formatUSD(totals.gainLoss)]);
+    }
+
+    if (rows.length === 0) {
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "italic");
+      doc.text(section.emptyText, 14, yPos + 5);
+      yPos += 12;
+    } else {
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Description", "Date Acquired", "Date Sold", "Proceeds", "Cost Basis", "Fees (in Proceeds)", "Gain/(Loss)"]],
+        body: rows,
+        foot: [buildTotalRowFromDetails(section.totalLabel, totals.proceeds, totals.basis, totals.gainLoss, totals.fees)],
+        theme: "striped",
+        headStyles: { fillColor: section.color, fontSize: 8 },
+        bodyStyles: { fontSize: 8 },
+        footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: "bold", fontSize: 8 },
+        margin: { left: 14, right: 14 },
+        styles: { cellPadding: 2 },
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
   }
 
   // Check if we need a new page for summary
-  if (yPos > doc.internal.pageSize.getHeight() - 50) {
+  if (yPos > pageHeight - 50) {
     doc.addPage();
     yPos = 15;
   }
@@ -169,10 +221,11 @@ export function exportForm8949PDF(
     startY: yPos,
     head: [["Category", "Proceeds", "Cost Basis", "Gain/(Loss)"]],
     body: [
-      ["Short-term (Part I)", formatUSD(stProceeds), formatUSD(stBasis), formatUSD(stGL)],
-      ["Long-term (Part II)", formatUSD(ltProceeds), formatUSD(ltBasis), formatUSD(ltGL)],
+      ...lineRows,
+      ["Short-term (Part I)", formatUSD(st.proceeds), formatUSD(st.basis), formatUSD(st.gainLoss)],
+      ["Long-term (Part II)", formatUSD(lt.proceeds), formatUSD(lt.basis), formatUSD(lt.gainLoss)],
     ],
-    foot: [["Net Total", formatUSD(stProceeds + ltProceeds), formatUSD(stBasis + ltBasis), formatUSD(stGL + ltGL)]],
+    foot: [["Net Total", formatUSD(st.proceeds + lt.proceeds), formatUSD(st.basis + lt.basis), formatUSD(st.gainLoss + lt.gainLoss)]],
     theme: "grid",
     headStyles: { fillColor: [52, 73, 94], fontSize: 9 },
     bodyStyles: { fontSize: 9 },
@@ -215,11 +268,11 @@ export function exportForm8949PDF(
   return new Uint8Array(doc.output("arraybuffer"));
 }
 
-/** Build detail rows from ALL sales, filtering lot details by term */
-function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][] {
+/** Build detail rows from ALL sales, keeping the lot details that pass `include` (term or box) */
+function buildDetailRows(sales: SaleRecord[], include: DetailFilter): string[][] {
   const rows: string[][] = [];
   for (const sale of sales) {
-    const termDetails = sale.lotDetails.filter((d) => longTermOnly ? d.isLongTerm : !d.isLongTerm);
+    const termDetails = sale.lotDetails.filter((d) => include(d, sale));
     if (termDetails.length === 0) continue;
     // Apportion fee proportionally when sale has mixed-term lots
     const termBTC = termDetails.reduce((a, d) => a + d.amountBTC, 0);
@@ -249,11 +302,11 @@ function buildDetailRows(sales: SaleRecord[], longTermOnly: boolean): string[][]
   return rows;
 }
 
-/** Compute totals from lot details for a given term */
-function computeDetailTotals(sales: SaleRecord[], longTermOnly: boolean): { proceeds: number; basis: number; gainLoss: number; fees: number } {
+/** Compute totals from the lot details that pass `include` (term or box) */
+function computeDetailTotals(sales: SaleRecord[], include: DetailFilter): { proceeds: number; basis: number; gainLoss: number; fees: number } {
   let proceeds = 0, basis = 0, gainLoss = 0, fees = 0;
   for (const sale of sales) {
-    const termDetails = sale.lotDetails.filter((d) => d.isLongTerm === longTermOnly);
+    const termDetails = sale.lotDetails.filter((d) => include(d, sale));
     if (termDetails.length === 0) continue;
     const termBTC = termDetails.reduce((a, d) => a + d.amountBTC, 0);
     const totalBTC = sale.lotDetails.reduce((a, d) => a + d.amountBTC, 0);

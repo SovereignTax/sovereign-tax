@@ -282,7 +282,7 @@ describe("FIFO — holding period classification", () => {
 });
 
 // ═══════════════════════════════════════════════════════
-// FIFO — Per-wallet cost basis (IRS TD 9989)
+// FIFO — Per-wallet cost basis (IRS TD 10000)
 // ═══════════════════════════════════════════════════════
 
 describe("FIFO — per-wallet enforcement", () => {
@@ -1947,5 +1947,54 @@ describe("E29 — honored cross-wallet election does not emit false fallback war
     expect(result.sales).toHaveLength(1);
     expect(result.warnings.some((w) => w.message.includes("Fell back to global lot pool"))).toBe(true);
     expect(result.sales[0].walletMismatch).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// LOT PROVENANCE (Form 8949 box G/J vs H/K)
+// ═══════════════════════════════════════════════════════
+
+describe("Lot provenance — transferred flag and sale wallet", () => {
+  it("stamps the disposition wallet on the SaleRecord", () => {
+    const result = calculate([buy("2026-01-10", 1, 50000, { wallet: "Kraken" }), sell("2026-03-01", 0.5, 60000, { wallet: "Kraken" })], AccountingMethod.FIFO);
+    expect(result.sales[0].wallet).toBe("Kraken");
+  });
+
+  it("lots bought and sold in the same wallet are not transferred", () => {
+    const result = calculate([buy("2026-01-10", 1, 50000), sell("2026-03-01", 0.5, 60000)], AccountingMethod.FIFO);
+    expect(result.sales[0].lotDetails[0].transferred).toBeUndefined();
+  });
+
+  it("whole-lot re-tag marks the lot transferred", () => {
+    const result = calculate([
+      buy("2026-01-10", 1, 50000, { wallet: "Cold" }),
+      transferIn("2026-02-01", 1, { wallet: "Coinbase", sourceWallet: "Cold" }),
+      sell("2026-03-01", 0.5, 60000, { wallet: "Coinbase" }),
+    ], AccountingMethod.FIFO);
+    expect(result.sales[0].walletMismatch).toBeUndefined();
+    expect(result.sales[0].lotDetails[0].transferred).toBe(true);
+  });
+
+  it("split re-tag marks only the moved portion transferred", () => {
+    const result = calculate([
+      buy("2026-01-10", 1, 50000, { wallet: "Coinbase" }),
+      transferIn("2026-02-01", 0.4, { wallet: "Cold", sourceWallet: "Coinbase" }),
+      sell("2026-03-01", 0.6, 60000, { wallet: "Coinbase" }),
+      sell("2026-03-02", 0.4, 60000, { wallet: "Cold" }),
+    ], AccountingMethod.FIFO);
+    const coinbaseSale = result.sales.find((s) => s.wallet === "Coinbase")!;
+    const coldSale = result.sales.find((s) => s.wallet === "Cold")!;
+    expect(coinbaseSale.lotDetails.every((d) => !d.transferred)).toBe(true);
+    expect(coldSale.lotDetails.every((d) => d.transferred)).toBe(true);
+  });
+
+  it("a round trip out and back keeps the lot transferred", () => {
+    const result = calculate([
+      buy("2026-01-10", 1, 50000, { wallet: "Coinbase" }),
+      transferIn("2026-02-01", 1, { wallet: "Cold", sourceWallet: "Coinbase" }),
+      transferIn("2026-02-15", 1, { wallet: "Coinbase", sourceWallet: "Cold" }),
+      sell("2026-03-01", 1, 60000, { wallet: "Coinbase" }),
+    ], AccountingMethod.FIFO);
+    expect(result.sales[0].lotDetails[0].transferred).toBe(true);
   });
 });
